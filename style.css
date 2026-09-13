@@ -29,6 +29,14 @@
 
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
+/* Only break genuinely long content */
+.question-text,
+.explanation-box,
+.option-text,
+.copy-link-box code {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
 /* =====================================================================
    RESET
    ===================================================================== */
@@ -514,3 +522,366 @@ table.report-table tr.me { background: var(--brand-tint); }
 .text-muted { color: var(--muted); }
 .text-center { text-align: center; }
 .center-screen { min-height: 70vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+
+/* =========================================================
+   MOBILE FIXES — EXAM + REPORT
+   ========================================================= */
+
+html,
+body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+/* Prevent flex/grid children from creating unwanted width */
+.exam-shell,
+.exam-body,
+.exam-main,
+.question-card,
+#resultContent,
+.card {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Keep question text readable on phones */
+.question-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  max-width: 100%;
+}
+
+/* Prevent long option/question content from expanding the page */
+.option-item,
+.option-text {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.option-text {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* =========================================================
+   MOBILE EXAM
+   ========================================================= */
+
+@media (max-width: 880px) {
+
+  .exam-topbar-inner {
+    padding: 10px 12px;
+  }
+
+  .exam-title {
+    max-width: calc(100vw - 110px);
+    overflow-wrap: anywhere;
+  }
+
+  .exam-candidate {
+    max-width: calc(100vw - 110px);
+    overflow-wrap: anywhere;
+  }
+
+  .exam-timer {
+    font-size: 17px;
+    padding: 5px 10px;
+    flex-shrink: 0;
+  }
+
+  .subject-tabs {
+    padding: 0 10px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .subject-tabs button {
+    flex-shrink: 0;
+  }
+
+  .exam-body {
+    width: 100%;
+    padding: 12px 10px 100px;
+    gap: 12px;
+  }
+
+  .question-card {
+    width: 100%;
+    padding: 14px;
+    overflow: hidden;
+  }
+
+  .question-meta {
+    align-items: flex-start;
+  }
+
+  .question-number-badge {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  /* Question action buttons */
+  .exam-actions {
+    width: 100%;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .exam-actions-left,
+  .exam-actions-right {
+    width: 100%;
+    display: flex;
+    gap: 8px;
+  }
+
+  .exam-actions-left .btn,
+  .exam-actions-right .btn {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* Mobile question palette drawer */
+  .exam-palette-panel {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: 14px;
+  }
+
+  .palette-legend {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .palette-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  /* Submit button must always be visible inside drawer */
+  .palette-submit {
+    display: flex;
+    width: 100%;
+    min-height: 46px;
+    margin-top: 14px;
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+  }
+
+  .palette-toggle {
+    right: 12px;
+    bottom: 12px;
+    z-index: 50;
+  }
+}
+
+/* Smaller phones */
+@media (max-width: 480px) {
+
+  .exam-topbar-inner {
+    padding: 8px 10px;
+  }
+
+  .exam-title {
+    font-size: 13px;
+  }
+
+  .exam-candidate {
+    font-size: 11px;
+  }
+
+  .exam-timer {
+    font-size: 15px;
+    padding: 5px 8px;
+  }
+
+  .question-card {
+    padding: 12px;
+    border-radius: 8px;
+  }
+
+  .question-text {
+    font-size: 15px;
+  }
+
+  .option-item {
+    padding: 10px;
+    gap: 9px;
+  }
+
+  .option-text {
+    font-size: 14px;
+  }
+
+  .exam-actions-left,
+  .exam-actions-right {
+    flex-direction: column;
+  }
+
+  .exam-actions-left .btn,
+  .exam-actions-right .btn {
+    width: 100%;
+    flex: none;
+  }
+}
+
+/* =========================================================
+   MOBILE REPORT
+   ========================================================= */
+
+#resultContent {
+  width: 100%;
+  min-width: 0;
+}
+
+#resultContent .card {
+  width: 100%;
+  min-width: 0;
+}
+
+.stat-grid {
+  width: 100%;
+  min-width: 0;
+}
+
+.stat-card {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.stat-card .val,
+.stat-card .lbl {
+    overflow-wrap: normal;
+    word-break: normal;
+}
+/* Report table should scroll horizontally as a whole,
+   NOT squeeze every column into tiny widths */
+.table-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+table.report-table {
+  width: max-content;
+  min-width: 620px;
+  table-layout: auto;
+}
+
+table.report-table th,
+table.report-table td {
+  white-space: nowrap;
+  word-break: normal;
+  overflow-wrap: normal;
+}
+
+/* Give important report columns enough space */
+table.report-table th:first-child,
+table.report-table td:first-child {
+  min-width: 90px;
+}
+
+table.report-table th:nth-child(2),
+table.report-table td:nth-child(2) {
+  min-width: 75px;
+}
+
+table.report-table th:nth-child(3),
+table.report-table td:nth-child(3) {
+  min-width: 65px;
+}
+
+table.report-table th:nth-child(4),
+table.report-table td:nth-child(4) {
+  min-width: 105px;
+}
+
+table.report-table th:nth-child(5),
+table.report-table td:nth-child(5) {
+  min-width: 75px;
+}
+
+/* Don't let the progress bar squeeze */
+table.report-table .bar-track {
+  min-width: 100px;
+}
+
+/* Mobile report cards */
+@media (max-width: 560px) {
+
+  #view-result .page-body {
+    padding-top: 14px;
+  }
+
+  #view-result .container {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  #resultContent .card {
+    padding: 14px;
+  }
+
+  #resultContent .section-title {
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  #resultContent .section-title h2 {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .stat-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .stat-card {
+    padding: 12px 8px;
+  }
+
+  .stat-card .val {
+    font-size: 20px;
+    line-height: 1.2;
+  }
+
+  .stat-card .lbl {
+    font-size: 11px;
+    line-height: 1.25;
+  }
+
+  table.report-table {
+    min-width: 620px;
+    font-size: 12.5px;
+  }
+
+  table.report-table th,
+  table.report-table td {
+    padding: 9px 10px;
+  }
+}
+
+.table-scroll {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+}
+
+table.report-table {
+    width: max-content;
+    min-width: 620px;
+    table-layout: auto;
+}
+
+table.report-table th,
+table.report-table td {
+    white-space: nowrap;
+    word-break: normal;
+    overflow-wrap: normal;
+}
