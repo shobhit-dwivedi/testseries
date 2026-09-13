@@ -1,415 +1,470 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
-<title>Test Series</title>
-<link rel="stylesheet" href="style.css">
-</head>
-<body>
 
-<!-- =====================================================================
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+  <title>Test Series</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+<button
+  type="button"
+  id="themeToggle"
+  class="theme-toggle"
+  aria-label="Switch to dark theme"
+  title="Switch theme"
+>
+  🌙
+</button>
+  <!-- =====================================================================
      AUTH VIEW — the only entry point for both students and admins
      ===================================================================== -->
-<section id="view-auth" class="view">
-  <div class="auth-shell">
-    <div class="auth-brand">
-      <h1>Practice like it's exam day.</h1>
-      <p>Full-length JEE-style mock tests with a real exam interface, instant scoring, and rank &amp; percentile comparison against everyone who took the same test.</p>
-      <ul>
-        <li>MCQ and integer-type questions, subject-wise</li>
-        <li>Timed tests with an official exam-style dashboard</li>
-        <li>Automatic rank, percentile and detailed report</li>
-      </ul>
-    </div>
+  <section id="view-auth" class="view">
+    <div class="auth-shell">
+      <div class="auth-brand">
+  <div class="brand-symbols">⚛ π ∑ √ Δ</div>
 
-    <div class="auth-form-wrap">
-      <div class="auth-form">
-        <div class="auth-tabs">
-          <button type="button" id="tabLoginBtn" class="active">Log in</button>
-          <button type="button" id="tabSignupBtn">Sign up</button>
-        </div>
+  <div class="brand-main">
+    <h1>JEE<br>HUSTLERS</h1>
+    <div class="brand-subtitle">TEST SERIES</div>
+    <p>Practice. Compete. Improve.</p>
 
-        <div id="authMessage"></div>
-
-        <form id="loginForm">
-          <div class="field">
-            <label for="loginEmail">Email</label>
-            <input type="email" id="loginEmail" required autocomplete="email">
-          </div>
-          <div class="field">
-            <label for="loginPassword">Password</label>
-            <input type="password" id="loginPassword" required autocomplete="current-password">
-          </div>
-          <button type="submit" class="btn btn-primary btn-block" id="loginBtn">Log in</button>
-        </form>
-
-        <form id="signupForm" style="display:none">
-          <div class="field">
-            <label for="signupName">Full name</label>
-            <input type="text" id="signupName" required autocomplete="name">
-          </div>
-          <div class="field">
-            <label for="signupEmail">Email</label>
-            <input type="email" id="signupEmail" required autocomplete="email">
-          </div>
-          <div class="field">
-            <label for="signupPassword">Password</label>
-            <input type="password" id="signupPassword" required minlength="6" autocomplete="new-password">
-            <div class="hint">At least 6 characters.</div>
-          </div>
-          <button type="submit" class="btn btn-primary btn-block" id="signupBtn">Create account</button>
-        </form>
-
-        <p class="helper-text mt-16">
-          There's no separate admin login — every account signs in here. An account becomes an admin when it's marked that way in the database (see README).
-        </p>
-      </div>
+    <div class="brand-features">
+      <span>✓ JEE-style tests</span>
+      <span>✓ Instant results</span>
+      <span>✓ Rank & percentile</span>
+      <span>✓ Detailed analysis</span>
     </div>
   </div>
-</section>
 
-<!-- =====================================================================
+  <div class="brand-bottom">
+    FREE &nbsp; • &nbsp; JEE PRACTICE &nbsp; • &nbsp; JUST IMPROVE
+  </div>
+</div>
+
+      <div class="auth-form-wrap">
+        <div class="auth-form">
+          <div class="auth-tabs">
+            <button type="button" id="tabLoginBtn" class="active">Log in</button>
+            <button type="button" id="tabSignupBtn">Register</button>
+          </div>
+
+          <div id="authMessage"></div>
+
+          <form id="loginForm">
+            <div class="field">
+              <label for="loginEmail">Email</label>
+              <input type="email" id="loginEmail" required autocomplete="email">
+            </div>
+            <div class="field">
+              <label for="loginPassword">Password</label>
+              <input type="password" id="loginPassword" required autocomplete="current-password">
+            </div>
+            <button type="submit" class="btn btn-primary btn-block" id="loginBtn">Log in</button>
+          </form>
+
+          <form id="signupForm" style="display:none">
+            <div class="field">
+              <label for="signupName">Full name</label>
+              <input type="text" id="signupName" required autocomplete="name">
+            </div>
+            <div class="field">
+              <label for="signupEmail">Email</label>
+              <input type="email" id="signupEmail" required autocomplete="email">
+            </div>
+            <div class="field">
+              <label for="signupPassword">Password</label>
+              <input type="password" id="signupPassword" required minlength="6" autocomplete="new-password">
+              <div class="hint">At least 6 characters.</div>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block" id="signupBtn">Create account</button>
+          </form>
+
+          <p class="helper-text mt-16">
+           New student? Register first
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =====================================================================
      DASHBOARD VIEW
      ===================================================================== -->
-<section id="view-dashboard" class="view">
-  <header class="appbar">
-    <div class="container">
-      <a href="#/dashboard" class="appbar-brand"><span class="dot"></span> Test Series</a>
-      <div class="appbar-user">
-        <span id="userName">…</span>
-        <span class="role-chip" id="roleChip"></span>
-        <button class="btn btn-sm js-logout">Log out</button>
-      </div>
-    </div>
-  </header>
-
-  <div class="page-body">
-    <div class="container">
-
-      <div id="joinPreviewSlot"></div>
-
-      <div class="card">
-        <h2 style="font-size:16px;">Join a test</h2>
-        <p class="text-muted" style="font-size:13.5px;">Enter the test code your admin shared with you — or open the link they sent, which fills this in automatically.</p>
-        <form id="joinForm" class="flex gap-8" style="flex-wrap:wrap;">
-          <input type="text" id="joinCode" placeholder="e.g. A1B2C3" style="flex:1;min-width:160px;text-transform:uppercase;" maxlength="12" required>
-          <button type="submit" class="btn btn-primary">Start / Resume</button>
-        </form>
-      </div>
-
-      <div id="adminSegmentWrap" style="display:none;">
-        <div class="segmented mt-16">
-          <button type="button" id="segStudent" class="active">My tests</button>
-          <button type="button" id="segAdmin">Admin panel</button>
+  <section id="view-dashboard" class="view">
+    <header class="appbar">
+      <div class="container">
+        <a href="#/dashboard" class="appbar-brand"><span class="dot"></span> Test Series</a>
+        <div class="appbar-user">
+          <span id="userName">…</span>
+          <span class="role-chip" id="roleChip"></span>
+          <button class="btn btn-sm js-logout">Log out</button>
         </div>
       </div>
+    </header>
 
-      <section id="studentSection" class="mt-16">
-        <div class="section-title"><h2>My tests</h2></div>
-        <div id="attemptsList"><div class="empty-state">Loading…</div></div>
-      </section>
+    <div class="page-body">
+      <div class="container">
 
-      <section id="adminSection" class="mt-16" style="display:none;">
-        <div class="section-title">
-          <h2>Tests you created</h2>
-          <a href="#/admin-test" class="btn btn-primary btn-sm">+ Create new test</a>
-        </div>
-        <div id="adminTestsList"><div class="empty-state">Loading…</div></div>
-      </section>
-
-    </div>
-  </div>
-</section>
-
-<!-- =====================================================================
-     ADMIN TEST MANAGER VIEW
-     ===================================================================== -->
-<section id="view-admin-test" class="view">
-  <header class="appbar">
-    <div class="container">
-      <a href="#/dashboard" class="appbar-brand"><span class="dot"></span> Test Series</a>
-      <div class="appbar-user">
-        <a href="#/dashboard" class="btn btn-sm">← Dashboard</a>
-        <button class="btn btn-sm js-logout">Log out</button>
-      </div>
-    </div>
-  </header>
-
-  <div class="page-body">
-    <div class="container" style="max-width:760px;">
-
-      <div id="notAdminNotice" style="display:none;" class="error-box">
-        Only admin accounts can create or manage tests. Ask whoever set up this app to mark your profile as admin.
-      </div>
-
-      <div id="adminMainContent" style="display:none;">
+        <div id="joinPreviewSlot"></div>
 
         <div class="card">
-          <h2 style="font-size:16px;" id="detailsTitle">Test details</h2>
-          <form id="testDetailsForm">
-            <div class="field">
-              <label for="titleInput">Title</label>
-              <input type="text" id="titleInput" placeholder="e.g. JEE Main Full Mock Test 1" required>
-            </div>
-            <div class="field">
-              <label for="descInput">Description (optional)</label>
-              <textarea id="descInput" placeholder="Instructions or notes for students"></textarea>
-            </div>
-            <div class="form-row">
-              <div class="field">
-                <label for="categoryInput">Test for</label>
-                <select id="categoryInput">
-                  <option>JEE Main</option>
-                  <option>JEE Advanced</option>
-                  <option>NEET</option>
-                  <option>Class 9th</option>
-                  <option>Class 10th</option>
-                  <option>Class 11th</option>
-                  <option>Class 12th</option>
-                  <option>Other</option>
-                </select>
-              </div>
-              <div class="field">
-                <label for="durationInput">Exam duration (minutes)</label>
-                <input type="number" id="durationInput" min="5" value="180" required>
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="field">
-                <label for="fromInput">Opens at</label>
-                <input type="datetime-local" id="fromInput" required>
-              </div>
-              <div class="field">
-                <label for="untilInput">Closes at</label>
-                <input type="datetime-local" id="untilInput" required>
-                <div class="hint">Students can start the test any time in this window (e.g. a 1-2 day window). Once started, they get the exam duration above.</div>
-              </div>
-            </div>
-            <button type="submit" class="btn btn-primary" id="saveDetailsBtn">Create test</button>
+          <h2 style="font-size:16px;">Join a test</h2>
+          <p class="text-muted" style="font-size:13.5px;">Enter the test code your admin shared with you — or open the
+            link they sent, which fills this in automatically.</p>
+          <form id="joinForm" class="flex gap-8" style="flex-wrap:wrap;">
+            <input type="text" id="joinCode" placeholder="e.g. A1B2C3"
+              style="flex:1;min-width:160px;text-transform:uppercase;" maxlength="12" required>
+            <button type="submit" class="btn btn-primary">Start / Resume</button>
           </form>
         </div>
 
-        <div class="card" id="shareCard" style="display:none;">
+        <div id="adminSegmentWrap" style="display:none;">
+          <div class="segmented mt-16">
+            <button type="button" id="segStudent" class="active">My tests</button>
+            <button type="button" id="segAdmin">Admin panel</button>
+          </div>
+        </div>
+
+        <section id="studentSection" class="mt-16">
           <div class="section-title">
-            <h2 style="font-size:16px;">Share with students</h2>
-            <div class="flex gap-8">
-              <span class="status-tag" id="publishTag"></span>
-              <button class="btn btn-sm" id="publishBtn"></button>
-            </div>
+            <h2>My tests</h2>
           </div>
-          <div class="copy-link-box">
-            <code id="linkText"></code>
-            <button class="btn btn-sm" id="copyLinkBtn">Copy</button>
+          <div id="attemptsList">
+            <div class="empty-state">Loading…</div>
           </div>
-          <p class="helper-text">Code: <strong id="codeText"></strong> — students can also just type this code into the "Join a test" box on their dashboard.</p>
-        </div>
+        </section>
 
-        <div class="card" id="questionsCard" style="display:none;">
-          <h2 style="font-size:16px;">Add a question</h2>
-          <form id="questionForm">
-            <div class="form-row">
-              <div class="field">
-                <label for="subjectInput">Subject</label>
-                <input type="text" id="subjectInput" list="subjectOptions" placeholder="Physics" required>
-                <datalist id="subjectOptions">
-                  <option value="Physics"></option>
-                  <option value="Chemistry"></option>
-                  <option value="Mathematics"></option>
-                  <option value="Biology"></option>
-                </datalist>
-              </div>
-              <div class="field">
-                <label for="typeInput">Question type</label>
-                <select id="typeInput">
-                  <option value="mcq">MCQ (single correct)</option>
-                  <option value="integer">Integer type</option>
-                </select>
-              </div>
-            </div>
-
-            <div class="field">
-              <label for="questionTextInput">Question</label>
-              <textarea id="questionTextInput" required placeholder="Type the question text here"></textarea>
-            </div>
-            <div class="field">
-              <label for="imageUrlInput">Image URL (optional)</label>
-              <input type="text" id="imageUrlInput" placeholder="https://…">
-            </div>
-
-            <div id="mcqFields">
-              <div class="field"><label>Option A</label><input type="text" id="optA"></div>
-              <div class="field"><label>Option B</label><input type="text" id="optB"></div>
-              <div class="field"><label>Option C</label><input type="text" id="optC"></div>
-              <div class="field"><label>Option D</label><input type="text" id="optD"></div>
-              <div class="field">
-                <label for="correctOptionInput">Correct answer</label>
-                <select id="correctOptionInput">
-                  <option value="A">A</option><option value="B">B</option>
-                  <option value="C">C</option><option value="D">D</option>
-                </select>
-              </div>
-            </div>
-
-            <div id="integerFields" style="display:none;">
-              <div class="field">
-                <label for="correctIntegerInput">Correct answer (number)</label>
-                <input type="number" id="correctIntegerInput" step="any">
-              </div>
-            </div>
-
-            <div class="field">
-              <label for="explanationInput">Explanation (optional)</label>
-              <textarea id="explanationInput" placeholder="Shown to the student after they submit, next to this question if they got it wrong"></textarea>
-            </div>
-
-            <div class="form-row">
-              <div class="field">
-                <label for="positiveMarksInput">Marks for correct</label>
-                <input type="number" id="positiveMarksInput" value="4" step="any" required>
-              </div>
-              <div class="field">
-                <label for="negativeMarksInput">Marks deducted if wrong</label>
-                <input type="number" id="negativeMarksInput" value="1" step="any" required>
-              </div>
-            </div>
-
-            <button type="submit" class="btn btn-primary" id="addQuestionBtn">Add question</button>
-          </form>
-        </div>
-
-        <div class="card" id="questionListCard" style="display:none;">
-          <div class="section-title"><h2 style="font-size:16px;">Questions added</h2><span id="questionCountTag" class="text-muted" style="font-size:13px;"></span></div>
-          <div id="questionsList"></div>
-        </div>
-
-        <div class="card" id="leaderboardCard" style="display:none;">
-          <h2 style="font-size:16px;">Leaderboard</h2>
-          <div class="table-scroll">
-            <table class="report-table" id="leaderboardTable">
-              <thead><tr><th>Rank</th><th>Student</th><th>Score</th><th>Percentile</th></tr></thead>
-              <tbody id="leaderboardBody"></tbody>
-            </table>
+        <section id="adminSection" class="mt-16" style="display:none;">
+          <div class="section-title">
+            <h2>Tests you created</h2>
+            <a href="#/admin-test" class="btn btn-primary btn-sm">+ Create new test</a>
           </div>
-        </div>
+          <div id="adminTestsList">
+            <div class="empty-state">Loading…</div>
+          </div>
+        </section>
 
       </div>
     </div>
-  </div>
-</section>
+  </section>
 
-<!-- =====================================================================
+  <!-- =====================================================================
+     ADMIN TEST MANAGER VIEW
+     ===================================================================== -->
+  <section id="view-admin-test" class="view">
+    <header class="appbar">
+      <div class="container">
+        <a href="#/dashboard" class="appbar-brand"><span class="dot"></span> Test Series</a>
+        <div class="appbar-user">
+          <a href="#/dashboard" class="btn btn-sm">← Dashboard</a>
+          <button class="btn btn-sm js-logout">Log out</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="page-body">
+      <div class="container" style="max-width:760px;">
+
+        <div id="notAdminNotice" style="display:none;" class="error-box">
+          Only admin accounts can create or manage tests. Ask whoever set up this app to mark your profile as admin.
+        </div>
+
+        <div id="adminMainContent" style="display:none;">
+
+          <div class="card">
+            <h2 style="font-size:16px;" id="detailsTitle">Test details</h2>
+            <form id="testDetailsForm">
+              <div class="field">
+                <label for="titleInput">Title</label>
+                <input type="text" id="titleInput" placeholder="e.g. JEE Main Full Mock Test 1" required>
+              </div>
+              <div class="field">
+                <label for="descInput">Description (optional)</label>
+                <textarea id="descInput" placeholder="Instructions or notes for students"></textarea>
+              </div>
+              <div class="form-row">
+                <div class="field">
+                  <label for="categoryInput">Test for</label>
+                  <select id="categoryInput">
+                    <option>JEE Main</option>
+                    <option>JEE Advanced</option>
+                    <option>NEET</option>
+                    <option>Class 9th</option>
+                    <option>Class 10th</option>
+                    <option>Class 11th</option>
+                    <option>Class 12th</option>
+                    <option>Other</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="durationInput">Exam duration (minutes)</label>
+                  <input type="number" id="durationInput" min="5" value="180" required>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="field">
+                  <label for="fromInput">Opens at</label>
+                  <input type="datetime-local" id="fromInput" required>
+                </div>
+                <div class="field">
+                  <label for="untilInput">Closes at</label>
+                  <input type="datetime-local" id="untilInput" required>
+                  <div class="hint">Students can start the test any time in this window (e.g. a 1-2 day window). Once
+                    started, they get the exam duration above.</div>
+                </div>
+              </div>
+              <button type="submit" class="btn btn-primary" id="saveDetailsBtn">Create test</button>
+            </form>
+          </div>
+
+          <div class="card" id="shareCard" style="display:none;">
+            <div class="section-title">
+              <h2 style="font-size:16px;">Share with students</h2>
+              <div class="flex gap-8">
+                <span class="status-tag" id="publishTag"></span>
+                <button class="btn btn-sm" id="publishBtn"></button>
+              </div>
+            </div>
+            <div class="copy-link-box">
+              <code id="linkText"></code>
+              <button class="btn btn-sm" id="copyLinkBtn">Copy</button>
+            </div>
+            <p class="helper-text">Code: <strong id="codeText"></strong> — students can also just type this code into
+              the "Join a test" box on their dashboard.</p>
+          </div>
+
+          <div class="card" id="questionsCard" style="display:none;">
+            <h2 style="font-size:16px;">Add a question</h2>
+            <form id="questionForm">
+              <div class="form-row">
+                <div class="field">
+                  <label for="subjectInput">Subject</label>
+                  <input type="text" id="subjectInput" list="subjectOptions" placeholder="Physics" required>
+                  <datalist id="subjectOptions">
+                    <option value="Physics"></option>
+                    <option value="Chemistry"></option>
+                    <option value="Mathematics"></option>
+                    <option value="Biology"></option>
+                  </datalist>
+                </div>
+                <div class="field">
+                  <label for="typeInput">Question type</label>
+                  <select id="typeInput">
+                    <option value="mcq">MCQ (single correct)</option>
+                    <option value="integer">Integer type</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="field">
+                <label for="questionTextInput">Question</label>
+                <textarea id="questionTextInput" required placeholder="Type the question text here"></textarea>
+              </div>
+              <div class="field">
+                <label for="imageUrlInput">Image URL (optional)</label>
+                <input type="text" id="imageUrlInput" placeholder="https://…">
+              </div>
+
+              <div id="mcqFields">
+                <div class="field"><label>Option A</label><input type="text" id="optA"></div>
+                <div class="field"><label>Option B</label><input type="text" id="optB"></div>
+                <div class="field"><label>Option C</label><input type="text" id="optC"></div>
+                <div class="field"><label>Option D</label><input type="text" id="optD"></div>
+                <div class="field">
+                  <label for="correctOptionInput">Correct answer</label>
+                  <select id="correctOptionInput">
+                    <option value="A">A</option>
+                    <option value="B">B</option>
+                    <option value="C">C</option>
+                    <option value="D">D</option>
+                  </select>
+                </div>
+              </div>
+
+              <div id="integerFields" style="display:none;">
+                <div class="field">
+                  <label for="correctIntegerInput">Correct answer (number)</label>
+                  <input type="number" id="correctIntegerInput" step="any">
+                </div>
+              </div>
+
+              <div class="field">
+                <label for="explanationInput">Explanation (optional)</label>
+                <textarea id="explanationInput"
+                  placeholder="Shown to the student after they submit, next to this question if they got it wrong"></textarea>
+              </div>
+
+              <div class="form-row">
+                <div class="field">
+                  <label for="positiveMarksInput">Marks for correct</label>
+                  <input type="number" id="positiveMarksInput" value="4" step="any" required>
+                </div>
+                <div class="field">
+                  <label for="negativeMarksInput">Marks deducted if wrong</label>
+                  <input type="number" id="negativeMarksInput" value="1" step="any" required>
+                </div>
+              </div>
+
+              <button type="submit" class="btn btn-primary" id="addQuestionBtn">Add question</button>
+            </form>
+          </div>
+
+          <div class="card" id="questionListCard" style="display:none;">
+            <div class="section-title">
+              <h2 style="font-size:16px;">Questions added</h2><span id="questionCountTag" class="text-muted"
+                style="font-size:13px;"></span>
+            </div>
+            <div id="questionsList"></div>
+          </div>
+
+          <div class="card" id="leaderboardCard" style="display:none;">
+            <h2 style="font-size:16px;">Leaderboard</h2>
+            <div class="table-scroll">
+              <table class="report-table" id="leaderboardTable">
+                <thead>
+                  <tr>
+                    <th>Rank</th>
+                    <th>Student</th>
+                    <th>Score</th>
+                    <th>Percentile</th>
+                  </tr>
+                </thead>
+                <tbody id="leaderboardBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =====================================================================
      EXAM VIEW (its own header only — no site nav, on purpose)
      ===================================================================== -->
-<section id="view-exam" class="view">
+  <section id="view-exam" class="view">
 
-  <div id="loadingScreen" class="center-screen"><p class="text-muted">Loading your test…</p></div>
+    <div id="loadingScreen" class="center-screen">
+      <p class="text-muted">Loading your test…</p>
+    </div>
 
-  <div id="examShell" style="display:none;">
+    <div id="examShell" style="display:none;">
 
-    <div class="exam-topbar">
-      <div class="exam-topbar-inner">
-        <div>
-          <div class="exam-title" id="examTitle">—</div>
-          <div class="exam-candidate" id="examCandidate">—</div>
+      <div class="exam-topbar">
+        <div class="exam-topbar-inner">
+          <div>
+            <div class="exam-title" id="examTitle">—</div>
+            <div class="exam-candidate" id="examCandidate">—</div>
+          </div>
+          <div class="exam-timer" id="examTimer">00:00:00</div>
         </div>
-        <div class="exam-timer" id="examTimer">00:00:00</div>
-      </div>
-      <div class="subject-tabs" id="subjectTabs"></div>
-    </div>
-
-    <div class="exam-body">
-      <div class="exam-main">
-        <div class="question-card" id="questionCard"></div>
+        <div class="subject-tabs" id="subjectTabs"></div>
       </div>
 
-      <div class="exam-palette-panel" id="palettePanel">
-        <h3 style="font-size:14.5px;">Question palette</h3>
-        <div class="palette-legend">
-          <div class="legend-item"><span class="legend-swatch" style="background:var(--not-visited-tint);border:1px solid var(--border-strong);"></span>Not visited</div>
-          <div class="legend-item"><span class="legend-swatch" style="background:var(--danger);"></span>Not answered</div>
-          <div class="legend-item"><span class="legend-swatch" style="background:var(--success);"></span>Answered</div>
-          <div class="legend-item"><span class="legend-swatch" style="background:var(--review);"></span>Marked for review</div>
+      <div class="exam-body">
+        <div class="exam-main">
+          <div class="question-card" id="questionCard"></div>
         </div>
-        <div class="palette-grid" id="paletteGrid"></div>
-        <button class="btn btn-danger btn-block palette-submit" id="submitTestBtn">Submit test</button>
+
+        <div class="exam-palette-panel" id="palettePanel">
+          <h3 style="font-size:14.5px;">Question palette</h3>
+          <div class="palette-legend">
+            <div class="legend-item"><span class="legend-swatch"
+                style="background:var(--not-visited-tint);border:1px solid var(--border-strong);"></span>Not visited
+            </div>
+            <div class="legend-item"><span class="legend-swatch" style="background:var(--danger);"></span>Not answered
+            </div>
+            <div class="legend-item"><span class="legend-swatch" style="background:var(--success);"></span>Answered
+            </div>
+            <div class="legend-item"><span class="legend-swatch" style="background:var(--review);"></span>Marked for
+              review</div>
+          </div>
+          <div class="palette-grid" id="paletteGrid"></div>
+          <button class="btn btn-danger btn-block palette-submit" id="submitTestBtn">Submit test</button>
+        </div>
+      </div>
+
+      <button class="btn btn-primary palette-toggle" id="paletteToggleBtn">Questions</button>
+      <div class="palette-backdrop" id="paletteBackdrop"></div>
+    </div>
+
+    <!-- Begin / fullscreen gate -->
+    <div class="modal-backdrop" id="beginModal">
+      <div class="modal">
+        <h3 id="beginModalTitle">Ready to begin?</h3>
+        <p>Your time has already started counting down. Click below to enter full-screen exam mode and begin. Leaving
+          the window during the test will count as a violation.</p>
+        <div class="modal-actions">
+          <button class="btn btn-primary btn-block" id="beginBtn">Begin test</button>
+        </div>
       </div>
     </div>
 
-    <button class="btn btn-primary palette-toggle" id="paletteToggleBtn">Questions</button>
-    <div class="palette-backdrop" id="paletteBackdrop"></div>
-  </div>
-
-  <!-- Begin / fullscreen gate -->
-  <div class="modal-backdrop" id="beginModal">
-    <div class="modal">
-      <h3 id="beginModalTitle">Ready to begin?</h3>
-      <p>Your time has already started counting down. Click below to enter full-screen exam mode and begin. Leaving the window during the test will count as a violation.</p>
-      <div class="modal-actions">
-        <button class="btn btn-primary btn-block" id="beginBtn">Begin test</button>
+    <!-- Violation warning -->
+    <div class="modal-backdrop" id="violationModal">
+      <div class="modal warning">
+        <h3>⚠ Warning</h3>
+        <p id="violationText"></p>
+        <div class="modal-actions">
+          <button class="btn btn-primary" id="violationOkBtn">Return to test</button>
+        </div>
       </div>
     </div>
-  </div>
 
-  <!-- Violation warning -->
-  <div class="modal-backdrop" id="violationModal">
-    <div class="modal warning">
-      <h3>⚠ Warning</h3>
-      <p id="violationText"></p>
-      <div class="modal-actions">
-        <button class="btn btn-primary" id="violationOkBtn">Return to test</button>
+    <!-- Submit confirmation -->
+    <div class="modal-backdrop" id="submitModal">
+      <div class="modal">
+        <h3>Submit test?</h3>
+        <p>Once submitted you can't change your answers. Here's your current status:</p>
+        <div class="modal-summary-grid" id="submitSummaryGrid"></div>
+        <div class="modal-actions">
+          <button class="btn" id="cancelSubmitBtn">Keep working</button>
+          <button class="btn btn-danger" id="confirmSubmitBtn">Submit now</button>
+        </div>
       </div>
     </div>
-  </div>
 
-  <!-- Submit confirmation -->
-  <div class="modal-backdrop" id="submitModal">
-    <div class="modal">
-      <h3>Submit test?</h3>
-      <p>Once submitted you can't change your answers. Here's your current status:</p>
-      <div class="modal-summary-grid" id="submitSummaryGrid"></div>
-      <div class="modal-actions">
-        <button class="btn" id="cancelSubmitBtn">Keep working</button>
-        <button class="btn btn-danger" id="confirmSubmitBtn">Submit now</button>
+    <!-- Terminal / error state -->
+    <div class="modal-backdrop" id="terminalModal">
+      <div class="modal">
+        <h3 id="terminalTitle">Test submitted</h3>
+        <p id="terminalText"></p>
+        <div class="modal-actions">
+          <a class="btn btn-primary" id="terminalActionBtn" href="#/dashboard">Back to dashboard</a>
+        </div>
       </div>
     </div>
-  </div>
 
-  <!-- Terminal / error state -->
-  <div class="modal-backdrop" id="terminalModal">
-    <div class="modal">
-      <h3 id="terminalTitle">Test submitted</h3>
-      <p id="terminalText"></p>
-      <div class="modal-actions">
-        <a class="btn btn-primary" id="terminalActionBtn" href="#/dashboard">Back to dashboard</a>
-      </div>
-    </div>
-  </div>
+  </section>
 
-</section>
-
-<!-- =====================================================================
+  <!-- =====================================================================
      RESULT VIEW
      ===================================================================== -->
-<section id="view-result" class="view">
-  <header class="appbar">
-    <div class="container">
-      <a href="#/dashboard" class="appbar-brand"><span class="dot"></span> Test Series</a>
-      <div class="appbar-user">
-        <a href="#/dashboard" class="btn btn-sm">← Dashboard</a>
-        <button class="btn btn-sm js-logout">Log out</button>
+  <section id="view-result" class="view">
+    <header class="appbar">
+      <div class="container">
+        <a href="#/dashboard" class="appbar-brand"><span class="dot"></span> Test Series</a>
+        <div class="appbar-user">
+          <a href="#/dashboard" class="btn btn-sm">← Dashboard</a>
+          <button class="btn btn-sm js-logout">Log out</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="page-body">
+      <div class="container" style="max-width:860px;">
+        <div id="resultContent">
+          <div class="empty-state">Loading your report…</div>
+        </div>
       </div>
     </div>
-  </header>
+  </section>
 
-  <div class="page-body">
-    <div class="container" style="max-width:860px;">
-      <div id="resultContent"><div class="empty-state">Loading your report…</div></div>
-    </div>
-  </div>
-</section>
-
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="script.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="script.js"></script>
 </body>
+
 </html>
