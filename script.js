@@ -731,8 +731,14 @@ function setupExamStaticListeners() {
   document.getElementById("cancelSubmitBtn").addEventListener("click", () => closeModal("submitModal"));
   document.getElementById("confirmSubmitBtn").addEventListener("click", () => doSubmit("manual"));
   document.getElementById("violationOkBtn").addEventListener("click", onViolationAck);
-  document.getElementById("paletteToggleBtn").addEventListener("click", togglePaletteDrawer);
-  document.getElementById("paletteBackdrop").addEventListener("click", togglePaletteDrawer);
+document.getElementById("paletteToggleBtn")
+  .addEventListener("click", togglePaletteDrawer);
+
+document.getElementById("paletteBackdrop")
+  .addEventListener("click", togglePaletteDrawer);
+
+document.getElementById("paletteCloseBtn")
+  .addEventListener("click", togglePaletteDrawer);
 }
 
 function closeModal(id) { document.getElementById(id).classList.remove("open"); }
@@ -1082,7 +1088,6 @@ async function onBegin() {
   closeModal("beginModal");
   examStarted = true;
   examLocked = true;
-  try { await document.documentElement.requestFullscreen(); } catch (e) { /* fullscreen not available — continue anyway */ }
   addAntiCheatListeners();
   startTimingQuestion(currentQuestion());
 }
