@@ -1699,3 +1699,445 @@ table.report-table td {
     bottom: 12px;
   }
 }
+
+/* =========================================================
+   MOBILE EXAM — FULL WIDTH / FULL HEIGHT FIX
+   ========================================================= */
+
+#view-exam.active {
+  width: 100%;
+  min-width: 0;
+  min-height: 100dvh;
+}
+
+#examShell {
+  width: 100%;
+  min-width: 0;
+  min-height: 100dvh;
+}
+
+.exam-topbar-inner,
+.exam-body,
+.question-card {
+  min-width: 0;
+}
+
+@media (max-width: 880px) {
+
+  /* ---------- FULL MOBILE SCREEN ---------- */
+
+  #view-exam.active {
+    width: 100vw;
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+
+  #examShell {
+    width: 100%;
+    max-width: 100%;
+    min-height: 100dvh;
+  }
+
+  /* ---------- TOP BAR ---------- */
+
+  .exam-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 60;
+    width: 100%;
+  }
+
+  .exam-topbar-inner {
+    width: 100%;
+    padding: 10px 12px;
+
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+
+    align-items: center;
+    gap: 10px;
+  }
+
+  .exam-topbar-inner > div:first-child {
+    min-width: 0;
+  }
+
+  .exam-title,
+  .exam-candidate {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .exam-title {
+    font-size: 14px;
+  }
+
+  .exam-candidate {
+    font-size: 11px;
+    margin-top: 2px;
+  }
+
+  .exam-timer {
+    flex-shrink: 0;
+    font-size: 16px;
+    padding: 6px 9px;
+    white-space: nowrap;
+  }
+
+  /* ---------- SUBJECT TABS ---------- */
+
+  .subject-tabs {
+    width: 100%;
+    max-width: 100%;
+
+    padding: 0 8px;
+
+    overflow-x: auto;
+    overflow-y: hidden;
+
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .subject-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .subject-tabs button {
+    flex: 0 0 auto;
+    padding: 9px 12px;
+    font-size: 12.5px;
+  }
+
+  /* ---------- MAIN EXAM ---------- */
+
+  .exam-body {
+    width: 100%;
+    max-width: 100%;
+
+    display: block;
+
+    padding: 10px 10px 88px;
+    margin: 0;
+  }
+
+  .exam-main {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .question-card {
+    width: 100%;
+    max-width: 100%;
+
+    padding: 14px;
+
+    border-radius: 10px;
+
+    overflow: hidden;
+  }
+
+  .question-meta {
+    width: 100%;
+  }
+
+  .question-number-badge {
+    max-width: 75%;
+    overflow-wrap: anywhere;
+  }
+
+  .question-marks {
+    white-space: nowrap;
+  }
+
+  .question-text {
+    width: 100%;
+    max-width: 100%;
+
+    font-size: 15px;
+    line-height: 1.55;
+
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .question-image img {
+    width: 100%;
+    height: auto;
+  }
+
+  /* ---------- OPTIONS ---------- */
+
+  .option-list {
+    width: 100%;
+  }
+
+  .option-item {
+    width: 100%;
+    min-width: 0;
+
+    padding: 11px;
+    gap: 9px;
+  }
+
+  .option-text {
+    min-width: 0;
+    flex: 1;
+
+    font-size: 14px;
+    line-height: 1.45;
+
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  /* ---------- QUESTION ACTIONS ---------- */
+
+  .exam-actions {
+    width: 100%;
+
+    display: flex;
+    flex-direction: column;
+
+    gap: 8px;
+    margin-top: 16px;
+  }
+
+  .exam-actions-left,
+  .exam-actions-right {
+    width: 100%;
+
+    display: flex;
+    gap: 8px;
+  }
+
+  .exam-actions-left .btn,
+  .exam-actions-right .btn {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* ---------- QUESTION DRAWER ---------- */
+
+  .exam-palette-panel {
+    width: 100%;
+    max-width: 100%;
+
+    position: fixed;
+
+    left: 0;
+    right: 0;
+    bottom: 0;
+
+    padding: 14px;
+
+    max-height: 72dvh;
+
+    overflow-y: auto;
+    overflow-x: hidden;
+
+    border-radius: 18px 18px 0 0;
+
+    transform: translateY(110%);
+    transition: transform 0.22s ease;
+
+    z-index: 120;
+
+    box-sizing: border-box;
+  }
+
+  .exam-palette-panel.open {
+    transform: translateY(0);
+  }
+
+  .palette-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    margin-bottom: 12px;
+  }
+
+  .palette-header h3 {
+    margin: 0;
+    font-size: 15px;
+  }
+
+  .palette-close {
+    width: 32px;
+    height: 32px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    border: 1px solid var(--border-strong);
+    border-radius: 50%;
+
+    background: var(--surface);
+    color: var(--ink);
+
+    font-size: 22px;
+    line-height: 1;
+
+    cursor: pointer;
+  }
+
+  .palette-grid {
+    width: 100%;
+
+    grid-template-columns: repeat(
+      5,
+      minmax(0, 1fr)
+    );
+
+    gap: 7px;
+  }
+
+  .palette-btn {
+    width: 100%;
+    min-width: 0;
+  }
+
+  /* ---------- MOBILE BOTTOM CONTROLS ---------- */
+
+  .mobile-exam-actions {
+    position: fixed;
+
+    left: 0;
+    right: 0;
+    bottom: 0;
+
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+
+    gap: 8px;
+
+    padding:
+      8px
+      10px
+      calc(8px + env(safe-area-inset-bottom));
+
+    background: var(--surface);
+
+    border-top: 1px solid var(--border);
+
+    box-shadow:
+      0 -4px 18px rgba(0,0,0,0.08);
+
+    z-index: 110;
+  }
+
+  .mobile-exam-actions .btn {
+    width: 100%;
+    min-height: 44px;
+    font-size: 13px;
+  }
+
+  /* ---------- BACKDROP ---------- */
+
+  .palette-backdrop.open {
+    display: block;
+
+    position: fixed;
+    inset: 0;
+
+    background: rgba(0,0,0,0.48);
+
+    z-index: 115;
+  }
+
+  /* ---------- THEME BUTTON ----------
+     Keep it away from exam controls */
+
+  .theme-toggle {
+    right: 10px;
+    bottom: 72px;
+
+    width: 36px;
+    height: 36px;
+
+    font-size: 15px;
+    z-index: 100;
+  }
+}
+
+
+/* =========================================================
+   SMALL PHONES
+   ========================================================= */
+
+@media (max-width: 480px) {
+
+  .exam-body {
+    padding-left: 8px;
+    padding-right: 8px;
+    padding-bottom: 88px;
+  }
+
+  .question-card {
+    padding: 12px;
+  }
+
+  .exam-title {
+    font-size: 13px;
+  }
+
+  .exam-timer {
+    font-size: 14px;
+    padding: 5px 8px;
+  }
+
+  .question-text {
+    font-size: 14.5px;
+  }
+
+  .option-item {
+    padding: 10px;
+  }
+
+  .option-text {
+    font-size: 13.5px;
+  }
+
+  .mobile-exam-actions {
+    gap: 6px;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  .mobile-exam-actions .btn {
+    min-height: 43px;
+    font-size: 12.5px;
+  }
+
+  .exam-palette-panel {
+    max-height: 76dvh;
+    padding: 12px;
+  }
+
+  .palette-grid {
+    gap: 6px;
+  }
+}
+
+
+/* =========================================================
+   DARK MODE MOBILE EXAM
+   ========================================================= */
+
+[data-theme="dark"] .mobile-exam-actions {
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+[data-theme="dark"] .palette-close {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+[data-theme="dark"] .exam-palette-panel {
+  background: var(--surface);
+}
