@@ -9,40 +9,34 @@
 </head>
 
 <body>
-<button
-  type="button"
-  id="themeToggle"
-  class="theme-toggle"
-  aria-label="Switch to dark theme"
-  title="Switch theme"
->
-  🌙
-</button>
+  <button type="button" id="themeToggle" class="theme-toggle" aria-label="Switch to dark theme" title="Switch theme">
+    🌙
+  </button>
   <!-- =====================================================================
      AUTH VIEW — the only entry point for both students and admins
      ===================================================================== -->
   <section id="view-auth" class="view">
     <div class="auth-shell">
       <div class="auth-brand">
-  <div class="brand-symbols">⚛ π ∑ √ Δ</div>
+        <div class="brand-symbols">⚛ π ∑ √ Δ</div>
 
-  <div class="brand-main">
-    <h1>JEE<br>HUSTLERS</h1>
-    <div class="brand-subtitle">TEST SERIES</div>
-    <p>Practice. Compete. Improve.</p>
+        <div class="brand-main">
+          <h1>JEE<br>HUSTLERS</h1>
+          <div class="brand-subtitle">TEST SERIES</div>
+          <p>Practice. Compete. Improve.</p>
 
-    <div class="brand-features">
-      <span>✓ JEE-style tests</span>
-      <span>✓ Instant results</span>
-      <span>✓ Rank & percentile</span>
-      <span>✓ Detailed analysis</span>
-    </div>
-  </div>
+          <div class="brand-features">
+            <span>✓ JEE-style tests</span>
+            <span>✓ Instant results</span>
+            <span>✓ Rank & percentile</span>
+            <span>✓ Detailed analysis</span>
+          </div>
+        </div>
 
-  <div class="brand-bottom">
-    FREE &nbsp; • &nbsp; JEE PRACTICE &nbsp; • &nbsp; JUST IMPROVE
-  </div>
-</div>
+        <div class="brand-bottom">
+          FREE &nbsp; • &nbsp; JEE PRACTICE &nbsp; • &nbsp; JUST IMPROVE
+        </div>
+      </div>
 
       <div class="auth-form-wrap">
         <div class="auth-form">
@@ -83,7 +77,7 @@
           </form>
 
           <p class="helper-text mt-16">
-           New student? Register first
+            New student? Register first
           </p>
         </div>
       </div>
@@ -370,73 +364,96 @@
         </div>
 
         <div class="exam-palette-panel" id="palettePanel">
-          <h3 style="font-size:14.5px;">Question palette</h3>
-          <div class="palette-legend">
-            <div class="legend-item"><span class="legend-swatch"
-                style="background:var(--not-visited-tint);border:1px solid var(--border-strong);"></span>Not visited
-            </div>
-            <div class="legend-item"><span class="legend-swatch" style="background:var(--danger);"></span>Not answered
-            </div>
-            <div class="legend-item"><span class="legend-swatch" style="background:var(--success);"></span>Answered
-            </div>
-            <div class="legend-item"><span class="legend-swatch" style="background:var(--review);"></span>Marked for
-              review</div>
+          <div class="palette-header">
+            <h3>Question palette</h3>
+            <button type="button" class="palette-close" id="paletteCloseBtn">×</button>
           </div>
+
+          <div class="palette-legend">
+            <div class="legend-item">
+              <span class="legend-swatch"
+                style="background:var(--not-visited-tint);border:1px solid var(--border-strong);"></span>
+              Not visited
+            </div>
+
+            <div class="legend-item">
+              <span class="legend-swatch" style="background:var(--danger);"></span>
+              Not answered
+            </div>
+
+            <div class="legend-item">
+              <span class="legend-swatch" style="background:var(--success);"></span>
+              Answered
+            </div>
+
+            <div class="legend-item">
+              <span class="legend-swatch" style="background:var(--review);"></span>
+              Marked for review
+            </div>
+          </div>
+
           <div class="palette-grid" id="paletteGrid"></div>
-          <button class="btn btn-danger btn-block palette-submit" id="submitTestBtn">Submit test</button>
+        </div>
+
+        <div class="mobile-exam-actions">
+          <button type="button" class="btn btn-secondary" id="paletteToggleBtn">
+            Questions
+          </button>
+
+          <button type="button" class="btn btn-danger" id="submitTestBtn">
+            Submit Test
+          </button>
+        </div>
+
+        <div class="palette-backdrop" id="paletteBackdrop"></div>
+      </div>
+
+      <!-- Begin / fullscreen gate -->
+      <div class="modal-backdrop" id="beginModal">
+        <div class="modal">
+          <h3 id="beginModalTitle">Ready to begin?</h3>
+          <p>Your time has already started counting down. Click below to enter full-screen exam mode and begin. Leaving
+            the window during the test will count as a violation.</p>
+          <div class="modal-actions">
+            <button class="btn btn-primary btn-block" id="beginBtn">Begin test</button>
+          </div>
         </div>
       </div>
 
-      <button class="btn btn-primary palette-toggle" id="paletteToggleBtn">Questions</button>
-      <div class="palette-backdrop" id="paletteBackdrop"></div>
-    </div>
-
-    <!-- Begin / fullscreen gate -->
-    <div class="modal-backdrop" id="beginModal">
-      <div class="modal">
-        <h3 id="beginModalTitle">Ready to begin?</h3>
-        <p>Your time has already started counting down. Click below to enter full-screen exam mode and begin. Leaving
-          the window during the test will count as a violation.</p>
-        <div class="modal-actions">
-          <button class="btn btn-primary btn-block" id="beginBtn">Begin test</button>
+      <!-- Violation warning -->
+      <div class="modal-backdrop" id="violationModal">
+        <div class="modal warning">
+          <h3>⚠ Warning</h3>
+          <p id="violationText"></p>
+          <div class="modal-actions">
+            <button class="btn btn-primary" id="violationOkBtn">Return to test</button>
+          </div>
         </div>
       </div>
-    </div>
 
-    <!-- Violation warning -->
-    <div class="modal-backdrop" id="violationModal">
-      <div class="modal warning">
-        <h3>⚠ Warning</h3>
-        <p id="violationText"></p>
-        <div class="modal-actions">
-          <button class="btn btn-primary" id="violationOkBtn">Return to test</button>
+      <!-- Submit confirmation -->
+      <div class="modal-backdrop" id="submitModal">
+        <div class="modal">
+          <h3>Submit test?</h3>
+          <p>Once submitted you can't change your answers. Here's your current status:</p>
+          <div class="modal-summary-grid" id="submitSummaryGrid"></div>
+          <div class="modal-actions">
+            <button class="btn" id="cancelSubmitBtn">Keep working</button>
+            <button class="btn btn-danger" id="confirmSubmitBtn">Submit now</button>
+          </div>
         </div>
       </div>
-    </div>
 
-    <!-- Submit confirmation -->
-    <div class="modal-backdrop" id="submitModal">
-      <div class="modal">
-        <h3>Submit test?</h3>
-        <p>Once submitted you can't change your answers. Here's your current status:</p>
-        <div class="modal-summary-grid" id="submitSummaryGrid"></div>
-        <div class="modal-actions">
-          <button class="btn" id="cancelSubmitBtn">Keep working</button>
-          <button class="btn btn-danger" id="confirmSubmitBtn">Submit now</button>
+      <!-- Terminal / error state -->
+      <div class="modal-backdrop" id="terminalModal">
+        <div class="modal">
+          <h3 id="terminalTitle">Test submitted</h3>
+          <p id="terminalText"></p>
+          <div class="modal-actions">
+            <a class="btn btn-primary" id="terminalActionBtn" href="#/dashboard">Back to dashboard</a>
+          </div>
         </div>
       </div>
-    </div>
-
-    <!-- Terminal / error state -->
-    <div class="modal-backdrop" id="terminalModal">
-      <div class="modal">
-        <h3 id="terminalTitle">Test submitted</h3>
-        <p id="terminalText"></p>
-        <div class="modal-actions">
-          <a class="btn btn-primary" id="terminalActionBtn" href="#/dashboard">Back to dashboard</a>
-        </div>
-      </div>
-    </div>
 
   </section>
 
