@@ -1324,9 +1324,61 @@ function setupGlobalListeners() {
   document.querySelectorAll(".js-logout").forEach(btn => btn.addEventListener("click", logout));
 }
 
+setupTheme();
 setupGlobalListeners();
 setupAuthListeners();
 setupDashboardListeners();
 setupAdminTestListeners();
 setupExamStaticListeners();
 router();
+
+/* =========================================================
+   THEME SYSTEM
+   Default: LIGHT
+   Remembers user's choice
+   ========================================================= */
+
+function applyTheme(theme) {
+  const safeTheme = theme === "dark" ? "dark" : "light";
+
+  document.documentElement.setAttribute("data-theme", safeTheme);
+
+  localStorage.setItem("jee_theme", safeTheme);
+
+  const btn = document.getElementById("themeToggle");
+
+  if (btn) {
+    btn.textContent = safeTheme === "dark" ? "☀️" : "🌙";
+
+    btn.setAttribute(
+      "aria-label",
+      safeTheme === "dark"
+        ? "Switch to light theme"
+        : "Switch to dark theme"
+    );
+
+    btn.title =
+      safeTheme === "dark"
+        ? "Switch to light theme"
+        : "Switch to dark theme";
+  }
+}
+
+function toggleTheme() {
+  const current =
+    document.documentElement.getAttribute("data-theme") || "light";
+
+  applyTheme(current === "dark" ? "light" : "dark");
+}
+
+function setupTheme() {
+  const savedTheme = localStorage.getItem("jee_theme") || "light";
+
+  applyTheme(savedTheme);
+
+  const btn = document.getElementById("themeToggle");
+
+  if (btn) {
+    btn.addEventListener("click", toggleTheme);
+  }
+}
