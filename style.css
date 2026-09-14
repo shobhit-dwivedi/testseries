@@ -2166,14 +2166,30 @@ table.report-table td {
 .palette-btn.marked, .palette-btn.answered_marked { background: #7c3aed; border-color: #7c3aed; color: #fff; }
 .palette-btn.answered_marked::after { background: #facc15; }
 
-/* Keep desktop focused on the question; its palette is always visible. */
 @media (min-width: 881px) {
-  .mobile-exam-actions { display: flex; justify-content: flex-end; padding: 0; margin-top: 14px; }
-  #paletteToggleBtn { display: none; }
-  .mobile-exam-actions #submitTestBtn { min-width: 140px; }
-  .exam-body { grid-template-columns: minmax(0, 1fr) 286px; gap: 28px; padding: 26px clamp(18px, 3vw, 42px) 42px; }
-  .exam-main { max-width: 1080px; }
-  .question-card { min-height: calc(100vh - 185px); }
+  .mobile-exam-actions {
+    position: static;
+    grid-column: 2;
+    grid-row: 2;
+    width: 100%;
+    display: flex;
+    justify-content: stretch;
+    margin-top: -12px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    z-index: auto;
+  }
+
+  .mobile-exam-actions #paletteToggleBtn {
+    display: none;
+  }
+
+  .mobile-exam-actions #submitTestBtn {
+    display: block;
+    width: 100%;
+  }
 }
 
 /* Icon-only reporting keeps the question interface uncluttered. */
@@ -2181,10 +2197,12 @@ table.report-table td {
 .report-question-icon { width: 30px; height: 30px; border: 0; border-radius: 50%; background: transparent; color: var(--muted); cursor: pointer; font-size: 17px; line-height: 1; }
 .report-question-icon:hover, .report-question-icon:focus-visible { color: var(--danger); background: var(--danger-tint); outline: none; }
 
-/* Mobile app-style focus mode: avoids the browser-owned fullscreen exit hint. */
-html.mobile-exam-focus, html.mobile-exam-focus body { width: 100%; height: 100%; overflow: hidden; }
-html.mobile-exam-focus #view-exam.active, html.mobile-exam-focus #examShell { min-height: 100dvh; height: 100dvh; }
-html.mobile-exam-focus .exam-body { height: calc(100dvh - 105px); overflow-y: auto; overscroll-behavior: contain; }
+/* File and URL controls match the existing simple question form. */
+.image-question-field { display: grid; gap: 8px; }
+.image-question-field label { margin: 0; }
+input[type="url"], input[type="file"] { width: 100%; min-height: 42px; box-sizing: border-box; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--ink); padding: 9px 10px; font: inherit; }
+input[type="file"] { padding: 7px 8px; cursor: pointer; }
+input[type="file"]::file-selector-button { margin-right: 10px; border: 0; border-radius: 5px; padding: 5px 9px; background: var(--brand-tint); color: var(--brand-dark); font: inherit; font-weight: 650; cursor: pointer; }
 
 /* A stable two-column workspace on desktop: the question has room for long
    JEE content while the navigation panel stays in reach. */
@@ -2204,4 +2222,73 @@ html.mobile-exam-focus .exam-body { height: calc(100dvh - 105px); overflow-y: au
   .question-tools .btn { width: 100%; min-height: 42px; }
   #leaderboardTable th:last-child, #leaderboardTable td:last-child { min-width: 112px; }
   .rating-row { justify-content: space-between; }
+}
+/* Desktop: Submit button below question palette */
+@media (min-width: 881px) {
+  .exam-palette-panel {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .mobile-exam-actions {
+    grid-column: 2;
+    justify-content: flex-end;
+    margin-top: 12px;
+  }
+
+  #paletteToggleBtn {
+    display: none;
+  }
+
+  #submitTestBtn {
+    display: inline-flex;
+  }
+}/* =========================================================
+   DESKTOP — SUBMIT DIRECTLY BELOW QUESTION PALETTE
+   ========================================================= */
+@media (min-width: 881px) {
+
+  .exam-body {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    grid-template-rows: auto auto;
+    column-gap: 24px;
+    row-gap: 10px;
+  }
+
+  /* Keep palette in right column, first row */
+  .exam-palette-panel {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  /* Move Submit into right column, directly under palette */
+  .mobile-exam-actions {
+    position: static !important;
+    grid-column: 2;
+    grid-row: 2;
+
+    width: 100%;
+    margin: 0;
+    padding: 0;
+
+    display: flex;
+    justify-content: stretch;
+
+    background: transparent;
+    border: none;
+    box-shadow: none;
+  }
+
+  /* Hide Questions button ONLY on desktop */
+  .mobile-exam-actions #paletteToggleBtn {
+    display: none;
+  }
+
+  /* Full-width Submit button */
+  .mobile-exam-actions #submitTestBtn {
+    display: block;
+    width: 100%;
+  }
 }
