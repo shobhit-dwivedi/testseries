@@ -68,6 +68,35 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+function renderMath(root) {
+  if (!root) return;
+  const run = () => {
+    if (typeof renderMathInElement !== "function") return setTimeout(run, 100);
+    try { renderMathInElement(root, { delimiters: [
+      { left: "$$", right: "$$", display: true }, { left: "\\[", right: "\\]", display: true },
+      { left: "$", right: "$", display: false }, { left: "\\(", right: "\\)", display: false }
+    ], throwOnError: false, strict: "ignore" }); } catch (_) {}
+  };
+  run();
+}
+
+function normaliseImageUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  try {
+    const url = new URL(raw);
+    if (!["https:", "http:"].includes(url.protocol)) return null;
+    const match = url.hostname.includes("drive.google.com") && (url.pathname.match(/\/d\/([^/]+)/) || url.searchParams.get("id"));
+    const id = Array.isArray(match) ? match[1] : match;
+    return id ? `https://drive.google.com/uc?export=view&id=${encodeURIComponent(id)}` : url.href;
+  } catch (_) { return null; }
+}
+
+function questionImageHtml(url) {
+  const safeUrl = normaliseImageUrl(url);
+  return safeUrl ? `<div class="question-image"><img src="${escapeHtml(safeUrl)}" alt="Question diagram" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentElement.innerHTML='<div class=&quot;image-fallback&quot;>This question image could not be loaded. Please report it.</div>'"></div>` : "";
+}
+
 function friendlyError(err) {
   if (!err) return "Something went wrong. Please try again.";
   const msg = err.message || String(err);
@@ -397,11 +426,11 @@ async function loadMyAttempts() {
 
 async function loadAdminTests() {
   const list = document.getElementById("adminTestsList");
-  const { data, error } = await sb.from("tests").select("*").eq("created_by", myProfile.id).order("created_at", { ascending: false });
+  const { data, error } = await sb.from("tests").select("*").order("created_at", { ascending: false });
 
   if (error) { list.innerHTML = `<div class="error-box">${escapeHtml(friendlyError(error))}</div>`; return; }
   if (!data || data.length === 0) {
-    list.innerHTML = `<div class="empty-state">You haven't created a test yet.</div>`;
+    list.innerHTML = `<div class="empty-state">No tests have been created yet.</div>`;
     return;
   }
 
@@ -424,6 +453,7 @@ async function loadAdminTests() {
         <div class="list-row-actions">
           <button class="btn btn-sm js-copy-link" data-link="${escapeHtml(link)}">Copy link</button>
           <a class="btn btn-primary btn-sm" href="#/admin-test?test=${t.id}">Manage</a>
+          <button class="btn btn-sm btn-danger js-delete-test" data-id="${t.id}">Delete</button>
         </div>
       </div>
     `;
@@ -434,6 +464,15 @@ async function loadAdminTests() {
       navigator.clipboard.writeText(btn.dataset.link).then(() => toast("Link copied"));
     });
   });
+  list.querySelectorAll(".js-delete-test").forEach(btn => btn.addEventListener("click", () => deleteTest(btn.dataset.id)));
+}
+
+async function deleteTest(id) {
+  if (!confirm("Delete this test, its questions, attempts, reports, and leaderboard entries? This cannot be undone.")) return;
+  const { error } = await sb.rpc("admin_delete_test", { p_test_id: id });
+  if (error) { toast(friendlyError(error), "error"); return; }
+  toast("Test deleted");
+  await loadAdminTests();
 }
 
 /* =========================================================================
@@ -441,6 +480,7 @@ async function loadAdminTests() {
    ========================================================================= */
 let currentTest = null;
 let questionCounter = 0;
+let editingQuestionId = null;
 
 function toLocalInputValue(isoOrDate) {
   const d = new Date(isoOrDate);
@@ -453,6 +493,18 @@ function setupAdminTestListeners() {
     const isMcq = e.target.value === "mcq";
     document.getElementById("mcqFields").style.display = isMcq ? "block" : "none";
     document.getElementById("integerFields").style.display = isMcq ? "none" : "block";
+  });
+  const questionInput = document.getElementById("questionTextInput");
+  const preview = document.getElementById("questionMathPreview");
+  questionInput.addEventListener("input", () => {
+    preview.textContent = questionInput.value || "Math preview will appear here.";
+    renderMath(preview);
+  });
+  document.getElementById("imageUrlInput").addEventListener("input", (e) => {
+    const box = document.getElementById("imagePreview");
+    const url = normaliseImageUrl(e.target.value);
+    box.hidden = !url;
+    box.innerHTML = url ? `<img src="${escapeHtml(url)}" alt="Image preview" onerror="this.parentElement.innerHTML='<div class=&quot;image-fallback&quot;>Image cannot be loaded. Use a direct public image URL.</div>'">` : "";
   });
 
   document.getElementById("testDetailsForm").addEventListener("submit", async (e) => {
@@ -493,6 +545,7 @@ function setupAdminTestListeners() {
       showPostCreateSections();
       await loadQuestions();
       await loadLeaderboard();
+      await loadReports();
     }
   });
 
@@ -504,7 +557,9 @@ function setupAdminTestListeners() {
     const subject = document.getElementById("subjectInput").value.trim();
     const type = document.getElementById("typeInput").value;
     const question_text = document.getElementById("questionTextInput").value.trim();
-    const image_url = document.getElementById("imageUrlInput").value.trim() || null;
+    const rawImageUrl = document.getElementById("imageUrlInput").value.trim();
+    const image_url = rawImageUrl ? normaliseImageUrl(rawImageUrl) : null;
+    if (rawImageUrl && !image_url) { toast("Use a valid http(s) image URL", "error"); btn.disabled = false; return; }
     const explanation = document.getElementById("explanationInput").value.trim() || null;
     const positive_marks = parseFloat(document.getElementById("positiveMarksInput").value);
     const negative_marks = parseFloat(document.getElementById("negativeMarksInput").value);
@@ -529,13 +584,17 @@ function setupAdminTestListeners() {
       correct_integer_value = parseFloat(val);
     }
 
-    const { error } = await sb.from("questions").insert({
+    const wasEditing = !!editingQuestionId;
+    const questionPayload = {
       test_id: currentTest.id,
       subject, question_type: type, question_text, image_url, explanation,
       options, correct_option, correct_integer_value,
-      positive_marks, negative_marks,
-      question_order: questionCounter++,
-    });
+      positive_marks, negative_marks
+    };
+    if (!wasEditing) questionPayload.question_order = questionCounter++;
+    const { error } = wasEditing
+      ? await sb.from("questions").update(questionPayload).eq("id", editingQuestionId)
+      : await sb.from("questions").insert(questionPayload);
 
     btn.disabled = false;
     if (error) { toast(friendlyError(error), "error"); return; }
@@ -548,9 +607,13 @@ function setupAdminTestListeners() {
     document.getElementById("optC").value = "";
     document.getElementById("optD").value = "";
     document.getElementById("correctIntegerInput").value = "";
+    document.getElementById("imagePreview").hidden = true;
+    document.getElementById("imagePreview").innerHTML = "";
+    editingQuestionId = null;
+    btn.textContent = "Add question";
     document.getElementById("questionTextInput").focus();
 
-    toast("Question added", "success");
+    toast(wasEditing ? "Question updated" : "Question added", "success");
     await loadQuestions();
   });
 }
@@ -568,6 +631,7 @@ async function enterAdminTestView() {
   document.getElementById("questionsCard").style.display = "none";
   document.getElementById("questionListCard").style.display = "none";
   document.getElementById("leaderboardCard").style.display = "none";
+  document.getElementById("reportsCard").style.display = "none";
   document.getElementById("mcqFields").style.display = "block";
   document.getElementById("integerFields").style.display = "none";
   document.getElementById("typeInput").value = "mcq";
@@ -608,6 +672,7 @@ async function loadExistingTest(testId) {
   showPostCreateSections();
   await loadQuestions();
   await loadLeaderboard();
+  await loadReports();
 }
 
 function showPostCreateSections() {
@@ -615,6 +680,7 @@ function showPostCreateSections() {
   document.getElementById("questionsCard").style.display = "block";
   document.getElementById("questionListCard").style.display = "block";
   document.getElementById("leaderboardCard").style.display = "block";
+  document.getElementById("reportsCard").style.display = "block";
   renderShareCard();
 
   document.getElementById("publishBtn").onclick = async () => {
@@ -661,6 +727,7 @@ async function loadQuestions() {
         <div class="list-row-meta">${subjectDot(q.subject)}${escapeHtml(q.subject)} · ${q.question_type === "mcq" ? "MCQ" : "Integer"} · +${q.positive_marks} / -${q.negative_marks}${q.explanation ? " · has explanation" : ""}</div>
       </div>
       <div class="list-row-actions">
+        <button class="btn btn-sm js-edit-question" data-id="${q.id}">Edit</button>
         <button class="btn btn-sm btn-danger js-delete-question" data-id="${q.id}">Delete</button>
       </div>
     </div>
@@ -669,6 +736,31 @@ async function loadQuestions() {
   list.querySelectorAll(".js-delete-question").forEach(btn => {
     btn.addEventListener("click", () => deleteQuestion(btn.dataset.id));
   });
+  list.querySelectorAll(".js-edit-question").forEach(btn => {
+    btn.addEventListener("click", () => editQuestion((data || []).find(q => q.id === btn.dataset.id)));
+  });
+}
+
+function editQuestion(q) {
+  if (!q) return;
+  editingQuestionId = q.id;
+  document.getElementById("subjectInput").value = q.subject || "";
+  document.getElementById("typeInput").value = q.question_type;
+  document.getElementById("typeInput").dispatchEvent(new Event("change"));
+  document.getElementById("questionTextInput").value = q.question_text || "";
+  document.getElementById("questionMathPreview").textContent = q.question_text || "";
+  renderMath(document.getElementById("questionMathPreview"));
+  document.getElementById("imageUrlInput").value = q.image_url || "";
+  document.getElementById("imageUrlInput").dispatchEvent(new Event("input"));
+  document.getElementById("explanationInput").value = q.explanation || "";
+  document.getElementById("positiveMarksInput").value = q.positive_marks;
+  document.getElementById("negativeMarksInput").value = q.negative_marks;
+  if (q.question_type === "mcq") {
+    (q.options || []).forEach(o => { const field = document.getElementById("opt" + o.id); if (field) field.value = o.text || ""; });
+    document.getElementById("correctOptionInput").value = q.correct_option || "A";
+  } else document.getElementById("correctIntegerInput").value = q.correct_integer_value ?? "";
+  document.getElementById("addQuestionBtn").textContent = "Save question changes";
+  document.getElementById("questionsCard").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 async function deleteQuestion(id) {
@@ -680,15 +772,48 @@ async function deleteQuestion(id) {
 }
 
 async function loadLeaderboard() {
-  const { data, error } = await sb.rpc("get_test_leaderboard", { p_test_id: currentTest.id });
+  const [{ data, error }, { data: attempts, error: attemptsError }] = await Promise.all([
+    sb.rpc("get_test_leaderboard", { p_test_id: currentTest.id }),
+    sb.from("test_attempts").select("id, user_id, disqualified_at").eq("test_id", currentTest.id)
+  ]);
   const body = document.getElementById("leaderboardBody");
   if (error || !data || data.length === 0) {
-    body.innerHTML = `<tr><td colspan="4" class="text-muted">No submissions yet.</td></tr>`;
+    body.innerHTML = `<tr><td colspan="5" class="text-muted">No submissions yet.</td></tr>`;
     return;
   }
-  body.innerHTML = data.map(r => `
-    <tr><td>${r.rnk}</td><td>${escapeHtml(r.full_name || "Student")}</td><td>${r.total_score}</td><td>${r.percentile}%</td></tr>
-  `).join("");
+  const attemptByUser = new Map((attempts || []).map(a => [a.user_id, a]));
+  const visible = data.filter(r => !attemptByUser.get(r.user_id)?.disqualified_at);
+  if (attemptsError) console.warn("Could not load moderation status", attemptsError);
+  body.innerHTML = visible.length ? visible.map(r => {
+    const attempt = attemptByUser.get(r.user_id);
+    const attemptIdForRow = r.attempt_id || attempt?.id || "";
+    return `<tr><td>${r.rnk}</td><td>${escapeHtml(r.full_name || "Student")}</td><td>${r.total_score}</td><td>${r.percentile}%</td><td><button class="btn btn-sm btn-warning js-remove-attempt" data-id="${attemptIdForRow}" ${attemptIdForRow ? "" : "disabled title=\"Attempt unavailable\""}>Remove</button></td></tr>`;
+  }).join("") : `<tr><td colspan="5" class="text-muted">No eligible submissions yet.</td></tr>`;
+  body.querySelectorAll(".js-remove-attempt").forEach(btn => btn.addEventListener("click", () => removeAttempt(btn.dataset.id, btn)));
+}
+
+async function removeAttempt(id, button) {
+  if (!id) { toast("Could not identify this attempt. Refresh the leaderboard and try again.", "error"); return; }
+  if (!confirm("Remove this student from the leaderboard for suspected cheating? Their attempt will be disqualified.")) return;
+  if (button) { button.disabled = true; button.textContent = "Removing…"; }
+  const { error } = await sb.rpc("admin_disqualify_attempt", { p_attempt_id: id });
+  if (error) { if (button) { button.disabled = false; button.textContent = "Remove"; } toast(friendlyError(error), "error"); return; }
+  toast("Student removed from this leaderboard");
+  await loadLeaderboard();
+}
+
+async function loadReports() {
+  const list = document.getElementById("reportsList");
+  if (!currentTest) return;
+  const { data, error } = await sb.from("question_reports")
+    .select("id, reason, details, created_at, questions(question_text), profiles(full_name)")
+    .eq("test_id", currentTest.id).order("created_at", { ascending: false });
+  if (error) { list.innerHTML = `<div class="error-box">${escapeHtml(friendlyError(error))}</div>`; return; }
+  list.innerHTML = !data?.length ? `<div class="empty-state">No question reports yet.</div>` : data.map(r => `
+    <div class="list-row"><div class="list-row-main"><div class="list-row-title">${escapeHtml(r.reason)}</div>
+    <div class="list-row-meta">${escapeHtml(r.profiles?.full_name || "Student")} · ${formatDateTime(r.created_at)}${r.details ? " · " + escapeHtml(r.details) : ""}</div>
+    <div class="question-text" style="font-size:13px;">${escapeHtml(r.questions?.question_text || "Question unavailable")}</div></div></div>`).join("");
+  renderMath(list);
 }
 
 /* =========================================================================
@@ -702,6 +827,7 @@ let subjects = [];
 let currentSubject = null;
 let currentLocalIndex = 0;
 let timerInterval = null;
+let answerSaveQueue = Promise.resolve();
 let examStarted = false;
 let submitted = false;
 let violationModalOpen = false;
@@ -956,8 +1082,9 @@ function renderQuestion() {
       <span class="question-number-badge">${subjectDot(q.subject)}${escapeHtml(q.subject)} · Question ${currentLocalIndex + 1}</span>
       <span class="question-marks">+${q.positive_marks} / -${q.negative_marks}</span>
     </div>
-    ${q.image_url ? `<div class="question-image"><img src="${escapeHtml(q.image_url)}" alt=""></div>` : ""}
+    ${questionImageHtml(q.image_url)}
     <div class="question-text">${escapeHtml(q.question_text)}</div>
+    <div class="question-tools"><button type="button" class="report-question-icon" id="reportQuestionBtn" aria-label="Report this question" title="Report this question">⚠</button></div>
     ${bodyHtml}
     <div class="exam-actions">
       <div class="exam-actions-left">
@@ -974,8 +1101,11 @@ function renderQuestion() {
     card.querySelectorAll(".option-item").forEach(el => {
       el.addEventListener("click", () => {
         q.selected_option = el.dataset.opt;
+        q.status = q.status === "marked" || q.status === "answered_marked" ? "answered_marked" : "answered";
         card.querySelectorAll(".option-item").forEach(o => o.classList.remove("selected"));
         el.classList.add("selected");
+        persistAnswer(q);
+        renderPalette();
       });
     });
   } else {
@@ -987,23 +1117,42 @@ function renderQuestion() {
   document.getElementById("saveNextBtn").addEventListener("click", () => goSaveNext(q));
   document.getElementById("markReviewBtn").addEventListener("click", () => goMarkReview(q));
   document.getElementById("clearResponseBtn").addEventListener("click", () => goClear(q));
+  document.getElementById("reportQuestionBtn").addEventListener("click", () => reportQuestion(q));
 
+  renderMath(card);
   renderPalette();
+}
+
+let reportingQuestion = null;
+function reportQuestion(q) {
+  reportingQuestion = q;
+  document.getElementById("reportReason").value = "image not visible";
+  document.getElementById("reportDetails").value = "";
+  openModal("reportQuestionModal");
 }
 
 function hasAnswer(q) {
   return q.question_type === "mcq" ? !!q.selected_option : (q.integer_answer !== null && q.integer_answer !== undefined && q.integer_answer !== "");
 }
 
-async function persistAnswer(q) {
-  const { error } = await sb.rpc("save_answer", {
+function persistAnswer(q) {
+  // Snapshot the current state and serialize writes. Fast option taps followed
+  // by Mark for review can otherwise reach Supabase in the wrong order.
+  const payload = {
     p_attempt_id: attemptId,
     p_question_id: q.id,
     p_selected_option: q.question_type === "mcq" ? q.selected_option : null,
     p_integer_answer: q.question_type === "integer" ? q.integer_answer : null,
     p_status: q.status,
+  };
+  answerSaveQueue = answerSaveQueue.catch(() => {}).then(async () => {
+    const { error } = await sb.rpc("save_answer", payload);
+    if (error) throw error;
   });
-  if (error) toast(friendlyError(error), "error");
+  return answerSaveQueue.then(() => true).catch(error => {
+    toast(friendlyError(error), "error");
+    return false;
+  });
 }
 
 function moveToNext() {
@@ -1025,13 +1174,13 @@ function moveToNext() {
 
 async function goSaveNext(q) {
   q.status = hasAnswer(q) ? "answered" : "not_answered";
-  await persistAnswer(q);
+  if (!await persistAnswer(q)) return;
   moveToNext();
 }
 
 async function goMarkReview(q) {
   q.status = hasAnswer(q) ? "answered_marked" : "marked";
-  await persistAnswer(q);
+  if (!await persistAnswer(q)) return;
   moveToNext();
 }
 
@@ -1039,7 +1188,7 @@ async function goClear(q) {
   q.selected_option = null;
   q.integer_answer = null;
   q.status = "not_answered";
-  await persistAnswer(q);
+  if (!await persistAnswer(q)) return;
   renderQuestion();
 }
 
@@ -1058,6 +1207,13 @@ function openSubmitModal() {
 
 async function doSubmit(reason) {
   if (submitted) return;
+  // Save the answer visible on screen before scoring. This makes a direct
+  // Submit after selecting an option count without needing Save & next.
+  const activeQuestion = currentQuestion();
+  if (activeQuestion) {
+    if (hasAnswer(activeQuestion) && activeQuestion.status !== "marked" && activeQuestion.status !== "answered_marked") activeQuestion.status = "answered";
+    if (!await persistAnswer(activeQuestion)) return;
+  }
   commitActiveTime();
   submitted = true;
   examLocked = false;
@@ -1067,6 +1223,7 @@ async function doSubmit(reason) {
 
   const { data, error } = await sb.rpc("submit_attempt", { p_attempt_id: attemptId, p_auto: reason !== "manual" });
 
+  document.documentElement.classList.remove("mobile-exam-focus");
   intentionalFullscreenExit = true;
   if (document.fullscreenElement) { try { await document.exitFullscreen(); } catch (e) {} }
 
@@ -1081,11 +1238,26 @@ async function doSubmit(reason) {
     violation: "Your test was submitted automatically after repeated warnings about leaving the exam window.",
   }[reason] || "Your test has been submitted.";
 
-  showTerminal("Test submitted", `${reasonText} Your score: ${data.total_score} / ${totalMarks}.`, `#/result?attempt=${attemptId}`, "View your report");
+  showFeedbackThenResult(data, reasonText);
 }
 
 async function onBegin() {
   closeModal("beginModal");
+  const isMobile = window.matchMedia("(max-width: 880px)").matches;
+  if (isMobile) {
+    // Native mobile fullscreen displays an unavoidable browser/OS exit hint.
+    // This app-style focus mode fills the viewport without that system prompt.
+    document.documentElement.classList.add("mobile-exam-focus");
+  } else {
+    try {
+      if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+        try { await document.documentElement.requestFullscreen({ navigationUI: "hide" }); }
+        catch (_) { await document.documentElement.requestFullscreen(); }
+      }
+    } catch (_) {
+      toast("Full-screen mode was not allowed by this browser. Continue in the largest available window.", "error");
+    }
+  }
   examStarted = true;
   examLocked = true;
   addAntiCheatListeners();
@@ -1146,6 +1318,7 @@ async function triggerViolation() {
     examLocked = false;
     clearInterval(timerInterval);
     removeAntiCheatListeners();
+    document.documentElement.classList.remove("mobile-exam-focus");
     intentionalFullscreenExit = true;
     if (document.fullscreenElement) { try { await document.exitFullscreen(); } catch (e) {} }
     showTerminal("Test auto-submitted", "Your test was submitted automatically after repeated warnings about leaving the exam window.", `#/result?attempt=${attemptId}`, "View your report");
@@ -1160,7 +1333,6 @@ async function triggerViolation() {
 async function onViolationAck() {
   closeModal("violationModal");
   violationModalOpen = false;
-  try { await document.documentElement.requestFullscreen(); } catch (e) {}
 }
 
 /* =========================================================================
@@ -1196,6 +1368,7 @@ function renderReviewQuestion(r) {
   return `
     <div class="card" style="box-shadow:none;">
       <div class="list-row-meta" style="margin-bottom:6px;">${subjectDot(r.subject)}${escapeHtml(r.subject)} · ${r.marks_obtained} marks</div>
+      ${questionImageHtml(r.image_url)}
       <div class="question-text" style="font-size:14.5px;margin-bottom:12px;">${escapeHtml(r.question_text)}</div>
       ${bodyHtml}
       ${r.explanation ? `<div class="explanation-box mt-8">${escapeHtml(r.explanation)}</div>` : ""}
@@ -1237,8 +1410,8 @@ async function enterResultView() {
     sb.rpc("get_test_leaderboard", { p_test_id: attempt.test_id }),
     sb.rpc("get_answer_review", { p_attempt_id: attemptIdParam }),
   ]);
-  const incorrectAnswers = (review || []).filter(r => r.is_correct === false);
 
+  const incorrectAnswers = (review || []).filter(r => r.is_correct === false);
   const totalMax = (subjectRows || []).reduce((s, r) => s + Number(r.total), 0);
   const me = (board || []).find(r => r.user_id === attempt.user_id);
   const totalParticipants = (board || []).length;
@@ -1320,6 +1493,7 @@ async function enterResultView() {
       </div>`}
     </div>
   `;
+  renderMath(content);
 }
 
 /* =========================================================================
@@ -1336,6 +1510,52 @@ setupDashboardListeners();
 setupAdminTestListeners();
 setupExamStaticListeners();
 router();
+
+let feedbackRating = 0;
+let pendingResult = null;
+document.querySelectorAll("#feedbackModal [data-rating]").forEach(btn => btn.addEventListener("click", () => {
+  feedbackRating = Number(btn.dataset.rating);
+  document.querySelectorAll("#feedbackModal [data-rating]").forEach(b => b.classList.toggle("selected", Number(b.dataset.rating) === feedbackRating));
+}));
+document.getElementById("skipFeedbackBtn").addEventListener("click", finishFeedback);
+document.getElementById("cancelReportBtn").addEventListener("click", () => { reportingQuestion = null; closeModal("reportQuestionModal"); });
+document.getElementById("submitReportBtn").addEventListener("click", async () => {
+  if (!reportingQuestion) return;
+  const btn = document.getElementById("submitReportBtn");
+  btn.disabled = true;
+  const { error } = await sb.from("question_reports").insert({
+    attempt_id: attemptId, test_id: testId, question_id: reportingQuestion.id,
+    reason: document.getElementById("reportReason").value,
+    details: document.getElementById("reportDetails").value.trim() || null
+  });
+  btn.disabled = false;
+  if (error) { toast(friendlyError(error), "error"); return; }
+  reportingQuestion = null;
+  closeModal("reportQuestionModal");
+  toast("Thanks — your report has been sent to the admins.", "success");
+});
+document.getElementById("saveFeedbackBtn").addEventListener("click", async () => {
+  const btn = document.getElementById("saveFeedbackBtn");
+  btn.disabled = true;
+  const { error } = await sb.from("test_feedback").upsert({ attempt_id: attemptId, test_id: testId, rating: feedbackRating || null, comment: document.getElementById("feedbackText").value.trim() || null }, { onConflict: "attempt_id" });
+  btn.disabled = false;
+  if (error) { toast(friendlyError(error), "error"); return; }
+  finishFeedback();
+});
+
+function showFeedbackThenResult(data, reasonText) {
+  pendingResult = { title: "Test submitted", text: `${reasonText} Your score: ${data.total_score} / ${totalMarks}.`, href: `#/result?attempt=${attemptId}` };
+  feedbackRating = 0;
+  document.getElementById("feedbackText").value = "";
+  document.querySelectorAll("#feedbackModal [data-rating]").forEach(b => b.classList.remove("selected"));
+  openModal("feedbackModal");
+}
+function finishFeedback() {
+  closeModal("feedbackModal");
+  if (!pendingResult) return;
+  showTerminal(pendingResult.title, pendingResult.text, pendingResult.href, "View your report");
+  pendingResult = null;
+}
 
 /* =========================================================
    THEME SYSTEM
