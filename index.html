@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
   <title>Test Series</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
 </head>
 
 <body>
@@ -133,7 +134,7 @@
 
         <section id="adminSection" class="mt-16" style="display:none;">
           <div class="section-title">
-            <h2>Tests you created</h2>
+            <h2>All tests</h2>
             <a href="#/admin-test" class="btn btn-primary btn-sm">+ Create new test</a>
           </div>
           <div id="adminTestsList">
@@ -255,15 +256,19 @@
 
               <div class="field">
                 <label for="questionTextInput">Question</label>
-                <textarea id="questionTextInput" required placeholder="Type the question text here"></textarea>
+                <textarea id="questionTextInput" required placeholder="Type the question text here. Use $...$ for inline maths and $$...$$ for a displayed equation."></textarea>
+                <div class="math-help">JEE maths is supported with LaTex: <code>$\\frac{a}{b}$</code>, <code>$\\sqrt{x}$</code>, <code>$x^{2}$</code>, <code>$\\int_0^1$</code>. The preview below shows the exact student view.</div>
+                <div id="questionMathPreview" class="math-preview" aria-live="polite">Math preview will appear here.</div>
               </div>
               <div class="field">
-                <label for="imageUrlInput">Image URL (optional)</label>
+                <label for="imageUrlInput">Question image URL (optional)</label>
                 <input type="text" id="imageUrlInput" placeholder="https://…">
+                <div class="hint">Use a direct image link (JPG, PNG, WEBP, GIF) or a public Google Drive image link.</div>
+                <div id="imagePreview" class="image-preview" hidden></div>
               </div>
 
               <div id="mcqFields">
-                <div class="field"><label>Option A</label><input type="text" id="optA"></div>
+                <div class="field"><label>Option A</label><input type="text" id="optA" placeholder="Maths allowed: $\\frac{1}{2}$"></div>
                 <div class="field"><label>Option B</label><input type="text" id="optB"></div>
                 <div class="field"><label>Option C</label><input type="text" id="optC"></div>
                 <div class="field"><label>Option D</label><input type="text" id="optD"></div>
@@ -288,7 +293,7 @@
               <div class="field">
                 <label for="explanationInput">Explanation (optional)</label>
                 <textarea id="explanationInput"
-                  placeholder="Shown to the student after they submit, next to this question if they got it wrong"></textarea>
+                  placeholder="Shown to the student after they submit. LaTex maths is supported here too."></textarea>
               </div>
 
               <div class="form-row">
@@ -324,11 +329,17 @@
                     <th>Student</th>
                     <th>Score</th>
                     <th>Percentile</th>
+                    <th>Action</th>
                   </tr>
                 </thead>
                 <tbody id="leaderboardBody"></tbody>
               </table>
             </div>
+          </div>
+
+          <div class="card" id="reportsCard" style="display:none;">
+            <h2 style="font-size:16px;">Reported questions</h2>
+            <div id="reportsList" class="text-muted">Loading reports…</div>
           </div>
 
         </div>
@@ -480,7 +491,42 @@
     </div>
   </section>
 
+  <div class="modal-backdrop" id="feedbackModal">
+    <div class="modal">
+      <h3>How was your test?</h3>
+      <p>Your feedback helps the admins improve future tests.</p>
+      <div class="rating-row" role="group" aria-label="Rate this test from 1 to 5">
+        <button type="button" data-rating="1">1</button><button type="button" data-rating="2">2</button><button type="button" data-rating="3">3</button><button type="button" data-rating="4">4</button><button type="button" data-rating="5">5</button>
+      </div>
+      <label class="field" for="feedbackText"><span>Comments (optional)</span><textarea id="feedbackText" placeholder="What went well? What should be improved?"></textarea></label>
+      <div class="modal-actions"><button class="btn" id="skipFeedbackBtn">Skip</button><button class="btn btn-primary" id="saveFeedbackBtn">Submit feedback</button></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="reportQuestionModal">
+    <div class="modal">
+      <h3>Report this question</h3>
+      <p>Select the issue so the admin can fix it quickly.</p>
+      <div class="field">
+        <label for="reportReason">Issue</label>
+        <select id="reportReason" required>
+          <option value="image not visible">Image not visible</option>
+          <option value="wrong question">Wrong or incomplete question</option>
+          <option value="wrong options">Wrong or missing options</option>
+          <option value="wrong answer">Wrong answer marked</option>
+          <option value="explanation issue">Explanation issue</option>
+          <option value="technical issue">Technical issue</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div class="field"><label for="reportDetails">Details (optional)</label><textarea id="reportDetails" placeholder="Tell the admin what needs correction"></textarea></div>
+      <div class="modal-actions"><button class="btn" id="cancelReportBtn">Cancel</button><button class="btn btn-primary" id="submitReportBtn">Send report</button></div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
   <script src="script.js"></script>
 </body>
 
