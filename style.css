@@ -2141,3 +2141,67 @@ table.report-table td {
 [data-theme="dark"] .exam-palette-panel {
   background: var(--surface);
 }
+
+/* Rich JEE maths, robust question images, and moderation controls */
+.math-help { margin-top: 6px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.math-help code { white-space: nowrap; }
+.math-preview { margin-top: 8px; min-height: 42px; padding: 10px; overflow-x: auto; border: 1px dashed var(--border-strong); border-radius: 8px; background: var(--brand-tint); font-size: 15px; }
+.question-text, .option-text, .explanation-box, .math-preview { overflow-wrap: anywhere; }
+.question-text .katex-display, .explanation-box .katex-display { overflow-x: auto; overflow-y: hidden; padding: 3px 0; }
+.image-preview { margin-top: 8px; border: 1px solid var(--border); border-radius: 8px; padding: 8px; max-width: 520px; }
+.image-preview img, .question-image img { display: block; width: 100%; max-width: 100%; height: auto; max-height: 460px; object-fit: contain; border-radius: 6px; }
+.question-image { background: var(--surface); }
+.image-fallback { padding: 10px; color: var(--danger); font-size: 13px; }
+.question-tools { display: flex; justify-content: flex-end; margin: 4px 0 10px; }
+.rating-row { display: flex; gap: 8px; margin: 16px 0; }
+.rating-row button { width: 42px; height: 42px; border: 1px solid var(--border-strong); border-radius: 50%; background: var(--surface); color: var(--ink); cursor: pointer; font-weight: 700; }
+.rating-row button.selected, .rating-row button:hover { background: var(--brand); color: #fff; border-color: var(--brand); }
+.btn-warning { background: var(--danger-tint); color: var(--danger); border-color: var(--danger); }
+
+/* Exam palette: answer = yellow, review = purple, unattempted = red. */
+:root { --review: #7c3aed; --review-tint: #ede9fe; }
+[data-theme="dark"] { --review: #a78bfa; --review-tint: #312e55; }
+.palette-btn.not_answered { background: #dc2626; border-color: #dc2626; color: #fff; }
+.palette-btn.answered { background: #eab308; border-color: #eab308; color: #1f2937; }
+.palette-btn.marked, .palette-btn.answered_marked { background: #7c3aed; border-color: #7c3aed; color: #fff; }
+.palette-btn.answered_marked::after { background: #facc15; }
+
+/* Keep desktop focused on the question; its palette is always visible. */
+@media (min-width: 881px) {
+  .mobile-exam-actions { display: flex; justify-content: flex-end; padding: 0; margin-top: 14px; }
+  #paletteToggleBtn { display: none; }
+  .mobile-exam-actions #submitTestBtn { min-width: 140px; }
+  .exam-body { grid-template-columns: minmax(0, 1fr) 286px; gap: 28px; padding: 26px clamp(18px, 3vw, 42px) 42px; }
+  .exam-main { max-width: 1080px; }
+  .question-card { min-height: calc(100vh - 185px); }
+}
+
+/* Icon-only reporting keeps the question interface uncluttered. */
+.question-tools { justify-content: flex-end; margin: -4px 0 10px; }
+.report-question-icon { width: 30px; height: 30px; border: 0; border-radius: 50%; background: transparent; color: var(--muted); cursor: pointer; font-size: 17px; line-height: 1; }
+.report-question-icon:hover, .report-question-icon:focus-visible { color: var(--danger); background: var(--danger-tint); outline: none; }
+
+/* Mobile app-style focus mode: avoids the browser-owned fullscreen exit hint. */
+html.mobile-exam-focus, html.mobile-exam-focus body { width: 100%; height: 100%; overflow: hidden; }
+html.mobile-exam-focus #view-exam.active, html.mobile-exam-focus #examShell { min-height: 100dvh; height: 100dvh; }
+html.mobile-exam-focus .exam-body { height: calc(100dvh - 105px); overflow-y: auto; overscroll-behavior: contain; }
+
+/* A stable two-column workspace on desktop: the question has room for long
+   JEE content while the navigation panel stays in reach. */
+@media (min-width: 881px) {
+  #view-exam.active { min-height: 100vh; background: var(--bg); }
+  .exam-topbar { position: sticky; top: 0; z-index: 60; }
+  .exam-body { width: min(1440px, 100%); max-width: none; display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; padding: 24px; }
+  .exam-main { min-width: 0; max-width: 980px; width: 100%; justify-self: center; }
+  .question-card { min-height: calc(100vh - 190px); padding: clamp(22px, 2.4vw, 34px); }
+  .exam-palette-panel { width: auto; position: sticky; top: 128px; max-height: calc(100vh - 150px); overflow-y: auto; align-self: start; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 18px; background: var(--surface); }
+  .palette-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .exam-actions { margin-top: 28px; }
+}
+
+@media (max-width: 600px) {
+  .math-preview { font-size: 14px; }
+  .question-tools .btn { width: 100%; min-height: 42px; }
+  #leaderboardTable th:last-child, #leaderboardTable td:last-child { min-width: 112px; }
+  .rating-row { justify-content: space-between; }
+}
