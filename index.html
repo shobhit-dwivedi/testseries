@@ -260,10 +260,11 @@
                 <div class="math-help">JEE maths is supported with LaTex: <code>$\\frac{a}{b}$</code>, <code>$\\sqrt{x}$</code>, <code>$x^{2}$</code>, <code>$\\int_0^1$</code>. The preview below shows the exact student view.</div>
                 <div id="questionMathPreview" class="math-preview" aria-live="polite">Math preview will appear here.</div>
               </div>
-              <div class="field">
-                <label for="imageUrlInput">Question image URL (optional)</label>
-                <input type="text" id="imageUrlInput" placeholder="https://…">
-                <div class="hint">Use a direct image link (JPG, PNG, WEBP, GIF) or a public Google Drive image link.</div>
+              <div class="field image-question-field">
+                <label for="imageFileInput">Question image (optional)</label>
+                <input type="file" id="imageFileInput" accept="image/png,image/jpeg,image/webp,image/gif">
+                <div class="hint">Upload from your device (max 5 MB), or use a public image URL below.</div>
+                <input type="url" id="imageUrlInput" placeholder="Or paste a public image URL">
                 <div id="imagePreview" class="image-preview" hidden></div>
               </div>
 
