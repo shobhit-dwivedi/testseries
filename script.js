@@ -97,6 +97,21 @@ function questionImageHtml(url) {
   return safeUrl ? `<div class="question-image"><img src="${escapeHtml(safeUrl)}" alt="Question diagram" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentElement.innerHTML='<div class=&quot;image-fallback&quot;>This question image could not be loaded. Please report it.</div>'"></div>` : "";
 }
 
+async function uploadQuestionImage(file) {
+  if (!file) return null;
+  if (!file.type.startsWith("image/")) throw new Error("Please choose an image file.");
+  if (file.size > 5 * 1024 * 1024) throw new Error("Image must be 5 MB or smaller.");
+  const extension = (file.name.split(".").pop() || "png").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const unique = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+  const path = `${currentTest.id}/${Date.now()}-${unique}.${extension || "png"}`;
+  const { data, error } = await sb.storage.from("question-images").upload(path, file, {
+    cacheControl: "3600", upsert: false, contentType: file.type
+  });
+  if (error) throw error;
+  const { data: publicUrl } = sb.storage.from("question-images").getPublicUrl(data.path);
+  return publicUrl.publicUrl;
+}
+
 function friendlyError(err) {
   if (!err) return "Something went wrong. Please try again.";
   const msg = err.message || String(err);
@@ -506,6 +521,18 @@ function setupAdminTestListeners() {
     box.hidden = !url;
     box.innerHTML = url ? `<img src="${escapeHtml(url)}" alt="Image preview" onerror="this.parentElement.innerHTML='<div class=&quot;image-fallback&quot;>Image cannot be loaded. Use a direct public image URL.</div>'">` : "";
   });
+  document.getElementById("imageFileInput").addEventListener("change", (e) => {
+    const file = e.target.files?.[0];
+    const box = document.getElementById("imagePreview");
+    if (!file) return;
+    if (!file.type.startsWith("image/") || file.size > 5 * 1024 * 1024) {
+      e.target.value = "";
+      toast(!file.type.startsWith("image/") ? "Choose an image file." : "Image must be 5 MB or smaller.", "error");
+      return;
+    }
+    box.hidden = false;
+    box.innerHTML = `<img src="${URL.createObjectURL(file)}" alt="Selected image preview">`;
+  });
 
   document.getElementById("testDetailsForm").addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -558,8 +585,11 @@ function setupAdminTestListeners() {
     const type = document.getElementById("typeInput").value;
     const question_text = document.getElementById("questionTextInput").value.trim();
     const rawImageUrl = document.getElementById("imageUrlInput").value.trim();
-    const image_url = rawImageUrl ? normaliseImageUrl(rawImageUrl) : null;
+    let image_url = rawImageUrl ? normaliseImageUrl(rawImageUrl) : null;
     if (rawImageUrl && !image_url) { toast("Use a valid http(s) image URL", "error"); btn.disabled = false; return; }
+    const imageFile = document.getElementById("imageFileInput").files?.[0];
+    try { if (imageFile) image_url = await uploadQuestionImage(imageFile); }
+    catch (uploadError) { toast(friendlyError(uploadError), "error"); btn.disabled = false; return; }
     const explanation = document.getElementById("explanationInput").value.trim() || null;
     const positive_marks = parseFloat(document.getElementById("positiveMarksInput").value);
     const negative_marks = parseFloat(document.getElementById("negativeMarksInput").value);
@@ -601,6 +631,7 @@ function setupAdminTestListeners() {
 
     document.getElementById("questionTextInput").value = "";
     document.getElementById("imageUrlInput").value = "";
+    document.getElementById("imageFileInput").value = "";
     document.getElementById("explanationInput").value = "";
     document.getElementById("optA").value = "";
     document.getElementById("optB").value = "";
@@ -871,6 +902,10 @@ function closeModal(id) { document.getElementById(id).classList.remove("open"); 
 function openModal(id) { document.getElementById(id).classList.add("open"); }
 
 function showTerminal(title, text, href, label) {
+  // Terminal states are also used before the exam shell has finished loading.
+  // Reveal it here so an error/previous-attempt message never becomes a blank screen.
+  document.getElementById("loadingScreen").style.display = "none";
+  document.getElementById("examShell").style.display = "block";
   document.getElementById("terminalTitle").textContent = title;
   document.getElementById("terminalText").textContent = text;
   const btn = document.getElementById("terminalActionBtn");
@@ -908,10 +943,35 @@ async function enterExamView() {
     return;
   }
 
+  // Avoid invoking start_attempt for a completed attempt. Besides giving a
+  // clearer result, this prevents RPC edge cases from rendering an empty exam.
+  const { data: previousAttempt } = await sb
+    .from("test_attempts")
+    .select("id, status, disqualified_at, tests!inner(test_code)")
+    .eq("user_id", session.user.id)
+    .eq("tests.test_code", code.toUpperCase())
+    .order("started_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (previousAttempt?.disqualified_at) {
+    showTerminal("Test access removed", "An administrator has removed you from this test. Contact your admin if you believe this is a mistake.", "#/dashboard", "Back to dashboard");
+    return;
+  }
+  if (["submitted", "auto_submitted"].includes(previousAttempt?.status)) {
+    showTerminal("Test already attempted", "You have already submitted this test. You cannot start it again, but you can view your report.", `#/result?attempt=${previousAttempt.id}`, "View your report");
+    return;
+  }
+
   const { data, error } = await sb.rpc("start_attempt", { p_test_code: code });
   if (error) {
     showTerminal("Can't start this test", friendlyError(error), "#/dashboard", "Back to dashboard");
     document.getElementById("loadingScreen").style.display = "none";
+    return;
+  }
+
+  if (!data?.attempt_id) {
+    showTerminal("Can't start this test", "This test has already been attempted or is no longer available.", "#/dashboard", "Back to dashboard");
     return;
   }
 
@@ -929,6 +989,14 @@ async function enterExamView() {
   startedAt = data.started_at;
   totalMarks = data.total_marks;
   warningCount = data.warning_count || 0;
+
+  const { data: moderation } = await sb.from("test_attempts")
+    .select("disqualified_at").eq("id", attemptId).maybeSingle();
+  if (moderation?.disqualified_at) {
+    showTerminal("Test access removed", "An administrator has removed you from this test. Contact your admin if you believe this is a mistake.", "#/dashboard", "Back to dashboard");
+    document.getElementById("loadingScreen").style.display = "none";
+    return;
+  }
 
   await loadQuestionsAndAnswers();
   buildSubjectStructure();
@@ -1223,7 +1291,6 @@ async function doSubmit(reason) {
 
   const { data, error } = await sb.rpc("submit_attempt", { p_attempt_id: attemptId, p_auto: reason !== "manual" });
 
-  document.documentElement.classList.remove("mobile-exam-focus");
   intentionalFullscreenExit = true;
   if (document.fullscreenElement) { try { await document.exitFullscreen(); } catch (e) {} }
 
@@ -1243,20 +1310,13 @@ async function doSubmit(reason) {
 
 async function onBegin() {
   closeModal("beginModal");
-  const isMobile = window.matchMedia("(max-width: 880px)").matches;
-  if (isMobile) {
-    // Native mobile fullscreen displays an unavoidable browser/OS exit hint.
-    // This app-style focus mode fills the viewport without that system prompt.
-    document.documentElement.classList.add("mobile-exam-focus");
-  } else {
-    try {
-      if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
-        try { await document.documentElement.requestFullscreen({ navigationUI: "hide" }); }
-        catch (_) { await document.documentElement.requestFullscreen(); }
-      }
-    } catch (_) {
-      toast("Full-screen mode was not allowed by this browser. Continue in the largest available window.", "error");
+  try {
+    if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+      try { await document.documentElement.requestFullscreen({ navigationUI: "hide" }); }
+      catch (_) { await document.documentElement.requestFullscreen(); }
     }
+  } catch (_) {
+    toast("Full-screen mode was not allowed by this browser. Continue in the largest available window.", "error");
   }
   examStarted = true;
   examLocked = true;
@@ -1318,7 +1378,6 @@ async function triggerViolation() {
     examLocked = false;
     clearInterval(timerInterval);
     removeAntiCheatListeners();
-    document.documentElement.classList.remove("mobile-exam-focus");
     intentionalFullscreenExit = true;
     if (document.fullscreenElement) { try { await document.exitFullscreen(); } catch (e) {} }
     showTerminal("Test auto-submitted", "Your test was submitted automatically after repeated warnings about leaving the exam window.", `#/result?attempt=${attemptId}`, "View your report");
