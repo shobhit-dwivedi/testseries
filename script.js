@@ -248,6 +248,17 @@ function showView(name) {
 async function router() {
   const parsed = parseHash();
 
+  // Supabase silently re-fires auth-state changes on things like the tab
+  // regaining focus — which happens right after a tab-switch violation
+  // warning — and that calls router() again even though the route never
+  // changed. If a test is already running, treat that as a no-op instead
+  // of re-running enterExamView() and wiping out progress / reopening the
+  // instructions modal mid-test.
+  if (examStarted && !submitted && parsed.path === "/exam") {
+    currentRoute = parsed;
+    return;
+  }
+
   if (examLocked && parsed.path !== "/exam") {
     toast("Finish or submit your test before leaving this page.", "error");
     window.location.hash = lastExamHash;
@@ -309,6 +320,20 @@ function setupAuthListeners() {
   const loginForm = document.getElementById("loginForm");
   const signupForm = document.getElementById("signupForm");
   const authMessage = document.getElementById("authMessage");
+
+  document.querySelectorAll(".password-toggle").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      const input = document.getElementById(btn.dataset.passwordTarget);
+      const visible = input.type === "text";
+      input.type = visible ? "password" : "text";
+      btn.setAttribute(
+        "aria-label",
+        visible ? "Show password" : "Hide password",
+      );
+      btn.setAttribute("aria-pressed", String(!visible));
+      btn.textContent = visible ? "👁️" : "🙈";
+    }),
+  );
 
   function showTab(tab) {
     authMessage.innerHTML = "";
@@ -414,7 +439,7 @@ function setupDashboardListeners() {
     navigate(`/exam?code=${encodeURIComponent(code)}`);
   });
 }
-
+ 
 async function enterDashboardView() {
   myProfile = await getMyProfile();
   const {
@@ -605,6 +630,7 @@ async function deleteTest(id) {
 let currentTest = null;
 let questionCounter = 0;
 let editingQuestionId = null;
+let editingQuestionImageUrl = null;
 
 function toLocalInputValue(isoOrDate) {
   const d = new Date(isoOrDate);
@@ -628,14 +654,6 @@ function setupAdminTestListeners() {
     preview.textContent =
       questionInput.value || "Math preview will appear here.";
     renderMath(preview);
-  });
-  document.getElementById("imageUrlInput").addEventListener("input", (e) => {
-    const box = document.getElementById("imagePreview");
-    const url = normaliseImageUrl(e.target.value);
-    box.hidden = !url;
-    box.innerHTML = url
-      ? `<img src="${escapeHtml(url)}" alt="Image preview" onerror="this.parentElement.innerHTML='<div class=&quot;image-fallback&quot;>Image cannot be loaded. Use a direct public image URL.</div>'">`
-      : "";
   });
   document.getElementById("imageFileInput").addEventListener("change", (e) => {
     const file = e.target.files?.[0];
@@ -735,13 +753,7 @@ function setupAdminTestListeners() {
       const question_text = document
         .getElementById("questionTextInput")
         .value.trim();
-      const rawImageUrl = document.getElementById("imageUrlInput").value.trim();
-      let image_url = rawImageUrl ? normaliseImageUrl(rawImageUrl) : null;
-      if (rawImageUrl && !image_url) {
-        toast("Use a valid http(s) image URL", "error");
-        btn.disabled = false;
-        return;
-      }
+      let image_url = editingQuestionImageUrl;
       const imageFile = document.getElementById("imageFileInput").files?.[0];
       try {
         if (imageFile) image_url = await uploadQuestionImage(imageFile);
@@ -824,7 +836,6 @@ function setupAdminTestListeners() {
       }
 
       document.getElementById("questionTextInput").value = "";
-      document.getElementById("imageUrlInput").value = "";
       document.getElementById("imageFileInput").value = "";
       document.getElementById("explanationInput").value = "";
       document.getElementById("optA").value = "";
@@ -835,6 +846,7 @@ function setupAdminTestListeners() {
       document.getElementById("imagePreview").hidden = true;
       document.getElementById("imagePreview").innerHTML = "";
       editingQuestionId = null;
+      editingQuestionImageUrl = null;
       btn.textContent = "Add question";
       document.getElementById("questionTextInput").focus();
 
@@ -849,6 +861,8 @@ async function enterAdminTestView() {
   // reset all admin-test state/UI to a blank slate every time we arrive here
   currentTest = null;
   questionCounter = 0;
+  editingQuestionId = null;
+  editingQuestionImageUrl = null;
   document.getElementById("testDetailsForm").reset();
   document.getElementById("detailsTitle").textContent = "Test details";
   document.getElementById("saveDetailsBtn").textContent = "Create test";
@@ -1014,8 +1028,12 @@ function editQuestion(q) {
   document.getElementById("questionMathPreview").textContent =
     q.question_text || "";
   renderMath(document.getElementById("questionMathPreview"));
-  document.getElementById("imageUrlInput").value = q.image_url || "";
-  document.getElementById("imageUrlInput").dispatchEvent(new Event("input"));
+  editingQuestionImageUrl = q.image_url || null;
+  const imagePreview = document.getElementById("imagePreview");
+  imagePreview.hidden = !editingQuestionImageUrl;
+  imagePreview.innerHTML = editingQuestionImageUrl
+    ? `<img src="${escapeHtml(editingQuestionImageUrl)}" alt="Current question image">`
+    : "";
   document.getElementById("explanationInput").value = q.explanation || "";
   document.getElementById("positiveMarksInput").value = q.positive_marks;
   document.getElementById("negativeMarksInput").value = q.negative_marks;
@@ -1155,6 +1173,10 @@ let attemptId,
   totalMarks,
   warningCount;
 let candidateName = "";
+// The test code being entered, resolved once in enterExamView and used by
+// onBegin — the actual attempt (and its clock) is only created once the
+// student clicks Begin Test, not the moment this page loads.
+let pendingTestCode = null;
 let questions = [];
 let bySubject = {};
 let subjects = [];
@@ -1237,6 +1259,80 @@ function showTerminal(title, text, href, label) {
   openModal("terminalModal");
 }
 
+// Builds the formal, CBT-style instructions shown before a test starts —
+// general rules, navigation, the palette legend, marking scheme, and the
+// full-screen / fair-use policy — ending in a declaration checkbox that
+// must be ticked before Begin Test can be clicked.
+function renderBeginInstructions() {
+  const beginText =
+    warningCount > 0
+      ? "You already have a warning on this attempt from a previous session. One more violation will submit your test automatically."
+      : "Please read every section below carefully before you begin.";
+
+  document.getElementById("beginInstructions").innerHTML = `
+    <div class="instruction-text"><strong>${escapeHtml(testTitle)}</strong> &nbsp;·&nbsp; ${escapeHtml(testCategory)} &nbsp;·&nbsp; Duration: ${durationMinutes} minutes</div>
+
+    <div class="instruction-section">
+      <strong>1. General Instructions</strong>
+      <ul>
+        <li>The countdown timer in the top bar shows the time remaining to complete the test. When it reaches zero, the test is submitted automatically.</li>
+        <li>The timer starts only once you click <strong>Begin Test</strong> below — it does not run while you are reading these instructions.</li>
+        <li>The test must be attempted in one continuous sitting. Do not close or refresh this page once you begin.</li>
+      </ul>
+    </div>
+
+    <div class="instruction-section">
+      <strong>2. Navigating a Question</strong>
+      <ul>
+        <li>Select an option (MCQ) or enter a value (numerical), then click <strong>Save &amp; next</strong> to save your response and move on.</li>
+        <li><strong>Mark for review &amp; next</strong> flags a question to revisit, without discarding any answer already saved.</li>
+        <li><strong>Clear response</strong> removes your saved answer for the current question.</li>
+        <li>Use the question palette on the side to jump to any question, in any order, at any time before submitting.</li>
+      </ul>
+    </div>
+
+    <div class="instruction-section">
+      <strong>3. Question Palette — Legend</strong>
+      <div class="palette-legend">
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--not-visited-tint);border:1px solid var(--border-strong);"></span>Not visited</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--danger);"></span>Not answered</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--success);"></span>Answered</div>
+        <div class="legend-item"><span class="legend-swatch" style="background:var(--review);"></span>Marked for review</div>
+      </div>
+    </div>
+
+    <div class="instruction-section">
+      <strong>4. Marking Scheme</strong>
+      <ul>
+        <li>Each question carries its own positive and negative marks, shown alongside it — marks are awarded only for the correct option or value.</li>
+        <li>Unattempted questions receive zero marks and no negative marking.</li>
+      </ul>
+    </div>
+
+    <div class="instruction-warning">
+      <strong>5. Full-Screen &amp; Fair-Use Policy</strong>
+      <p>This test runs in full-screen mode. Exiting full-screen, switching tabs or apps, or minimising the browser after you begin is recorded as a violation. A second violation submits your test automatically. If you're warned, use <strong>Return to test</strong> to re-enter full-screen and continue.</p>
+      <p>${escapeHtml(beginText)}</p>
+    </div>
+
+    <label class="declaration-row">
+      <input type="checkbox" id="declarationCheckbox">
+      <span>I have read and understood the instructions above, and I agree to abide by them.</span>
+    </label>
+  `;
+
+  const beginBtn = document.getElementById("beginBtn");
+  const declarationCheckbox = document.getElementById("declarationCheckbox");
+  beginBtn.disabled = true;
+  beginBtn.textContent =
+    previousAttemptInProgress ? "Resume Test" : "Begin Test";
+  declarationCheckbox.addEventListener("change", () => {
+    beginBtn.disabled = !declarationCheckbox.checked;
+  });
+}
+
+let previousAttemptInProgress = false;
+
 async function enterExamView() {
   // Reset everything to a clean slate — this view can be entered more than
   // once per page session (e.g. one test after another).
@@ -1278,17 +1374,39 @@ async function enterExamView() {
     document.getElementById("loadingScreen").style.display = "none";
     return;
   }
+  pendingTestCode = code.toUpperCase();
 
-  // Avoid invoking start_attempt for a completed attempt. Besides giving a
-  // clearer result, this prevents RPC edge cases from rendering an empty exam.
-  const { data: previousAttempt } = await sb
-    .from("test_attempts")
-    .select("id, status, disqualified_at, tests!inner(test_code)")
-    .eq("user_id", session.user.id)
-    .eq("tests.test_code", code.toUpperCase())
-    .order("started_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  // Look up the test and any existing attempt WITHOUT starting the exam —
+  // start_attempt (which stamps the server-side started_at the countdown
+  // is based on) only runs once the student clicks Begin Test, so reading
+  // the instructions never eats into the exam clock.
+  const [{ data: testMeta, error: testMetaError }, { data: previousAttempt }] =
+    await Promise.all([
+      sb
+        .from("tests")
+        .select("title, category, duration_minutes, is_published")
+        .eq("test_code", pendingTestCode)
+        .maybeSingle(),
+      sb
+        .from("test_attempts")
+        .select("id, status, disqualified_at, warning_count, tests!inner(test_code)")
+        .eq("user_id", session.user.id)
+        .eq("tests.test_code", pendingTestCode)
+        .order("started_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+  if (testMetaError || !testMeta || !testMeta.is_published) {
+    showTerminal(
+      "Test not found",
+      "No published test was found for this code. Go back to your dashboard and check the link.",
+      "#/dashboard",
+      "Back to dashboard",
+    );
+    document.getElementById("loadingScreen").style.display = "none";
+    return;
+  }
 
   if (previousAttempt?.disqualified_at) {
     showTerminal(
@@ -1309,86 +1427,24 @@ async function enterExamView() {
     return;
   }
 
-  const { data, error } = await sb.rpc("start_attempt", { p_test_code: code });
-  if (error) {
-    showTerminal(
-      "Can't start this test",
-      friendlyError(error),
-      "#/dashboard",
-      "Back to dashboard",
-    );
-    document.getElementById("loadingScreen").style.display = "none";
-    return;
-  }
-
-  if (!data?.attempt_id) {
-    showTerminal(
-      "Can't start this test",
-      "This test has already been attempted or is no longer available.",
-      "#/dashboard",
-      "Back to dashboard",
-    );
-    return;
-  }
-
-  if (data.expired) {
-    showTerminal(
-      "Time's up",
-      "Your time for this test had already run out, so it was submitted automatically.",
-      `#/result?attempt=${data.attempt_id}`,
-      "View your report",
-    );
-    document.getElementById("loadingScreen").style.display = "none";
-    return;
-  }
-
-  attemptId = data.attempt_id;
-  testId = data.test_id;
-  testTitle = data.title;
-  testCategory = data.category;
-  durationMinutes = data.duration_minutes;
-  startedAt = data.started_at;
-  totalMarks = data.total_marks;
-  warningCount = data.warning_count || 0;
-
-  const { data: moderation } = await sb
-    .from("test_attempts")
-    .select("disqualified_at")
-    .eq("id", attemptId)
-    .maybeSingle();
-  if (moderation?.disqualified_at) {
-    showTerminal(
-      "Test access removed",
-      "An administrator has removed you from this test. Contact your admin if you believe this is a mistake.",
-      "#/dashboard",
-      "Back to dashboard",
-    );
-    document.getElementById("loadingScreen").style.display = "none";
-    return;
-  }
-
-  await loadQuestionsAndAnswers();
-  buildSubjectStructure();
+  testTitle = testMeta.title;
+  testCategory = testMeta.category;
+  durationMinutes = testMeta.duration_minutes;
+  warningCount = previousAttempt?.warning_count || 0;
+  previousAttemptInProgress = previousAttempt?.status === "in_progress";
 
   document.getElementById("examTitle").innerHTML =
     `${escapeHtml(testTitle)} ${categoryBadge(testCategory)}`;
-  document.getElementById("examCandidate").textContent =
-    `${candidateName} · Max marks: ${totalMarks}`;
+  document.getElementById("examCandidate").textContent = candidateName;
 
   document.getElementById("loadingScreen").style.display = "none";
   document.getElementById("examShell").style.display = "block";
 
-  const beginText =
-    warningCount > 0
-      ? "Your time has already started counting down. Note: you already have a warning on this attempt from an earlier session — one more violation will auto-submit your test."
-      : "Your time has already started counting down. Click below to enter full-screen exam mode and begin. Leaving the window during the test will count as a violation.";
-  document.querySelector("#beginModal p").textContent = beginText;
+  renderBeginInstructions();
   openModal("beginModal");
 
-  startTimer();
-  renderSubjectTabs();
-  renderPalette();
-  renderQuestion();
+  // Timer does NOT start here, and questions are not loaded yet either —
+  // both happen only once Begin Test is clicked, in onBegin().
 }
 
 async function loadQuestionsAndAnswers() {
@@ -1761,15 +1817,19 @@ async function doSubmit(reason) {
 }
 
 async function onBegin() {
-  closeModal("beginModal");
+  const beginBtn = document.getElementById("beginBtn");
+  const originalBtnText = beginBtn.textContent;
+  beginBtn.disabled = true;
+  beginBtn.textContent = "Starting…";
+
+  // Enter full-screen mode FIRST, synchronously with the click — this has
+  // to happen before any await to a server, or the browser no longer
+  // considers it part of the user gesture and silently refuses it.
   try {
-    if (
-      !document.fullscreenElement &&
-      document.documentElement.requestFullscreen
-    ) {
+    if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
       try {
         await document.documentElement.requestFullscreen({
-          navigationUI: "hide",
+          navigationUI: "hide"
         });
       } catch (_) {
         await document.documentElement.requestFullscreen();
@@ -1778,12 +1838,92 @@ async function onBegin() {
   } catch (_) {
     toast(
       "Full-screen mode was not allowed by this browser. Continue in the largest available window.",
-      "error",
+      "error"
     );
   }
+
+  // This is the moment the exam clock actually starts — start_attempt
+  // stamps started_at server-side right now, not back when the page loaded.
+  const { data, error } = await sb.rpc("start_attempt", {
+    p_test_code: pendingTestCode,
+  });
+
+  if (error) {
+    closeModal("beginModal");
+    showTerminal(
+      "Can't start this test",
+      friendlyError(error),
+      "#/dashboard",
+      "Back to dashboard",
+    );
+    return;
+  }
+  if (!data?.attempt_id) {
+    closeModal("beginModal");
+    showTerminal(
+      "Can't start this test",
+      "This test has already been attempted or is no longer available.",
+      "#/dashboard",
+      "Back to dashboard",
+    );
+    return;
+  }
+  if (data.expired) {
+    closeModal("beginModal");
+    showTerminal(
+      "Time's up",
+      "Your time for this test had already run out, so it was submitted automatically.",
+      `#/result?attempt=${data.attempt_id}`,
+      "View your report",
+    );
+    return;
+  }
+
+  attemptId = data.attempt_id;
+  testId = data.test_id;
+  testTitle = data.title;
+  testCategory = data.category;
+  durationMinutes = data.duration_minutes;
+  startedAt = data.started_at;
+  totalMarks = data.total_marks;
+  warningCount = data.warning_count || 0;
+
+  const { data: moderation } = await sb
+    .from("test_attempts")
+    .select("disqualified_at")
+    .eq("id", attemptId)
+    .maybeSingle();
+  if (moderation?.disqualified_at) {
+    closeModal("beginModal");
+    showTerminal(
+      "Test access removed",
+      "An administrator has removed you from this test. Contact your admin if you believe this is a mistake.",
+      "#/dashboard",
+      "Back to dashboard",
+    );
+    return;
+  }
+
+  await loadQuestionsAndAnswers();
+  buildSubjectStructure();
+
+  document.getElementById("examCandidate").textContent =
+    `${candidateName} · Max marks: ${totalMarks}`;
+
+  beginBtn.disabled = false;
+  beginBtn.textContent = originalBtnText;
+  closeModal("beginModal");
+
   examStarted = true;
   examLocked = true;
+
+  // Start timer ONLY after clicking Begin Test
+  startTimer();
+
   addAntiCheatListeners();
+  renderSubjectTabs();
+  renderPalette();
+  renderQuestion();
   startTimingQuestion(currentQuestion());
 }
 
@@ -1881,8 +2021,25 @@ async function triggerViolation() {
 async function onViolationAck() {
   closeModal("violationModal");
   violationModalOpen = false;
-}
 
+  // Re-enter full-screen before   continuing
+  try {
+    if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+      try {
+        await document.documentElement.requestFullscreen({
+          navigationUI: "hide"
+        });
+      } catch (_) {
+        await document.documentElement.requestFullscreen();
+      }
+    }
+  } catch (_) {
+    toast(
+      "Please enter full-screen mode to continue the test.",
+      "error"
+    );
+  }
+}
 /* =========================================================================
    7. RESULT VIEW
    ========================================================================= */
@@ -2244,15 +2401,4 @@ function setupTheme() {
   if (btn) {
     btn.addEventListener("click", toggleTheme);
   }
-}
-function togglePassword(inputId, button) {
-  const input = document.getElementById(inputId);
-
-  if (input.type === "password") {
-    input.type = "text";
-    button.textContent = "🙈";
-  } else {
-    input.type = "password";
-    button.textContent = "👁️";
-  }
-}
+}  
