@@ -47,6 +47,7 @@
           </div>
 
           <div id="authMessage"></div>
+
           <form id="loginForm">
             <div class="field">
               <label for="loginEmail">Email</label>
@@ -54,10 +55,10 @@
             </div>
             <div class="field">
               <label for="loginPassword">Password</label>
-              <div style="position: relative;">
+              <div class="password-control">
                 <input type="password" id="loginPassword" required autocomplete="current-password">
-                <button type="button" onclick="togglePassword('loginPassword', this)"
-                  style="position:absolute; right:10px; top:50%; transform:translateY(-50%); border:none; background:none; cursor:pointer;">👁️</button>
+                <button type="button" class="password-toggle" data-password-target="loginPassword"
+                  aria-label="Show password" aria-pressed="false">👁️</button>
               </div>
             </div>
             <button type="submit" class="btn btn-primary btn-block" id="loginBtn">Log in</button>
@@ -73,11 +74,11 @@
               <input type="email" id="signupEmail" required autocomplete="email">
             </div>
             <div class="field">
-              <label for="signupPassword">Set a Password</label>
-              <div style="position: relative;">
+              <label for="signupPassword">Password</label>
+              <div class="password-control">
                 <input type="password" id="signupPassword" required minlength="6" autocomplete="new-password">
-                <button type="button" onclick="togglePassword('signupPassword', this)"
-                  style="position:absolute; right:10px; top:50%; transform:translateY(-50%); border:none; background:none; cursor:pointer;">👁️</button>
+                <button type="button" class="password-toggle" data-password-target="signupPassword"
+                  aria-label="Show password" aria-pressed="false">👁️</button>
               </div>
               <div class="hint">At least 6 characters.</div>
             </div>
@@ -274,8 +275,8 @@
               <div class="field image-question-field">
                 <label for="imageFileInput">Question image (optional)</label>
                 <input type="file" id="imageFileInput" accept="image/png,image/jpeg,image/webp,image/gif">
-                <div class="hint">Upload from your device (max 5 MB).</div>
-
+                <div class="hint">Upload from your device (max 5 MB). Existing image links remain visible in older
+                  questions.</div>
                 <div id="imagePreview" class="image-preview" hidden></div>
               </div>
 
@@ -432,18 +433,28 @@
         <div class="palette-backdrop" id="paletteBackdrop"></div>
       </div>
 
-      <!-- Begin / fullscreen gate -->
-      <div class="modal-backdrop" id="beginModal">
-        <div class="modal">
-          <h3 id="beginModalTitle">Ready to begin?</h3>
-          <p>Your time has already started counting down. Click below to enter full-screen exam mode and begin. Leaving
-            the window during the test will count as a violation.</p>
-          <div class="modal-actions">
-            <button class="btn btn-primary btn-block" id="beginBtn">Begin test</button>
-          </div>
-        </div>
-      </div>
+<!-- Begin / Test Instructions -->
+<div class="modal-backdrop" id="beginModal">
+  <div class="modal begin-test-modal">
 
+    <div class="begin-test-header">
+      <h3 id="beginModalTitle">Test Instructions</h3>
+      <span class="begin-test-badge">READ CAREFULLY</span>
+    </div>
+
+    <div id="beginInstructions" class="begin-instructions">
+      Loading instructions... 
+    </div>
+ 
+    <div class="begin-test-footer">
+      <button class="btn btn-primary btn-block" id="beginBtn">
+        Begin Test
+      </button> 
+    </div>
+
+  </div>   
+</div>
+ 
       <!-- Violation warning -->
       <div class="modal-backdrop" id="violationModal">
         <div class="modal warning">
@@ -538,7 +549,7 @@
       </div>
       <div class="field"><label for="reportDetails">Details (optional)</label><textarea id="reportDetails"
           placeholder="Tell the admin what needs correction"></textarea></div>
-      <div class="modal-actions"><button class="btn" id="cancelReportBtn">Cancel</button><button class="btn btn-primary"
+      <div class="fodal-actions"><button class="btn" id="cancelReportBtn">Cancel</button><button class="btn btn-primary"
           id="submitReportBtn">Send report</button></div>
     </div>
   </div>
