@@ -47,7 +47,6 @@
           </div>
 
           <div id="authMessage"></div>
-
           <form id="loginForm">
             <div class="field">
               <label for="loginEmail">Email</label>
@@ -55,7 +54,11 @@
             </div>
             <div class="field">
               <label for="loginPassword">Password</label>
-              <input type="password" id="loginPassword" required autocomplete="current-password">
+              <div style="position: relative;">
+                <input type="password" id="loginPassword" required autocomplete="current-password">
+                <button type="button" onclick="togglePassword('loginPassword', this)"
+                  style="position:absolute; right:10px; top:50%; transform:translateY(-50%); border:none; background:none; cursor:pointer;">👁️</button>
+              </div>
             </div>
             <button type="submit" class="btn btn-primary btn-block" id="loginBtn">Log in</button>
           </form>
@@ -70,8 +73,12 @@
               <input type="email" id="signupEmail" required autocomplete="email">
             </div>
             <div class="field">
-              <label for="signupPassword">Password</label>
-              <input type="password" id="signupPassword" required minlength="6" autocomplete="new-password">
+              <label for="signupPassword">Set a Password</label>
+              <div style="position: relative;">
+                <input type="password" id="signupPassword" required minlength="6" autocomplete="new-password">
+                <button type="button" onclick="togglePassword('signupPassword', this)"
+                  style="position:absolute; right:10px; top:50%; transform:translateY(-50%); border:none; background:none; cursor:pointer;">👁️</button>
+              </div>
               <div class="hint">At least 6 characters.</div>
             </div>
             <button type="submit" class="btn btn-primary btn-block" id="signupBtn">Create account</button>
@@ -256,20 +263,25 @@
 
               <div class="field">
                 <label for="questionTextInput">Question</label>
-                <textarea id="questionTextInput" required placeholder="Type the question text here. Use $...$ for inline maths and $$...$$ for a displayed equation."></textarea>
-                <div class="math-help">JEE maths is supported with LaTex: <code>$\\frac{a}{b}$</code>, <code>$\\sqrt{x}$</code>, <code>$x^{2}$</code>, <code>$\\int_0^1$</code>. The preview below shows the exact student view.</div>
-                <div id="questionMathPreview" class="math-preview" aria-live="polite">Math preview will appear here.</div>
+                <textarea id="questionTextInput" required
+                  placeholder="Type the question text here. Use $...$ for inline maths and $$...$$ for a displayed equation."></textarea>
+                <div class="math-help">JEE maths is supported with LaTex: <code>$\\frac{a}{b}$</code>,
+                  <code>$\\sqrt{x}$</code>, <code>$x^{2}$</code>, <code>$\\int_0^1$</code>. The preview below shows the
+                  exact student view.</div>
+                <div id="questionMathPreview" class="math-preview" aria-live="polite">Math preview will appear here.
+                </div>
               </div>
               <div class="field image-question-field">
                 <label for="imageFileInput">Question image (optional)</label>
                 <input type="file" id="imageFileInput" accept="image/png,image/jpeg,image/webp,image/gif">
-                <div class="hint">Upload from your device (max 5 MB), or use a public image URL below.</div>
-                <input type="url" id="imageUrlInput" placeholder="Or paste a public image URL">
+                <div class="hint">Upload from your device (max 5 MB).</div>
+
                 <div id="imagePreview" class="image-preview" hidden></div>
               </div>
 
               <div id="mcqFields">
-                <div class="field"><label>Option A</label><input type="text" id="optA" placeholder="Maths allowed: $\\frac{1}{2}$"></div>
+                <div class="field"><label>Option A</label><input type="text" id="optA"
+                    placeholder="Maths allowed: $\\frac{1}{2}$"></div>
                 <div class="field"><label>Option B</label><input type="text" id="optB"></div>
                 <div class="field"><label>Option C</label><input type="text" id="optC"></div>
                 <div class="field"><label>Option D</label><input type="text" id="optD"></div>
@@ -497,10 +509,14 @@
       <h3>How was your test?</h3>
       <p>Your feedback helps the admins improve future tests.</p>
       <div class="rating-row" role="group" aria-label="Rate this test from 1 to 5">
-        <button type="button" data-rating="1">1</button><button type="button" data-rating="2">2</button><button type="button" data-rating="3">3</button><button type="button" data-rating="4">4</button><button type="button" data-rating="5">5</button>
+        <button type="button" data-rating="1">1</button><button type="button" data-rating="2">2</button><button
+          type="button" data-rating="3">3</button><button type="button" data-rating="4">4</button><button type="button"
+          data-rating="5">5</button>
       </div>
-      <label class="field" for="feedbackText"><span>Comments (optional)</span><textarea id="feedbackText" placeholder="What went well? What should be improved?"></textarea></label>
-      <div class="modal-actions"><button class="btn" id="skipFeedbackBtn">Skip</button><button class="btn btn-primary" id="saveFeedbackBtn">Submit feedback</button></div>
+      <label class="field" for="feedbackText"><span>Comments (optional)</span><textarea id="feedbackText"
+          placeholder="What went well? What should be improved?"></textarea></label>
+      <div class="modal-actions"><button class="btn" id="skipFeedbackBtn">Skip</button><button class="btn btn-primary"
+          id="saveFeedbackBtn">Submit feedback</button></div>
     </div>
   </div>
 
@@ -520,8 +536,10 @@
           <option value="other">Other</option>
         </select>
       </div>
-      <div class="field"><label for="reportDetails">Details (optional)</label><textarea id="reportDetails" placeholder="Tell the admin what needs correction"></textarea></div>
-      <div class="modal-actions"><button class="btn" id="cancelReportBtn">Cancel</button><button class="btn btn-primary" id="submitReportBtn">Send report</button></div>
+      <div class="field"><label for="reportDetails">Details (optional)</label><textarea id="reportDetails"
+          placeholder="Tell the admin what needs correction"></textarea></div>
+      <div class="modal-actions"><button class="btn" id="cancelReportBtn">Cancel</button><button class="btn btn-primary"
+          id="submitReportBtn">Send report</button></div>
     </div>
   </div>
 
