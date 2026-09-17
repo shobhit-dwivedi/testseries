@@ -2377,7 +2377,7 @@ function applyTheme(theme) {
     btn.setAttribute(
       "aria-label",
       safeTheme === "dark" ? "Switch to light theme" : "Switch to dark theme",
-    );
+    ); 
 
     btn.title =
       safeTheme === "dark" ? "Switch to light theme" : "Switch to dark theme";
