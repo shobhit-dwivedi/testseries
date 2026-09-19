@@ -74,7 +74,7 @@
               <input type="email" id="signupEmail" required autocomplete="email">
             </div>
             <div class="field">
-              <label for="signupPassword">Set a Password</label>
+              <label for="signupPassword">Password</label>
               <div class="password-control">
                 <input type="password" id="signupPassword" required minlength="6" autocomplete="new-password">
                 <button type="button" class="password-toggle" data-password-target="signupPassword"
@@ -169,7 +169,7 @@
     </header>
 
     <div class="page-body">
-      <div class="container" style="max-width:760px;">
+      <div class="container admin-page-container">
 
         <div id="notAdminNotice" style="display:none;" class="error-box">
           Only admin accounts can create or manage tests. Ask whoever set up this app to mark your profile as admin.
@@ -239,19 +239,19 @@
               the "Join a test" box on their dashboard.</p>
           </div>
 
-          <div class="card" id="questionsCard" style="display:none;">
+          <div class="card admin-question-card" id="questionsCard" style="display:none;">
             <h2 style="font-size:16px;">Add a question</h2>
-            <form id="questionForm">
+            <form id="questionForm" class="question-form">
               <div class="form-row">
                 <div class="field">
                   <label for="subjectInput">Subject</label>
-                  <input type="text" id="subjectInput" list="subjectOptions" placeholder="Physics" required>
-                  <datalist id="subjectOptions">
-                    <option value="Physics"></option>
-                    <option value="Chemistry"></option>
-                    <option value="Mathematics"></option>
-                    <option value="Biology"></option>
-                  </datalist>
+                  <select id="subjectInput" required>
+                    <option value="" disabled selected>Select subject</option>
+                    <option value="Physics">Physics</option>
+                    <option value="Chemistry">Chemistry</option>
+                    <option value="Mathematics">Mathematics</option>
+                    <option value="Biology">Biology</option>
+                  </select>
                 </div>
                 <div class="field">
                   <label for="typeInput">Question type</label>
@@ -266,11 +266,9 @@
                 <label for="questionTextInput">Question</label>
                 <textarea id="questionTextInput" required
                   placeholder="Type the question text here. Use $...$ for inline maths and $$...$$ for a displayed equation."></textarea>
-                <div class="math-help">JEE maths is supported with LaTex: <code>$\\frac{a}{b}$</code>,
-                  <code>$\\sqrt{x}$</code>, <code>$x^{2}$</code>, <code>$\\int_0^1$</code>. The preview below shows the
-                  exact student view.</div>
-                <div id="questionMathPreview" class="math-preview" aria-live="polite">Math preview will appear here.
-                </div>
+                <div class="math-help">Maths supported via LaTeX — <code>$\\frac{a}{b}$</code>, <code>$\\sqrt{x}$</code>,
+                  <code>$x^{2}$</code> — rendered live in the preview below, in the question, every option, and the
+                  explanation.</div>
               </div>
               <div class="field image-question-field">
                 <label for="imageFileInput">Question image (optional)</label>
@@ -281,11 +279,13 @@
               </div>
 
               <div id="mcqFields">
-                <div class="field"><label>Option A</label><input type="text" id="optA"
-                    placeholder="Maths allowed: $\\frac{1}{2}$"></div>
-                <div class="field"><label>Option B</label><input type="text" id="optB"></div>
-                <div class="field"><label>Option C</label><input type="text" id="optC"></div>
-                <div class="field"><label>Option D</label><input type="text" id="optD"></div>
+                <div class="form-row form-row-options">
+                  <div class="field"><label for="optA">Option A</label><input type="text" id="optA"
+                      placeholder="Maths allowed: $\\frac{1}{2}$"></div>
+                  <div class="field"><label for="optB">Option B</label><input type="text" id="optB"></div>
+                  <div class="field"><label for="optC">Option C</label><input type="text" id="optC"></div>
+                  <div class="field"><label for="optD">Option D</label><input type="text" id="optD"></div>
+                </div>
                 <div class="field">
                   <label for="correctOptionInput">Correct answer</label>
                   <select id="correctOptionInput">
@@ -321,6 +321,14 @@
                 </div>
               </div>
 
+              <div class="question-preview-field">
+                <div class="preview-field-label">Live preview — exactly what students will see</div>
+                <div id="questionLivePreview" class="question-live-preview">
+                  <div class="preview-empty">Start typing above — your question will appear here exactly as
+                    students will see it, with maths rendered.</div>
+                </div>
+              </div>
+
               <button type="submit" class="btn btn-primary" id="addQuestionBtn">Add question</button>
             </form>
           </div>
@@ -331,6 +339,30 @@
                 style="font-size:13px;"></span>
             </div>
             <div id="questionsList"></div>
+          </div>
+
+          <div class="card" id="studentResultsCard" style="display:none;">
+            <div class="section-title">
+              <h2 style="font-size:16px;">Student Results</h2>
+              <div id="resultDeclarationStatus"></div>
+            </div>
+            <div id="resultDeclarationActions" class="result-declaration-actions"></div>
+            <div class="table-scroll">
+              <table class="report-table" id="studentResultsTable">
+                <thead>
+                  <tr>
+                    <th>Student</th>
+                    <th>Status</th>
+                    <th>Score</th>
+                    <th>Correct</th>
+                    <th>Wrong</th>
+                    <th>Unanswered</th>
+                    <th>Submitted At</th>
+                  </tr>
+                </thead>
+                <tbody id="studentResultsBody"></tbody>
+              </table>
+            </div>
           </div>
 
           <div class="card" id="leaderboardCard" style="display:none;">
@@ -551,8 +583,8 @@
           placeholder="Tell the admin what needs correction"></textarea></div>
       <div class="fodal-actions"><button class="btn" id="cancelReportBtn">Cancel</button><button class="btn btn-primary"
           id="submitReportBtn">Send report</button></div>
-    </div>
-  </div>
+    </div>  
+  </div> 
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
@@ -560,4 +592,4 @@
   <script src="script.js"></script>
 </body>
 
-</html>
+</html> 
