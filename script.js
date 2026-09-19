@@ -1244,6 +1244,7 @@ async function loadLeaderboard() {
 
   if (error) {
     console.error("Leaderboard RPC error:", error);
+
     body.innerHTML = `
       <tr>
         <td colspan="5" class="text-muted">
@@ -1251,6 +1252,7 @@ async function loadLeaderboard() {
         </td>
       </tr>
     `;
+
     return;
   }
 
@@ -1264,96 +1266,159 @@ async function loadLeaderboard() {
         </td>
       </tr>
     `;
+
     return;
   }
 
   body.innerHTML = data
     .map((r) => {
-      // Support current + older RPC field names
-      const rank = r.rnk ?? r.rank ?? r.ranking ?? "-";
+      const rank =
+        r.rnk ??
+        r.rank ??
+        r.ranking ??
+        "-";
 
-      const student = r.full_name ?? r.student_name ?? r.name ?? "Student";
+      const student =
+        r.full_name ??
+        r.student_name ??
+        r.name ??
+        "Student";
 
-      const score = r.total_score ?? r.score ?? r.marks ?? 0;
+      const score =
+        r.total_score ??
+        r.score ??
+        r.marks ??
+        0;
 
-      const percentile = r.percentile ?? r.percentile_score ?? 0;
+      const percentile =
+        r.percentile ??
+        r.percentile_score ??
+        0;
 
-      const attemptId = r.attempt_id ?? r.id ?? "";
+      const attemptId =
+        r.attempt_id ??
+        r.id ??
+        "";
 
       return `
-      <tr>
-        <td>${rank}</td>
+        <tr>
+          <td>${rank}</td>
 
-        <td>
-          ${escapeHtml(student)}
-        </td>
+          <td>
+            ${escapeHtml(student)}
+          </td>
 
-        <td>
-          ${score}
-        </td>
+          <td>
+            ${score}
+          </td>
 
-        <td>
-          ${Number(percentile).toFixed(3)}%
-        </td>
+          <td>
+            ${Number(percentile).toFixed(3)}%
+          </td>
 
-        <td>
-          <button
-            class="btn btn-sm btn-warning js-remove-attempt"
-            data-id="${attemptId}"
-            ${attemptId ? "" : "disabled"}
-          >
-            Remove
-          </button>
-        </td>
-      </tr>
-    `;
+          <td>
+            <button
+              type="button"
+              class="btn btn-sm btn-warning js-remove-attempt"
+              data-id="${attemptId}"
+              ${attemptId ? "" : "disabled"}
+            >
+              Remove
+            </button>
+          </td>
+        </tr>
+      `;
     })
     .join("");
 
-  body.querySelectorAll(".js-remove-attempt").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      async function removeAttempt(id, button) {
-        if (!id) {
-          toast(
-            "Could not identify this attempt. Refresh the leaderboard and try again.",
-            "error",
-          );
-          return;
-        }
+  body
+    .querySelectorAll(".js-remove-attempt")
+    .forEach((btn) => {
+      btn.addEventListener("click", function () {
+        const attemptId = this.dataset.id;
 
-        if (
-          !confirm(
-            "Remove this student from the leaderboard for suspected cheating? Their attempt will be disqualified.",
-          )
-        ) {
-          return;
-        }
-
-        if (button) {
-          button.disabled = true;
-          button.textContent = "Removing…";
-        }
-
-        const { error } = await sb.rpc("admin_disqualify_attempt", {
-          p_attempt_id: id,
-        });
-
-        if (error) {
-          if (button) {
-            button.disabled = false;
-            button.textContent = "Remove";
-          }
-
-          toast(friendlyError(error), "error");
-          return;
-        }
-
-        toast("Student removed from this leaderboard");
-
-        await loadLeaderboard();
-      }
+        removeAttempt(attemptId, this);
+      });
     });
-  });
+}
+async function removeAttempt(id, button) {
+  if (!id) {
+    toast(
+      "Could not identify this attempt. Refresh the leaderboard and try again.",
+      "error"
+    );
+
+    return;
+  }
+
+  const confirmed = confirm(
+    "Remove this student from the leaderboard for suspected cheating? Their attempt will be disqualified."
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Removing...";
+  }
+
+  try {
+    const { data, error } = await sb.rpc(
+      "admin_disqualify_attempt",
+      {
+        p_attempt_id: id,
+      }
+    );
+
+    if (error) {
+      console.error(
+        "admin_disqualify_attempt error:",
+        error
+      );
+
+      if (button) {
+        button.disabled = false;
+        button.textContent = "Remove";
+      }
+
+      toast(
+        friendlyError(error),
+        "error"
+      );
+
+      return;
+    }
+
+    console.log(
+      "Attempt successfully disqualified:",
+      data
+    );
+
+    toast(
+      "Student removed from this leaderboard",
+      "success"
+    );
+
+    await loadLeaderboard();
+
+  } catch (err) {
+    console.error(
+      "Unexpected remove attempt error:",
+      err
+    );
+
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Remove";
+    }
+
+    toast(
+      "Something went wrong while removing the student.",
+      "error"
+    ); 
+  }
 }
 
 async function loadReports() {
@@ -2752,8 +2817,7 @@ function setupTheme() {
 
   const btn = document.getElementById("themeToggle");
 
-  if (btn) {
+  if (btn) { 
     btn.addEventListener("click", toggleTheme);
   }
 }
-
