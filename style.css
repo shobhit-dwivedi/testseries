@@ -491,6 +491,20 @@ input:focus, textarea:focus, select:focus {
   color: var(--review);
 }
 
+.result-declaration-actions {
+  margin: 4px 0 14px;
+}
+
+.locked-banner {
+  background: var(--brand-tint);
+  color: var(--brand-dark);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 14px;
+}
+
 .auth-shell {
   min-height: 100vh;
   display: flex;
@@ -1430,6 +1444,36 @@ table.report-table tr.me {
   background: var(--brand-tint);
 }
 
+/* Top-10 leaderboard rank-1/2/3 highlighting */
+table.report-table tr.rank-gold td:first-child,
+table.report-table tr.rank-silver td:first-child,
+table.report-table tr.rank-bronze td:first-child {
+  font-weight: 700;
+}
+
+table.report-table tr.rank-gold {
+  background: #FFF6DE;
+}
+
+table.report-table tr.rank-silver {
+  background: #F1F3F6;
+}
+
+table.report-table tr.rank-bronze {
+  background: #FBE9DD;
+}
+
+table.report-table tr.rank-gold.me,
+table.report-table tr.rank-silver.me,
+table.report-table tr.rank-bronze.me {
+  background: var(--brand-tint);
+}
+
+.your-rank-card {
+  border-color: var(--brand);
+  border-width: 1.5px;
+}
+
 .bar-track {
   background: var(--not-visited-tint);
   border-radius: 999px;
@@ -2113,6 +2157,24 @@ table.report-table .bar-track {
   background: var(--brand-tint);
 }
 
+[data-theme="dark"] table.report-table tr.rank-gold {
+  background: rgba(245, 158, 11, 0.18);
+}
+
+[data-theme="dark"] table.report-table tr.rank-silver {
+  background: rgba(148, 163, 184, 0.16);
+}
+
+[data-theme="dark"] table.report-table tr.rank-bronze {
+  background: rgba(180, 83, 9, 0.22);
+}
+
+[data-theme="dark"] table.report-table tr.rank-gold.me,
+[data-theme="dark"] table.report-table tr.rank-silver.me,
+[data-theme="dark"] table.report-table tr.rank-bronze.me {
+  background: var(--brand-tint);
+}
+
 [data-theme="dark"] .bar-track {
   background: #31291D;
 }
@@ -2221,6 +2283,91 @@ table.report-table .bar-track {
   border-radius: 8px;
   background: var(--brand-tint);
   font-size: 15px;
+}
+
+/* =========================================================================
+   ADMIN — "Add a question" form: wider desktop layout, option fields in a
+   grid instead of one long stack, and a unified live preview below the
+   form covering the question, every option, and the explanation.
+   ========================================================================= */
+.admin-page-container {
+  max-width: 1200px;
+}
+
+.admin-question-card {
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+.form-row-options {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px 16px;
+  margin-bottom: 16px;
+}
+
+.form-row-options > .field {
+  margin-bottom: 0;
+}
+
+.question-preview-field {
+  margin: 22px 0 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
+.preview-field-label {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+
+.question-live-preview {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 18px 20px;
+  background: var(--bg);
+}
+
+.question-live-preview .option-item {
+  cursor: default;
+}
+
+.question-live-preview .option-item:hover {
+  border-color: var(--border-strong);
+}
+
+.preview-empty {
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.6;
+  text-align: center;
+  padding: 10px 4px;
+}
+
+.preview-empty-inline {
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* Desktop: real workspace width instead of a narrow, mobile-style column,
+   and the option fields sit two-across since there's room for it. */
+@media (min-width: 760px) {
+  .form-row-options {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* Mobile: unchanged from before — single column, comfortable tap targets. */
+@media (max-width: 759px) {
+  .admin-question-card {
+    padding: 16px;
+  }
+
+  .question-live-preview {
+    padding: 14px 16px;
+  }
 }
 
 .question-text, .option-text, .explanation-box, .math-preview {
@@ -2912,3 +3059,81 @@ html.dark #beginModal #beginInstructions, body.dark #beginModal #beginInstructio
     font-size: 15px;
   }
 } 
+/* =========================================
+JEE HUSTLERS - DOWNLOAD REPORT PDF
+========================================= */
+
+.jh-pdf-section {
+width: 100%;
+display: flex;
+justify-content: center;
+align-items: center;
+margin: 24px 0 12px;
+padding: 0 12px;
+box-sizing: border-box;
+}
+
+.jh-pdf-btn {
+width: 100%;
+max-width: 420px;
+min-height: 48px;
+padding: 13px 20px;
+
+display: flex;
+align-items: center;
+justify-content: center;
+gap: 9px;
+
+border: 0;
+border-radius: 12px;
+
+background: linear-gradient(135deg, #ff7a00, #ffb000);
+color: #ffffff;
+
+font-family: inherit;
+font-size: 15px;
+font-weight: 700;
+
+cursor: pointer;
+
+box-shadow: 0 6px 18px rgba(255, 122, 0, 0.22);
+
+transition:
+transform 0.15s ease,
+box-shadow 0.15s ease,
+opacity 0.15s ease;
+}
+
+.jh-pdf-btn:hover {
+transform: translateY(-1px);
+box-shadow: 0 8px 22px rgba(255, 122, 0, 0.30);
+}
+
+.jh-pdf-btn:active {
+transform: translateY(0);
+}
+
+.jh-pdf-btn:disabled {
+opacity: 0.65;
+cursor: wait;
+transform: none;
+}
+
+.jh-pdf-icon {
+font-size: 18px;
+line-height: 1;
+}
+
+@media (max-width: 600px) {
+.jh-pdf-section {
+margin: 20px 0 10px;
+padding: 0 8px;
+}
+
+.jh-pdf-btn {
+max-width: none;
+min-height: 50px;
+font-size: 14px;
+border-radius: 11px;
+}
+}
