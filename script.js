@@ -439,7 +439,7 @@ function setupDashboardListeners() {
     navigate(`/exam?code=${encodeURIComponent(code)}`);
   });
 }
- 
+
 async function enterDashboardView() {
   myProfile = await getMyProfile();
   const {
@@ -638,6 +638,69 @@ function toLocalInputValue(isoOrDate) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
+// One combined "as students will see it" preview — covers the question
+// text, every option, and the explanation, all with maths rendered. Lives
+// below the form and updates on every keystroke/change.
+function updateQuestionPreview() {
+  const preview = document.getElementById("questionLivePreview");
+  if (!preview) return;
+
+  const subject = document.getElementById("subjectInput").value;
+  const type = document.getElementById("typeInput").value;
+  const questionText = document
+    .getElementById("questionTextInput")
+    .value.trim();
+  const explanation = document.getElementById("explanationInput").value.trim();
+  const positiveMarks = document.getElementById("positiveMarksInput").value;
+  const negativeMarks = document.getElementById("negativeMarksInput").value;
+
+  if (!questionText && !subject) {
+    preview.innerHTML = `<div class="preview-empty">Start typing above — your question will appear here exactly as students will see it, with maths rendered.</div>`;
+    return;
+  }
+
+  let bodyHtml;
+  if (type === "mcq") {
+    const correctOption = document.getElementById("correctOptionInput").value;
+    const letters = ["A", "B", "C", "D"];
+    const opts = letters
+      .map((id) => ({
+        id,
+        text: document.getElementById("opt" + id).value.trim(),
+      }))
+      .filter((o) => o.text);
+    bodyHtml = opts.length
+      ? `<div class="option-list">` +
+        opts
+          .map(
+            (o) => `
+          <div class="option-item ${o.id === correctOption ? "review-correct" : ""}">
+            <span class="option-letter">${o.id}</span>
+            <span class="option-text">${escapeHtml(o.text)}</span>
+            ${o.id === correctOption ? `<span class="status-tag published" style="margin-left:auto;">Correct</span>` : ""}
+          </div>
+        `,
+          )
+          .join("") +
+        `</div>`
+      : `<div class="preview-empty-inline">No options entered yet.</div>`;
+  } else {
+    const val = document.getElementById("correctIntegerInput").value;
+    bodyHtml = `<p style="font-size:14px;margin:0;"><span style="color:var(--success);font-weight:650;">Correct answer: ${val !== "" ? escapeHtml(val) : "—"}</span></p>`;
+  }
+
+  preview.innerHTML = `
+    <div class="question-meta">
+      <span class="question-number-badge">${subject ? subjectDot(subject) + escapeHtml(subject) : `<span class="preview-empty-inline">No subject selected</span>`}</span>
+      <span class="question-marks">+${positiveMarks || 0} / -${negativeMarks || 0}</span>
+    </div>
+    <div class="question-text">${questionText ? escapeHtml(questionText) : `<span class="preview-empty-inline">Question text will appear here…</span>`}</div>
+    ${bodyHtml}
+    ${explanation ? `<div class="explanation-box mt-8"><strong>Explanation:</strong> ${escapeHtml(explanation)}</div>` : ""}
+  `;
+  renderMath(preview);
+}
+
 function setupAdminTestListeners() {
   document.getElementById("typeInput").addEventListener("change", (e) => {
     const isMcq = e.target.value === "mcq";
@@ -647,13 +710,27 @@ function setupAdminTestListeners() {
     document.getElementById("integerFields").style.display = isMcq
       ? "none"
       : "block";
+    updateQuestionPreview();
   });
-  const questionInput = document.getElementById("questionTextInput");
-  const preview = document.getElementById("questionMathPreview");
-  questionInput.addEventListener("input", () => {
-    preview.textContent =
-      questionInput.value || "Math preview will appear here.";
-    renderMath(preview);
+  // One unified live preview reflecting the question exactly as a student
+  // will see it — question text, every option, and the explanation all
+  // render maths, instead of a preview limited to the question text alone.
+  [
+    "subjectInput",
+    "questionTextInput",
+    "optA",
+    "optB",
+    "optC",
+    "optD",
+    "correctOptionInput",
+    "correctIntegerInput",
+    "explanationInput",
+    "positiveMarksInput",
+    "negativeMarksInput",
+  ].forEach((id) => {
+    const el = document.getElementById(id);
+    el.addEventListener("input", updateQuestionPreview);
+    el.addEventListener("change", updateQuestionPreview);
   });
   document.getElementById("imageFileInput").addEventListener("change", (e) => {
     const file = e.target.files?.[0];
@@ -736,6 +813,7 @@ function setupAdminTestListeners() {
         toast("Test created — now add some questions", "success");
         showPostCreateSections();
         await loadQuestions();
+        await loadStudentResults();
         await loadLeaderboard();
         await loadReports();
       }
@@ -848,6 +926,7 @@ function setupAdminTestListeners() {
       editingQuestionId = null;
       editingQuestionImageUrl = null;
       btn.textContent = "Add question";
+      updateQuestionPreview();
       document.getElementById("questionTextInput").focus();
 
       toast(wasEditing ? "Question updated" : "Question added", "success");
@@ -869,6 +948,7 @@ async function enterAdminTestView() {
   document.getElementById("shareCard").style.display = "none";
   document.getElementById("questionsCard").style.display = "none";
   document.getElementById("questionListCard").style.display = "none";
+  document.getElementById("studentResultsCard").style.display = "none";
   document.getElementById("leaderboardCard").style.display = "none";
   document.getElementById("reportsCard").style.display = "none";
   document.getElementById("mcqFields").style.display = "block";
@@ -921,6 +1001,7 @@ async function loadExistingTest(testId) {
 
   showPostCreateSections();
   await loadQuestions();
+  await loadStudentResults();
   await loadLeaderboard();
   await loadReports();
 }
@@ -929,6 +1010,7 @@ function showPostCreateSections() {
   document.getElementById("shareCard").style.display = "block";
   document.getElementById("questionsCard").style.display = "block";
   document.getElementById("questionListCard").style.display = "block";
+  document.getElementById("studentResultsCard").style.display = "block";
   document.getElementById("leaderboardCard").style.display = "block";
   document.getElementById("reportsCard").style.display = "block";
   renderShareCard();
@@ -1025,9 +1107,6 @@ function editQuestion(q) {
   document.getElementById("typeInput").value = q.question_type;
   document.getElementById("typeInput").dispatchEvent(new Event("change"));
   document.getElementById("questionTextInput").value = q.question_text || "";
-  document.getElementById("questionMathPreview").textContent =
-    q.question_text || "";
-  renderMath(document.getElementById("questionMathPreview"));
   editingQuestionImageUrl = q.image_url || null;
   const imagePreview = document.getElementById("imagePreview");
   imagePreview.hidden = !editingQuestionImageUrl;
@@ -1049,6 +1128,7 @@ function editQuestion(q) {
       q.correct_integer_value ?? "";
   document.getElementById("addQuestionBtn").textContent =
     "Save question changes";
+  updateQuestionPreview();
   document
     .getElementById("questionsCard")
     .scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1065,73 +1145,215 @@ async function deleteQuestion(id) {
   await loadQuestions();
 }
 
-async function loadLeaderboard() {
-  const [{ data, error }, { data: attempts, error: attemptsError }] =
-    await Promise.all([
-      sb.rpc("get_test_leaderboard", { p_test_id: currentTest.id }),
-      sb
-        .from("test_attempts")
-        .select("id, user_id, disqualified_at")
-        .eq("test_id", currentTest.id),
-    ]);
-  const body = document.getElementById("leaderboardBody");
-  if (error || !data || data.length === 0) {
-    body.innerHTML = `<tr><td colspan="5" class="text-muted">No submissions yet.</td></tr>`;
-    return;
-  }
-  const attemptByUser = new Map((attempts || []).map((a) => [a.user_id, a]));
-  const visible = data.filter(
-    (r) => !attemptByUser.get(r.user_id)?.disqualified_at,
-  );
-  if (attemptsError)
-    console.warn("Could not load moderation status", attemptsError);
-  body.innerHTML = visible.length
-    ? visible
-        .map((r) => {
-          const attempt = attemptByUser.get(r.user_id);
-          const attemptIdForRow = r.attempt_id || attempt?.id || "";
-          return `<tr><td>${r.rnk}</td><td>${escapeHtml(r.full_name || "Student")}</td><td>${r.total_score}</td><td>${r.percentile}%</td><td><button class="btn btn-sm btn-warning js-remove-attempt" data-id="${attemptIdForRow}" ${attemptIdForRow ? "" : 'disabled title="Attempt unavailable"'}>Remove</button></td></tr>`;
-        })
-        .join("")
-    : `<tr><td colspan="5" class="text-muted">No eligible submissions yet.</td></tr>`;
-  body
-    .querySelectorAll(".js-remove-attempt")
-    .forEach((btn) =>
-      btn.addEventListener("click", () => removeAttempt(btn.dataset.id, btn)),
-    );
+function medalFor(rank) {
+  return rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : "";
 }
 
-async function removeAttempt(id, button) {
-  if (!id) {
-    toast(
-      "Could not identify this attempt. Refresh the leaderboard and try again.",
-      "error",
-    );
-    return;
+function rankRowClass(rank) {
+  return rank === 1
+    ? "rank-gold"
+    : rank === 2
+      ? "rank-silver"
+      : rank === 3
+        ? "rank-bronze"
+        : "";
+}
+
+async function loadStudentResults() {
+  const statusEl = document.getElementById("resultDeclarationStatus");
+  const actionsEl = document.getElementById("resultDeclarationActions");
+  const body = document.getElementById("studentResultsBody");
+
+  const declared = !!currentTest.result_release_at;
+  statusEl.innerHTML = declared
+    ? `<span class="status-tag published">Results Declared ✓</span>`
+    : `<span class="status-tag draft">Results not declared yet</span>`;
+
+  actionsEl.innerHTML = declared
+    ? ""
+    : `<button class="btn btn-primary btn-sm" id="declareResultsBtn">🏆 Declare Results</button>`;
+
+  const declareBtn = document.getElementById("declareResultsBtn");
+  if (declareBtn) {
+    declareBtn.onclick = async () => {
+      if (
+        !confirm(
+          "Are you sure you want to declare the results? Rank, percentile and leaderboard will become visible to students.",
+        )
+      )
+        return;
+      declareBtn.disabled = true;
+      declareBtn.textContent = "Declaring…";
+      const { error } = await sb.rpc("admin_declare_results", {
+        p_test_id: currentTest.id,
+      });
+      if (error) {
+        toast(friendlyError(error), "error");
+        declareBtn.disabled = false;
+        declareBtn.textContent = "🏆 Declare Results";
+        return;
+      }
+      currentTest.result_release_at = new Date().toISOString();
+      toast(
+        "Results declared — students can now see their rank and the leaderboard",
+        "success",
+      );
+      await loadStudentResults();
+      await loadLeaderboard();
+    };
   }
-  if (
-    !confirm(
-      "Remove this student from the leaderboard for suspected cheating? Their attempt will be disqualified.",
-    )
-  )
-    return;
-  if (button) {
-    button.disabled = true;
-    button.textContent = "Removing…";
-  }
-  const { error } = await sb.rpc("admin_disqualify_attempt", {
-    p_attempt_id: id,
+
+  const { data, error } = await sb.rpc("admin_get_test_results", {
+    p_test_id: currentTest.id,
   });
   if (error) {
-    if (button) {
-      button.disabled = false;
-      button.textContent = "Remove";
-    }
-    toast(friendlyError(error), "error");
+    body.innerHTML = `<tr><td colspan="7" class="text-muted">${escapeHtml(friendlyError(error))}</td></tr>`;
     return;
   }
-  toast("Student removed from this leaderboard");
-  await loadLeaderboard();
+  body.innerHTML = !data?.length
+    ? `<tr><td colspan="7" class="text-muted">No attempts yet.</td></tr>`
+    : data
+        .map(
+          (r) => `
+    <tr>
+      <td>${escapeHtml(r.full_name || "Student")}${
+        r.disqualified_at
+          ? ` <span class="status-tag" style="background:var(--danger-tint);color:var(--danger);">DQ</span>`
+          : ""
+      }</td>
+      <td><span class="status-tag ${r.status}">${r.status.replace("_", " ")}</span></td>
+      <td>${r.total_score}</td>
+      <td>${r.correct_count}</td>
+      <td>${r.wrong_count}</td>
+<td>${r.unanswered_count ?? 0}</td>
+      <td>${r.submitted_at ? formatDateTime(r.submitted_at) : "—"}</td>
+    </tr>
+  `, 
+        )
+        .join("");
+}
+
+async function loadLeaderboard() {
+  const { data, error } = await sb.rpc("get_test_leaderboard", {
+    p_test_id: currentTest.id,
+  });
+
+  const body = document.getElementById("leaderboardBody");
+
+  if (!body) return;
+
+  if (error) {
+    console.error("Leaderboard RPC error:", error);
+    body.innerHTML = `
+      <tr>
+        <td colspan="5" class="text-muted">
+          ${escapeHtml(friendlyError(error))}
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  console.log("RAW LEADERBOARD DATA:", data);
+
+  if (!data || data.length === 0) {
+    body.innerHTML = `
+      <tr>
+        <td colspan="5" class="text-muted">
+          No submissions yet.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  body.innerHTML = data
+    .map((r) => {
+      // Support current + older RPC field names
+      const rank = r.rnk ?? r.rank ?? r.ranking ?? "-";
+
+      const student = r.full_name ?? r.student_name ?? r.name ?? "Student";
+
+      const score = r.total_score ?? r.score ?? r.marks ?? 0;
+
+      const percentile = r.percentile ?? r.percentile_score ?? 0;
+
+      const attemptId = r.attempt_id ?? r.id ?? "";
+
+      return `
+      <tr>
+        <td>${rank}</td>
+
+        <td>
+          ${escapeHtml(student)}
+        </td>
+
+        <td>
+          ${score}
+        </td>
+
+        <td>
+          ${Number(percentile).toFixed(3)}%
+        </td>
+
+        <td>
+          <button
+            class="btn btn-sm btn-warning js-remove-attempt"
+            data-id="${attemptId}"
+            ${attemptId ? "" : "disabled"}
+          >
+            Remove
+          </button>
+        </td>
+      </tr>
+    `;
+    })
+    .join("");
+
+  body.querySelectorAll(".js-remove-attempt").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      async function removeAttempt(id, button) {
+        if (!id) {
+          toast(
+            "Could not identify this attempt. Refresh the leaderboard and try again.",
+            "error",
+          );
+          return;
+        }
+
+        if (
+          !confirm(
+            "Remove this student from the leaderboard for suspected cheating? Their attempt will be disqualified.",
+          )
+        ) {
+          return;
+        }
+
+        if (button) {
+          button.disabled = true;
+          button.textContent = "Removing…";
+        }
+
+        const { error } = await sb.rpc("admin_disqualify_attempt", {
+          p_attempt_id: id,
+        });
+
+        if (error) {
+          if (button) {
+            button.disabled = false;
+            button.textContent = "Remove";
+          }
+
+          toast(friendlyError(error), "error");
+          return;
+        }
+
+        toast("Student removed from this leaderboard");
+
+        await loadLeaderboard();
+      }
+    });
+  });
 }
 
 async function loadReports() {
@@ -1191,7 +1413,31 @@ let intentionalFullscreenExit = false;
 let activeTimingQuestion = null;
 let activeTimingStart = null;
 
-// Commit elapsed time on the question the student is navigating away from.
+/* -------------------------------------------------------------------------
+   Time-spent tracking: batched instead of one API call per question.
+
+   Every navigation away from a question used to fire its own
+   `add_time_spent` RPC immediately. On a 90-question test that's ~90+
+   network calls from navigation alone. Instead, elapsed time is now kept
+   locally in `pendingTimeDeltas` (question_id -> accumulated seconds,
+   merging repeat visits from "mark for review" automatically) and only
+   sent on a periodic timer, plus a handful of safety points — never on
+   plain navigation.
+   ------------------------------------------------------------------------- */
+let pendingTimeDeltas = new Map();
+let timeSyncInterval = null;
+// Optimistic: if a batched `add_time_spent_batch` RPC exists in this
+// Supabase project (see the optional SQL in the accompanying notes), it's
+// used automatically — a single request per flush covering every pending
+// question, regardless of how many. If it isn't deployed, this flips to
+// false on the first failed attempt and every flush falls back to one
+// `add_time_spent` call per distinct pending question (still merged
+// across revisits, still far fewer calls than before) for the rest of
+// this attempt — no broken behaviour either way.
+let timeSpentBatchAvailable = true;
+
+// Record elapsed time on the question being navigated away from — purely
+// local, no network call here anymore.
 function commitActiveTime() {
   if (!activeTimingQuestion || !activeTimingStart) return;
   const q = activeTimingQuestion;
@@ -1199,17 +1445,82 @@ function commitActiveTime() {
   activeTimingStart = null;
   if (elapsed < 0.3) return;
   q.time_spent = (q.time_spent || 0) + elapsed;
-  sb.rpc("add_time_spent", {
-    p_attempt_id: attemptId,
-    p_question_id: q.id,
-    p_seconds: elapsed,
-  }).then(({ error }) => {
-    if (error) console.error(error);
-  });
+  pendingTimeDeltas.set(q.id, (pendingTimeDeltas.get(q.id) || 0) + elapsed);
 }
 function startTimingQuestion(q) {
   activeTimingQuestion = q;
   activeTimingStart = q ? Date.now() : null;
+}
+
+// Sends whatever time has accumulated locally. Called periodically (every
+// 45s) while a test is running, as a best-effort safety net when the tab
+// is hidden or the page is being unloaded, and — awaited — right before
+// submission so no meaningful time data is ever lost.
+async function flushTimeDeltas({ awaitCompletion = false } = {}) {
+  if (!attemptId || pendingTimeDeltas.size === 0) return;
+  const entries = Array.from(pendingTimeDeltas.entries()).filter(
+    ([, seconds]) => seconds > 0,
+  );
+  pendingTimeDeltas.clear();
+  if (entries.length === 0) return;
+
+  const requeue = () => {
+    entries.forEach(([qid, secs]) => {
+      pendingTimeDeltas.set(qid, (pendingTimeDeltas.get(qid) || 0) + secs);
+    });
+  };
+
+  const send = async () => {
+    if (timeSpentBatchAvailable) {
+      const { error } = await sb.rpc("add_time_spent_batch", {
+        p_attempt_id: attemptId,
+        p_deltas: entries.map(([question_id, seconds]) => ({
+          question_id,
+          seconds,
+        })),
+      });
+      if (!error) return;
+      const notDeployed =
+        error.code === "PGRST202" ||
+        /schema cache|does not exist|not found/i.test(error.message || "");
+      if (notDeployed) {
+        // No batch function in this project — fall back permanently for
+        // the rest of this attempt instead of re-failing every 45s.
+        timeSpentBatchAvailable = false;
+      } else {
+        console.error(error);
+        requeue();
+        return;
+      }
+    }
+    const results = await Promise.allSettled(
+      entries.map(([question_id, seconds]) =>
+        sb
+          .rpc("add_time_spent", {
+            p_attempt_id: attemptId,
+            p_question_id: question_id,
+            p_seconds: seconds,
+          })
+          .then(({ error }) => {
+            if (error) throw error;
+          }),
+      ),
+    );
+    // Only requeue the ones that actually failed, so a single flaky
+    // request doesn't cost you every other question's progress too.
+    results.forEach((r, i) => {
+      if (r.status === "rejected") {
+        const [qid, secs] = entries[i];
+        pendingTimeDeltas.set(qid, (pendingTimeDeltas.get(qid) || 0) + secs);
+      }
+    });
+  };
+
+  if (awaitCompletion) {
+    await send();
+  } else {
+    send().catch((e) => console.error(e));
+  }
 }
 
 function setupExamStaticListeners() {
@@ -1324,8 +1635,9 @@ function renderBeginInstructions() {
   const beginBtn = document.getElementById("beginBtn");
   const declarationCheckbox = document.getElementById("declarationCheckbox");
   beginBtn.disabled = true;
-  beginBtn.textContent =
-    previousAttemptInProgress ? "Resume Test" : "Begin Test";
+  beginBtn.textContent = previousAttemptInProgress
+    ? "Resume Test"
+    : "Begin Test";
   declarationCheckbox.addEventListener("change", () => {
     beginBtn.disabled = !declarationCheckbox.checked;
   });
@@ -1337,6 +1649,8 @@ async function enterExamView() {
   // Reset everything to a clean slate — this view can be entered more than
   // once per page session (e.g. one test after another).
   clearInterval(timerInterval);
+  clearInterval(timeSyncInterval);
+  pendingTimeDeltas.clear();
   removeAntiCheatListeners();
   ["beginModal", "violationModal", "submitModal", "terminalModal"].forEach(
     closeModal,
@@ -1389,7 +1703,9 @@ async function enterExamView() {
         .maybeSingle(),
       sb
         .from("test_attempts")
-        .select("id, status, disqualified_at, warning_count, tests!inner(test_code)")
+        .select(
+          "id, status, disqualified_at, warning_count, tests!inner(test_code)",
+        )
         .eq("user_id", session.user.id)
         .eq("tests.test_code", pendingTestCode)
         .order("started_at", { ascending: false })
@@ -1780,8 +2096,13 @@ async function doSubmit(reason) {
   submitted = true;
   examLocked = false;
   clearInterval(timerInterval);
+  clearInterval(timeSyncInterval);
   closeModal("submitModal");
   removeAntiCheatListeners();
+
+  // Final time sync — awaited, so no time data from the last stretch of
+  // the test (since the previous ~45s tick) is lost before scoring.
+  await flushTimeDeltas({ awaitCompletion: true });
 
   const { data, error } = await sb.rpc("submit_attempt", {
     p_attempt_id: attemptId,
@@ -1826,10 +2147,13 @@ async function onBegin() {
   // to happen before any await to a server, or the browser no longer
   // considers it part of the user gesture and silently refuses it.
   try {
-    if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+    if (
+      !document.fullscreenElement &&
+      document.documentElement.requestFullscreen
+    ) {
       try {
         await document.documentElement.requestFullscreen({
-          navigationUI: "hide"
+          navigationUI: "hide",
         });
       } catch (_) {
         await document.documentElement.requestFullscreen();
@@ -1838,7 +2162,7 @@ async function onBegin() {
   } catch (_) {
     toast(
       "Full-screen mode was not allowed by this browser. Continue in the largest available window.",
-      "error"
+      "error",
     );
   }
 
@@ -1920,6 +2244,11 @@ async function onBegin() {
   // Start timer ONLY after clicking Begin Test
   startTimer();
 
+  // Batched time-sync: accumulates locally, sent roughly every 45s instead
+  // of on every question navigation (see flushTimeDeltas above).
+  clearInterval(timeSyncInterval);
+  timeSyncInterval = setInterval(() => flushTimeDeltas(), 45000);
+
   addAntiCheatListeners();
   renderSubjectTabs();
   renderPalette();
@@ -1928,7 +2257,12 @@ async function onBegin() {
 }
 
 function onVisibilityChange() {
-  if (document.hidden && examStarted && !submitted) triggerViolation();
+  if (document.hidden && examStarted && !submitted) {
+    // Safety net: send whatever time has accumulated so far rather than
+    // waiting for the next ~45s tick, in case the tab never comes back.
+    flushTimeDeltas();
+    triggerViolation();
+  }
 }
 function onFullscreenChange() {
   if (!document.fullscreenElement && examStarted && !submitted) {
@@ -1957,9 +2291,16 @@ function onKeyDown(e) {
 }
 function onBeforeUnload(e) {
   if (examStarted && !submitted) {
+    flushTimeDeltas();
     e.preventDefault();
     e.returnValue = "";
   }
+}
+// Fires reliably on mobile when the app is backgrounded or the tab is
+// closed, even in cases beforeunload doesn't — another best-effort point
+// to get accumulated time off the device before it's potentially lost.
+function onPageHide() {
+  if (examStarted && !submitted) flushTimeDeltas();
 }
 
 function addAntiCheatListeners() {
@@ -1970,6 +2311,7 @@ function addAntiCheatListeners() {
   document.addEventListener("cut", onCopyCut);
   document.addEventListener("keydown", onKeyDown);
   window.addEventListener("beforeunload", onBeforeUnload);
+  window.addEventListener("pagehide", onPageHide);
 }
 function removeAntiCheatListeners() {
   document.removeEventListener("visibilitychange", onVisibilityChange);
@@ -1979,6 +2321,7 @@ function removeAntiCheatListeners() {
   document.removeEventListener("cut", onCopyCut);
   document.removeEventListener("keydown", onKeyDown);
   window.removeEventListener("beforeunload", onBeforeUnload);
+  window.removeEventListener("pagehide", onPageHide);
 }
 
 async function triggerViolation() {
@@ -1994,10 +2337,15 @@ async function triggerViolation() {
   }
 
   if (data.status === "auto_submitted") {
+    commitActiveTime();
     submitted = true;
     examLocked = false;
     clearInterval(timerInterval);
+    clearInterval(timeSyncInterval);
     removeAntiCheatListeners();
+    // Final time sync here too — this path bypasses doSubmit() entirely
+    // since the server already auto-submitted as part of register_violation.
+    await flushTimeDeltas({ awaitCompletion: true });
     intentionalFullscreenExit = true;
     if (document.fullscreenElement) {
       try {
@@ -2024,20 +2372,20 @@ async function onViolationAck() {
 
   // Re-enter full-screen before   continuing
   try {
-    if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+    if (
+      !document.fullscreenElement &&
+      document.documentElement.requestFullscreen
+    ) {
       try {
         await document.documentElement.requestFullscreen({
-          navigationUI: "hide"
+          navigationUI: "hide",
         });
       } catch (_) {
         await document.documentElement.requestFullscreen();
       }
     }
   } catch (_) {
-    toast(
-      "Please enter full-screen mode to continue the test.",
-      "error"
-    );
+    toast("Please enter full-screen mode to continue the test.", "error");
   }
 }
 /* =========================================================================
@@ -2102,82 +2450,75 @@ async function enterResultView() {
     return;
   }
 
-  const { data: attempt, error } = await sb
-    .from("test_attempts")
-    .select(
-      "*, tests(id, title, test_code, category, duration_minutes, available_until)",
-    )
-    .eq("id", attemptIdParam)
-    .single();
+  const { data: report, error } = await sb.rpc("get_full_report", {
+    p_attempt_id: attemptIdParam,
+  });
 
-  if (error || !attempt) {
+  if (error || !report) {
     content.innerHTML = `<div class="error-box">Couldn't load this report. ${escapeHtml(friendlyError(error))}</div>`;
     return;
   }
 
-  if (attempt.status === "in_progress") {
+  if (report.status === "in_progress") {
     content.innerHTML = `
       <div class="card">
         <h2 style="font-size:16px;">Still in progress</h2>
         <p class="text-muted">This test hasn't been submitted yet.</p>
-        <a class="btn btn-primary" href="#/exam?code=${attempt.tests.test_code}">Resume test</a>
+        <a class="btn btn-primary" href="#/exam?code=${report.test_code}">Resume test</a>
       </div>
     `;
     return;
   }
 
-  const [
-    { data: subjectRows, error: subjErr },
-    { data: board, error: boardErr },
-    { data: review, error: reviewErr },
-  ] = await Promise.all([
-    sb.rpc("get_subject_wise_marks", { p_attempt_id: attemptIdParam }),
-    sb.rpc("get_test_leaderboard", { p_test_id: attempt.test_id }),
-    sb.rpc("get_answer_review", { p_attempt_id: attemptIdParam }),
-  ]);
-
-  const incorrectAnswers = (review || []).filter((r) => r.is_correct === false);
-  const totalMax = (subjectRows || []).reduce((s, r) => s + Number(r.total), 0);
-  const me = (board || []).find((r) => r.user_id === attempt.user_id);
-  const totalParticipants = (board || []).length;
-  const timeTakenSec = attempt.submitted_at
-    ? (new Date(attempt.submitted_at) - new Date(attempt.started_at)) / 1000
+  // Score is always available immediately after submission. Rank,
+  // percentile and the leaderboard stay locked until the admin declares
+  // results — get_full_report simply returns null/empty for those until
+  // then, rather than erroring, so `declared` is derived from that.
+  const declared = report.rank !== null && report.rank !== undefined;
+  const subjectRows = report.subject_rows || [];
+  const review = report.review || [];
+  const board = report.board || [];
+  const incorrectAnswers = review.filter((r) => r.is_correct === false);
+  const totalMax = subjectRows.reduce((s, r) => s + Number(r.total), 0);
+  const timeTakenSec = report.submitted_at
+    ? (new Date(report.submitted_at) - new Date(report.started_at)) / 1000
     : null;
 
-  const windowClosed = attempt.tests?.available_until
-    ? new Date(attempt.tests.available_until) < new Date()
-    : false;
+  const viewingSomeoneElse = !report.is_owner;
+  const viewerInTop10 = board.some((b) => b.user_id === report.viewer_user_id);
+  const showYourResult = declared && report.viewer_rank && !viewerInTop10;
 
   content.innerHTML = `
     <div class="card">
       <div class="section-title">
-        <h2 style="font-size:17px;">${escapeHtml(attempt.tests.title)} ${categoryBadge(attempt.tests.category)}</h2>
-        <span class="status-tag ${attempt.status}">${attempt.status.replace("_", " ")}</span>
+        <h2 style="font-size:17px;">${escapeHtml(report.test_title)} ${categoryBadge(report.category)}</h2>
+        <span class="status-tag ${report.status}">${report.status.replace("_", " ")}</span>
       </div>
       <p class="text-muted" style="font-size:13px;">
-        Submitted ${formatDateTime(attempt.submitted_at)}
-        ${windowClosed ? "· Test window has closed — this rank is final." : "· Test window is still open — rank &amp; percentile may still change as others submit."}
+        ${viewingSomeoneElse ? `Top-3 public report · ${escapeHtml(report.full_name || "Student")} · ` : ""}Submitted ${formatDateTime(report.submitted_at)}
       </p>
     </div>
 
+    ${
+      !declared
+        ? `<div class="locked-banner">Your score is available. Rank and percentile will be announced when the admin declares the results.</div>`
+        : ""
+    }
+
     <div class="stat-grid">
-      <div class="stat-card"><div class="val">${attempt.total_score} / ${totalMax}</div><div class="lbl">Score</div></div>
-      <div class="stat-card"><div class="val">${me ? `#${me.rnk}` : "—"}</div><div class="lbl">Rank of ${totalParticipants}</div></div>
-      <div class="stat-card"><div class="val">${me ? me.percentile + "%" : "—"}</div><div class="lbl">Percentile</div></div>
+      <div class="stat-card"><div class="val">${report.total_score} / ${totalMax}</div><div class="lbl">Score</div></div>
+      <div class="stat-card"><div class="val">${declared ? `${medalFor(report.rank)}#${report.rank}` : "🔒"}</div><div class="lbl">Rank${declared ? " of " + report.total_participants : ""}</div></div>
+      <div class="stat-card"><div class="val">${declared ? report.percentile + "%" : "🔒"}</div><div class="lbl">Percentile</div></div>
       <div class="stat-card"><div class="val">${formatDurationPrecise(timeTakenSec)}</div><div class="lbl">Time taken</div></div>
     </div>
 
     <div class="card">
       <h2 style="font-size:16px;">Subject-wise performance</h2>
-      ${
-        subjErr
-          ? `<div class="error-box">${escapeHtml(friendlyError(subjErr))}</div>`
-          : `
       <div class="table-scroll">
         <table class="report-table">
           <thead><tr><th>Subject</th><th>Correct</th><th>Wrong</th><th>Unattempted</th><th>Accuracy</th><th>Time taken</th><th>Marks</th><th></th></tr></thead>
           <tbody>
-            ${(subjectRows || [])
+            ${subjectRows
               .map((r) => {
                 const attempted =
                   Number(r.correct_count) + Number(r.wrong_count);
@@ -2202,36 +2543,40 @@ async function enterResultView() {
               .join("")}
           </tbody>
         </table>
-      </div>`
-      }
+      </div>
     </div>
 
+    ${
+      report.is_owner || report.is_public_top3
+        ? `
     <div class="card">
-      <h2 style="font-size:16px;">Review your incorrect answers</h2>
+      <h2 style="font-size:16px;">Review ${viewingSomeoneElse ? "their" : "your"} incorrect answers</h2>
       ${
-        reviewErr
-          ? `<div class="error-box">${escapeHtml(friendlyError(reviewErr))}</div>`
-          : incorrectAnswers.length === 0
-            ? `<div class="empty-state">No incorrect answers — nice work! (Unattempted questions aren't shown here.)</div>`
-            : incorrectAnswers.map(renderReviewQuestion).join("")
+        incorrectAnswers.length === 0
+          ? `<div class="empty-state">No incorrect answers — nice work! (Unattempted questions aren't shown here.)</div>`
+          : incorrectAnswers.map(renderReviewQuestion).join("")
       }
-    </div>
+    </div>`
+        : ""
+    }
 
     <div class="card">
       <h2 style="font-size:16px;">Leaderboard</h2>
       ${
-        boardErr
-          ? `<div class="error-box">${escapeHtml(friendlyError(boardErr))}</div>`
-          : `
+        !declared
+          ? `<div class="empty-state">Rank and percentile will be announced when the admin declares the results.</div>`
+          : board.length === 0
+            ? `<div class="empty-state">No submissions yet.</div>`
+            : `
       <div class="table-scroll">
         <table class="report-table">
           <thead><tr><th>Rank</th><th>Student</th><th>Score</th><th>Percentile</th></tr></thead>
           <tbody>
-            ${(board || [])
+            ${board
               .map(
                 (r) => `
-              <tr class="${r.user_id === attempt.user_id ? "me" : ""}">
-                <td>${r.rnk}</td><td>${escapeHtml(r.full_name || "Student")}${r.user_id === attempt.user_id ? " (you)" : ""}</td>
+              <tr class="${rankRowClass(r.rnk)} ${r.user_id === report.viewer_user_id ? "me" : ""}">
+                <td>${medalFor(r.rnk)}${r.rnk}</td><td>${escapeHtml(r.full_name || "Student")}${r.user_id === report.viewer_user_id ? " (you)" : ""}</td>
                 <td>${r.total_score}</td><td>${r.percentile}%</td>
               </tr>
             `,
@@ -2239,7 +2584,18 @@ async function enterResultView() {
               .join("")}
           </tbody>
         </table>
+      </div>
+      ${
+        showYourResult
+          ? `
+      <div class="card your-rank-card" style="margin-top:12px;">
+        <h2 style="font-size:14px;">Your Result</h2>
+        <p style="font-size:14px;">Rank: #${report.viewer_rank} &nbsp;·&nbsp; Score: ${report.viewer_score} &nbsp;·&nbsp; Percentile: ${report.viewer_percentile}%</p>
+        <a class="btn btn-sm btn-primary" href="#/result?attempt=${report.viewer_attempt_id}">View My Report</a>
       </div>`
+          : ""
+      }
+      `
       }
     </div>
   `;
@@ -2312,17 +2668,15 @@ document
   .addEventListener("click", async () => {
     const btn = document.getElementById("saveFeedbackBtn");
     btn.disabled = true;
-    const { error } = await sb
-      .from("test_feedback")
-      .upsert(
-        {
-          attempt_id: attemptId,
-          test_id: testId,
-          rating: feedbackRating || null,
-          comment: document.getElementById("feedbackText").value.trim() || null,
-        },
-        { onConflict: "attempt_id" },
-      );
+    const { error } = await sb.from("test_feedback").upsert(
+      {
+        attempt_id: attemptId,
+        test_id: testId,
+        rating: feedbackRating || null,
+        comment: document.getElementById("feedbackText").value.trim() || null,
+      },
+      { onConflict: "attempt_id" },
+    );
     btn.disabled = false;
     if (error) {
       toast(friendlyError(error), "error");
@@ -2377,7 +2731,7 @@ function applyTheme(theme) {
     btn.setAttribute(
       "aria-label",
       safeTheme === "dark" ? "Switch to light theme" : "Switch to dark theme",
-    ); 
+    );
 
     btn.title =
       safeTheme === "dark" ? "Switch to light theme" : "Switch to dark theme";
@@ -2401,4 +2755,5 @@ function setupTheme() {
   if (btn) {
     btn.addEventListener("click", toggleTheme);
   }
-}  
+}
+
