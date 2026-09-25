@@ -211,7 +211,7 @@ function categoryBadge(category) {
    sections toggled on/off, and the URL hash carries the route + params,
    e.g. #/exam?code=ABC123  or  #/result?attempt=<uuid>
    ========================================================================= */
-const VIEWS = ["auth", "dashboard", "admin-test", "exam", "result"];
+const VIEWS = ["landing", "auth", "dashboard", "admin-test", "exam", "result"];
 let currentRoute = { path: "/login", params: new URLSearchParams() };
 
 // Set to true while a student is actively inside a running exam, so they
@@ -221,7 +221,7 @@ let lastExamHash = "/exam";
 
 function parseHash() {
   let raw = window.location.hash.slice(1);
-  if (!raw) raw = "/login";
+  if (!raw) raw = "/";
   const qIndex = raw.indexOf("?");
   const path = qIndex === -1 ? raw : raw.slice(0, qIndex);
   const query = qIndex === -1 ? "" : raw.slice(qIndex + 1);
@@ -272,11 +272,29 @@ async function router() {
   } = await sb.auth.getSession();
 
   if (!session) {
-    showView("auth");
+    // Landing-page section hashes are anchors, not application routes.
+    if (parsed.path.startsWith("/lp-")) {
+      showView("landing");
+      requestAnimationFrame(() => {
+        document.getElementById(parsed.path.slice(1))?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      });
+      return;
+    }
+    // Public, signed-out visitors land on the marketing page first; only an
+    // explicit "/login" request (e.g. the Participate buttons) — or a deep
+    // link to a page that requires a session — opens the existing auth view.
+    if (parsed.path === "/" || parsed.path === "/landing") {
+      showView("landing");
+    } else {
+      showView("auth");
+    }
     return;
   }
 
-  if (parsed.path === "/login") {
+  if (parsed.path === "/login" || parsed.path === "/" || parsed.path === "/landing") {
     navigate("/dashboard");
     return;
   }
@@ -2654,6 +2672,7 @@ function setupGlobalListeners() {
 
 setupTheme();
 setupGlobalListeners();
+setupLandingPage();
 setupAuthListeners();
 setupDashboardListeners();
 setupAdminTestListeners();
@@ -2752,6 +2771,149 @@ function finishFeedback() {
 }
 
 /* =========================================================
+   LANDING PAGE (public front page)
+   ========================================================= */
+function setupLandingPage() {
+  const root = document.getElementById("view-landing");
+  if (!root) return;
+
+  const reduceMotion = window.matchMedia(
+    "(prefers-reduced-motion: reduce)",
+  ).matches;
+
+  const titleLines = root.querySelectorAll("[data-typing-text]");
+  if (titleLines.length) {
+    const typeTitle = async () => {
+      for (const line of titleLines) {
+        const text = line.dataset.typingText || "";
+        for (let i = 1; i <= text.length; i += 1) {
+          line.textContent = text.slice(0, i);
+          await new Promise((resolve) => setTimeout(resolve, 105));
+        }
+        await new Promise((resolve) => setTimeout(resolve, 130));
+      }
+    };
+    typeTitle();
+  }
+
+  // Mobile hamburger menu
+  const hamburger = document.getElementById("landingHamburger");
+  const navLinks = document.getElementById("landingNavLinks");
+  if (hamburger && navLinks) {
+    hamburger.addEventListener("click", () => {
+      const open = navLinks.classList.toggle("open");
+      hamburger.classList.toggle("open", open);
+      hamburger.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+    navLinks.querySelectorAll("a").forEach((link) =>
+      link.addEventListener("click", () => {
+        navLinks.classList.remove("open");
+        hamburger.classList.remove("open");
+        hamburger.setAttribute("aria-expanded", "false");
+      }),
+    );
+  }
+
+  // Test-series popup — shown once per browser session
+  const popup = document.getElementById("landingPopup");
+  const popupClose = document.getElementById("landingPopupClose");
+  if (popup && popupClose) {
+    popupClose.addEventListener("click", () => closeModal("landingPopup"));
+    document.getElementById("landingPopupCta")?.addEventListener("click", () => {
+      closeModal("landingPopup");
+      toast("Opening the free test series. Prizes included!", "success");
+    });
+    popup.addEventListener("click", (e) => {
+      if (e.target === popup) closeModal("landingPopup");
+    });
+  }
+  function maybeShowPopup() {
+    if (!popup) return;
+    if (sessionStorage.getItem("jee_landing_popup_shown")) return;
+    sessionStorage.setItem("jee_landing_popup_shown", "1");
+    setTimeout(() => openModal("landingPopup"), 600);
+  }
+
+  // Follower counter — animates once when the hero scrolls into view
+  const counterEl = document.getElementById("followerCount");
+  const TARGET_FOLLOWERS = 800;
+  let counted = false;
+  function runCounter() {
+    if (counted || !counterEl) return;
+    counted = true;
+    if (reduceMotion) {
+      counterEl.textContent = TARGET_FOLLOWERS;
+      return;
+    }
+    const duration = 900;
+    const start = performance.now();
+    function step(now) {
+      const progress = Math.min((now - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      counterEl.textContent = Math.round(eased * TARGET_FOLLOWERS);
+      if (progress < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+
+  // Scroll-reveal for feature/community cards
+  const revealTargets = root.querySelectorAll(
+    ".landing-feature-card, .landing-community-card",
+  );
+  if (revealTargets.length) {
+    if (reduceMotion || !("IntersectionObserver" in window)) {
+      revealTargets.forEach((el) => el.classList.add("in-view"));
+    } else {
+      const revealObserver = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              entry.target.classList.add("in-view");
+              revealObserver.unobserve(entry.target);
+            }
+          });
+        },
+        { threshold: 0.15 },
+      );
+      revealTargets.forEach((el) => revealObserver.observe(el));
+    }
+  }
+
+  if ("IntersectionObserver" in window) {
+    const heroObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            runCounter();
+            heroObserver.disconnect();
+          }
+        });
+      },
+      { threshold: 0.3 },
+    );
+    const hero = document.querySelector(".landing-hero");
+    if (hero) heroObserver.observe(hero);
+  }
+
+  // Show the popup the first time the landing view actually becomes active,
+  // not merely on page load (so it never appears behind other views).
+  const landingViewObserver = new MutationObserver(() => {
+    if (root.classList.contains("active")) {
+      maybeShowPopup();
+      runCounter();
+    }
+  });
+  landingViewObserver.observe(root, {
+    attributes: true,
+    attributeFilter: ["class"],
+  });
+  if (root.classList.contains("active")) {
+    maybeShowPopup();
+    runCounter();
+  }
+}
+
+/* =========================================================
    THEME SYSTEM
    Default: LIGHT
    Remembers user's choice
@@ -2796,4 +2958,4 @@ function setupTheme() {
   if (btn) {
     btn.addEventListener("click", toggleTheme);
   }
-}
+} 
