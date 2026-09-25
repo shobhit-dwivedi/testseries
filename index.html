@@ -14,6 +14,182 @@
     🌙
   </button>
   <!-- =====================================================================
+     LANDING VIEW — public front page, shown to signed-out visitors
+     ===================================================================== -->
+  <section id="view-landing" class="view landing-page">
+
+    <nav class="landing-navbar">
+      <div class="landing-navbar-inner">
+        <a href="#/" class="landing-logo">
+          <img src="logo.png" alt="JEE Hustlers logo">
+          <span>JEE <strong>HUSTLERS</strong></span>
+        </a>
+
+        <button type="button" class="landing-hamburger" id="landingHamburger" aria-label="Open menu" aria-expanded="false">
+          <span></span><span></span><span></span>
+        </button>
+
+        <div class="landing-nav-links" id="landingNavLinks">
+            <a href="#lp-home" class="landing-nav-link">Home</a>
+          <a href="#lp-features" class="landing-nav-link">Features</a>
+          <a href="#lp-community" class="landing-nav-link">Community</a>
+          <a href="#lp-testseries" class="landing-nav-link">Test Series</a>
+          <a href="#/login" class="btn btn-primary btn-sm landing-nav-cta"><span class="landing-new-label">NEW</span>Participate →</a>
+        </div>
+      </div>
+    </nav>
+
+    <header class="landing-hero" id="lp-home">
+      <div class="landing-hero-fx" aria-hidden="true">
+        <div class="landing-dot-grid"></div>
+        <div class="landing-glow landing-glow-1"></div>
+        <div class="landing-glow landing-glow-2"></div>
+        <span class="landing-float landing-float-1">π</span>
+        <span class="landing-float landing-float-2">∑</span>
+        <span class="landing-float landing-float-3">√</span>
+        <span class="landing-float landing-float-4">Δ</span>
+        <span class="landing-float landing-float-5">⚛</span>
+      </div>
+
+      <div class="landing-hero-inner">
+        <div class="landing-symbols" aria-hidden="true">⚛ &nbsp; π &nbsp; ∑ &nbsp; √ &nbsp; Δ</div>
+
+        <h1 class="landing-title" aria-label="JEE HUSTLERS">
+          <span class="landing-title-line" data-typing-text="JEE"></span>
+          <span class="landing-title-line" data-typing-text="HUSTLERS"></span>
+        </h1>
+
+        <div class="landing-stat">
+          <span class="landing-stat-num" id="followerCount">0</span><span class="landing-stat-plus">+</span>
+          <span class="landing-stat-label">Followers</span>
+        </div>
+
+        <p class="landing-tagline">JEE Test Series is Here.</p>
+        <p class="landing-subline">Prepare. Compete. Improve.</p>
+
+        <div class="landing-action-wrap">
+          <span class="landing-new-label">NEW</span>
+          <a href="#/login" class="btn btn-primary btn-block landing-cta-btn">
+            <span class="landing-party-popper" aria-hidden="true">
+              <i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+            </span>
+            <span>🚀 Participate in Test Series</span>
+          </a>
+          <span class="landing-action-note">Free entry · Prizes included</span>
+        </div>
+      </div>
+    </header>
+
+    <section class="landing-features" id="lp-features">
+      <div class="container">
+        <h2 class="landing-section-title">More Than Just Tests.</h2>
+
+        <div class="landing-feature-grid">
+          <div class="landing-feature-card">
+            <div class="landing-feature-icon">📚</div>
+            <h3>Short Notes</h3>
+            <p>Quick revision material.</p>
+          </div>
+          <div class="landing-feature-card">
+            <div class="landing-feature-icon">🧠</div>
+            <h3>Quizzes</h3>
+            <p>Test your concepts quickly.</p>
+          </div>
+          <div class="landing-feature-card">
+            <div class="landing-feature-icon">📝</div>
+            <h3>Test Series</h3>
+            <p>JEE-focused competitive tests.</p>
+          </div>
+          <div class="landing-feature-card">
+            <div class="landing-feature-icon">📊</div>
+            <h3>Performance</h3>
+            <p>Understand your performance.</p>
+          </div>
+          <div class="landing-feature-card">
+            <div class="landing-feature-icon">🏆</div>
+            <h3>Leaderboard</h3>
+            <p>See how you compare.</p>
+          </div>
+          <div class="landing-feature-card">
+            <div class="landing-feature-icon">🎯</div>
+            <h3>Rank & Percentile</h3>
+            <p>Track your competitive performance.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="landing-community" id="lp-community">
+      <div class="container">
+        <div class="landing-section-kicker">STAY IN THE LOOP</div>
+        <h2 class="landing-section-title">Join the JEE Hustlers Community</h2>
+        <p class="landing-section-intro">Daily updates, test announcements, study motivation, and a community of serious aspirants.</p>
+
+        <div class="landing-community-grid">
+          <div class="landing-community-card landing-community-card-featured">
+            <div class="landing-community-card-topline"><span class="landing-new-label">NEW</span><span class="landing-community-live">Official channel</span></div>
+            <div class="landing-community-icon landing-whatsapp-icon"><img src="https://cdn.simpleicons.org/whatsapp/ffffff" alt="" aria-hidden="true"></div>
+            <h3>JEE Hustlers WhatsApp</h3>
+            <p class="landing-community-followers"><strong>800+</strong> followers</p>
+            <p class="landing-community-copy">Be the first to get free test-series alerts, study updates, and prize announcements.</p>
+            <a href="https://whatsapp.com/channel/0029Vb7hPew8vd1QgN9cEh2Y" class="btn btn-secondary landing-community-link" target="_blank" rel="noopener">Join WhatsApp Channel <span aria-hidden="true">↗</span></a>
+          </div>
+          <div class="landing-community-card">
+            <div class="landing-community-icon">💬</div>
+            <h3>Telegram</h3>
+            <p>Resources • Updates • Discussions</p>
+            <a href="#" class="btn btn-secondary landing-community-link" target="_blank" rel="noopener">Join Telegram →</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="landing-cta-section" id="lp-testseries">
+      <div class="container">
+        <div class="landing-section-kicker landing-section-kicker-light">NEW TEST SERIES</div>
+        <h2 class="landing-cta-title">Ready to Test Yourself?</h2>
+        <p class="landing-cta-sub">Don't just prepare. Compete. <strong>Free entry with prizes included.</strong></p>
+        <div class="landing-action-wrap">
+          <span class="landing-new-label landing-new-label-dark">NEW</span>
+          <a href="#/login" class="btn btn-primary btn-block landing-cta-btn">🚀 Participate in Test Series</a>
+          <span class="landing-action-note">Create your account and start competing</span>
+        </div>
+      </div>
+    </section>
+
+    <footer class="landing-footer">
+      <div class="container landing-footer-inner">
+        <div class="landing-footer-brand">JEE HUSTLERS</div>
+        <p class="landing-footer-tagline">“Prepare. Compete. Improve.”</p>
+        <nav class="landing-footer-links">
+          <a href="#lp-home">Home</a>
+          <a href="#lp-testseries">Test Series</a>
+          <a href="#lp-community">Community</a>
+          <a href="#/login">Login</a>
+        </nav>
+      </div>
+    </footer>
+  </section>
+
+  <!-- Landing test-series popup — shown once per browser session -->
+  <div class="modal-backdrop" id="landingPopup">
+    <div class="modal landing-popup-modal">
+      <button type="button" class="landing-popup-close" id="landingPopupClose" aria-label="Close">×</button>
+      <div class="landing-popup-icon">🔥</div>
+      <h3>JEE HUSTLERS TEST SERIES</h3>
+      <p>Test your preparation.<br>Compete with other aspirants.</p>
+      <p class="landing-popup-offer"><strong>Free test series</strong> with exciting prizes included.</p>
+      <ul class="landing-popup-features">
+        <li>✓ JEE-level questions</li>
+        <li>✓ Competitive leaderboard</li>
+        <li>✓ Rank &amp; percentile</li>
+        <li>✓ Detailed performance report</li>
+      </ul>
+      <a href="#/login" class="btn btn-primary btn-block" id="landingPopupCta">🚀 Participate Now</a>
+    </div>
+  </div>
+
+  <!-- =====================================================================
      AUTH VIEW — the only entry point for both students and admins
      ===================================================================== -->
   <section id="view-auth" class="view">
@@ -585,11 +761,11 @@
           id="submitReportBtn">Send report</button></div>
     </div>  
   </div> 
-
+ 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
   <script src="script.js"></script>
 </body>
 
-</html> 
+</html>
