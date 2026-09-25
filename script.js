@@ -900,6 +900,22 @@ function setupAdminTestListeners() {
         negative_marks,
       };
       if (!wasEditing) questionPayload.question_order = questionCounter++;
+
+      // Make sure the current Supabase login session is available
+      // before sending the INSERT/UPDATE request.
+      const {
+        data: { session },
+      } = await sb.auth.getSession();
+
+      if (!session?.user?.id) {
+        btn.disabled = false;
+        toast(
+          "Your login session is not ready. Please refresh the page and try again.",
+          "error",
+        );
+        return;
+      }
+
       const { error } = wasEditing
         ? await sb
             .from("questions")
@@ -908,7 +924,9 @@ function setupAdminTestListeners() {
         : await sb.from("questions").insert(questionPayload);
 
       btn.disabled = false;
+
       if (error) {
+        console.error("Question save error:", error);
         toast(friendlyError(error), "error");
         return;
       }
@@ -1228,7 +1246,7 @@ async function loadStudentResults() {
 <td>${r.unanswered_count ?? 0}</td>
       <td>${r.submitted_at ? formatDateTime(r.submitted_at) : "—"}</td>
     </tr>
-  `, 
+  `,
         )
         .join("");
 }
@@ -1272,33 +1290,15 @@ async function loadLeaderboard() {
 
   body.innerHTML = data
     .map((r) => {
-      const rank =
-        r.rnk ??
-        r.rank ??
-        r.ranking ??
-        "-";
+      const rank = r.rnk ?? r.rank ?? r.ranking ?? "-";
 
-      const student =
-        r.full_name ??
-        r.student_name ??
-        r.name ??
-        "Student";
+      const student = r.full_name ?? r.student_name ?? r.name ?? "Student";
 
-      const score =
-        r.total_score ??
-        r.score ??
-        r.marks ??
-        0;
+      const score = r.total_score ?? r.score ?? r.marks ?? 0;
 
-      const percentile =
-        r.percentile ??
-        r.percentile_score ??
-        0;
+      const percentile = r.percentile ?? r.percentile_score ?? 0;
 
-      const attemptId =
-        r.attempt_id ??
-        r.id ??
-        "";
+      const attemptId = r.attempt_id ?? r.id ?? "";
 
       return `
         <tr>
@@ -1331,28 +1331,26 @@ async function loadLeaderboard() {
     })
     .join("");
 
-  body
-    .querySelectorAll(".js-remove-attempt")
-    .forEach((btn) => {
-      btn.addEventListener("click", function () {
-        const attemptId = this.dataset.id;
+  body.querySelectorAll(".js-remove-attempt").forEach((btn) => {
+    btn.addEventListener("click", function () {
+      const attemptId = this.dataset.id;
 
-        removeAttempt(attemptId, this);
-      });
+      removeAttempt(attemptId, this);
     });
+  });
 }
 async function removeAttempt(id, button) {
   if (!id) {
     toast(
       "Could not identify this attempt. Refresh the leaderboard and try again.",
-      "error"
+      "error",
     );
 
     return;
   }
 
   const confirmed = confirm(
-    "Remove this student from the leaderboard for suspected cheating? Their attempt will be disqualified."
+    "Remove this student from the leaderboard for suspected cheating? Their attempt will be disqualified.",
   );
 
   if (!confirmed) {
@@ -1365,59 +1363,37 @@ async function removeAttempt(id, button) {
   }
 
   try {
-    const { data, error } = await sb.rpc(
-      "admin_disqualify_attempt",
-      {
-        p_attempt_id: id,
-      }
-    );
+    const { data, error } = await sb.rpc("admin_disqualify_attempt", {
+      p_attempt_id: id,
+    });
 
     if (error) {
-      console.error(
-        "admin_disqualify_attempt error:",
-        error
-      );
+      console.error("admin_disqualify_attempt error:", error);
 
       if (button) {
         button.disabled = false;
         button.textContent = "Remove";
       }
 
-      toast(
-        friendlyError(error),
-        "error"
-      );
+      toast(friendlyError(error), "error");
 
       return;
     }
 
-    console.log(
-      "Attempt successfully disqualified:",
-      data
-    );
+    console.log("Attempt successfully disqualified:", data);
 
-    toast(
-      "Student removed from this leaderboard",
-      "success"
-    );
+    toast("Student removed from this leaderboard", "success");
 
     await loadLeaderboard();
-
   } catch (err) {
-    console.error(
-      "Unexpected remove attempt error:",
-      err
-    );
+    console.error("Unexpected remove attempt error:", err);
 
     if (button) {
       button.disabled = false;
       button.textContent = "Remove";
     }
 
-    toast(
-      "Something went wrong while removing the student.",
-      "error"
-    ); 
+    toast("Something went wrong while removing the student.", "error");
   }
 }
 
@@ -2817,7 +2793,7 @@ function setupTheme() {
 
   const btn = document.getElementById("themeToggle");
 
-  if (btn) { 
+  if (btn) {
     btn.addEventListener("click", toggleTheme);
   }
 }
