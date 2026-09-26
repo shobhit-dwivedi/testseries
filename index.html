@@ -5,14 +5,56 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
   <title>Test Series</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
 </head>
-
+ 
 <body>
   <button type="button" id="themeToggle" class="theme-toggle" aria-label="Switch to dark theme" title="Switch theme">
     🌙
   </button>
+
+  <!-- =====================================================================
+     APP SHELL — desktop sidebar + mobile bottom nav.
+     Hidden by default; shown (via body.app-shell-on) only for signed-in
+     app views. Hidden again during the exam view on purpose.
+     ===================================================================== -->
+  <aside class="app-sidebar" id="appSidebar">
+    <div>
+      <a href="#/dashboard" class="app-sidebar-logo">JEE <span>HUSTLERS</span></a>
+      <nav class="app-sidebar-nav">
+        <a href="#/dashboard" class="app-nav-item" data-nav="dashboard"><span class="app-nav-icon">🏠</span> Home</a>
+        <a href="#/tests" class="app-nav-item" data-nav="tests"><span class="app-nav-icon">📝</span> Tests</a>
+        <a href="#/leaderboard" class="app-nav-item" data-nav="leaderboard"><span class="app-nav-icon">🏆</span> Leaderboard</a>
+        <a href="#/analytics" class="app-nav-item" data-nav="analytics"><span class="app-nav-icon">📊</span> Analytics</a>
+        <a href="#/profile" class="app-nav-item" data-nav="profile"><span class="app-nav-icon">👤</span> Profile</a>
+        <a href="#/admin-test" class="app-nav-item" data-nav="admin-test" id="appNavAdmin" style="display:none;"><span class="app-nav-icon">🛠️</span> Admin</a>
+        <a href="#/bulk-import" class="app-nav-item" data-nav="bulk-import" id="appNavBulkImport" style="display:none;"><span class="app-nav-icon">📥</span> Bulk import</a>
+      </nav>
+    </div>
+    <div class="app-sidebar-bottom">
+      <div class="app-sidebar-user">
+        <div class="app-sidebar-avatar" id="appSidebarAvatar">S</div>
+        <div class="app-sidebar-user-info">
+          <div class="app-sidebar-user-name" id="appSidebarUserName">…</div>
+          <div class="app-sidebar-user-role" id="appSidebarUserRole">Student</div>
+        </div>
+      </div>
+      <button type="button" class="btn btn-sm app-sidebar-logout js-logout">Log out</button>
+    </div>
+  </aside>
+
+  <nav class="app-bottom-nav" id="appBottomNav">
+    <a href="#/dashboard" class="app-bottom-item" data-nav="dashboard"><span class="app-bottom-icon">🏠</span><span>Home</span></a>
+    <a href="#/tests" class="app-bottom-item" data-nav="tests"><span class="app-bottom-icon">📝</span><span>Tests</span></a>
+    <a href="#/leaderboard" class="app-bottom-item" data-nav="leaderboard"><span class="app-bottom-icon">🏆</span><span>Board</span></a>
+    <a href="#/analytics" class="app-bottom-item" data-nav="analytics"><span class="app-bottom-icon">📊</span><span>Stats</span></a>
+    <a href="#/profile" class="app-bottom-item" data-nav="profile"><span class="app-bottom-icon">👤</span><span>Profile</span></a>
+  </nav>
+
   <!-- =====================================================================
      LANDING VIEW — public front page, shown to signed-out visitors
      ===================================================================== -->
@@ -20,100 +62,107 @@
 
     <nav class="landing-navbar">
       <div class="landing-navbar-inner">
-        <a href="#/" class="landing-logo">
-          <img src="logo.png" alt="JEE Hustlers logo">
-          <span>JEE <strong>HUSTLERS</strong></span>
-        </a>
+        <a href="#/" class="landing-logo">JEE <span>HUSTLERS</span></a>
 
         <button type="button" class="landing-hamburger" id="landingHamburger" aria-label="Open menu" aria-expanded="false">
           <span></span><span></span><span></span>
         </button>
 
         <div class="landing-nav-links" id="landingNavLinks">
-            <a href="#lp-home" class="landing-nav-link">Home</a>
           <a href="#lp-features" class="landing-nav-link">Features</a>
+          <a href="#lp-how" class="landing-nav-link">Process</a>
           <a href="#lp-community" class="landing-nav-link">Community</a>
-          <a href="#lp-testseries" class="landing-nav-link">Test Series</a>
-          <a href="#/login" class="btn btn-primary btn-sm landing-nav-cta"><span class="landing-new-label">NEW</span>Participate →</a>
+          <a href="#/login" class="landing-nav-login">Log in</a>
+          <a href="#/login" class="btn btn-primary btn-sm landing-nav-cta">Participate</a>
         </div>
       </div>
     </nav>
 
     <header class="landing-hero" id="lp-home">
-      <div class="landing-hero-fx" aria-hidden="true">
-        <div class="landing-dot-grid"></div>
-        <div class="landing-glow landing-glow-1"></div>
-        <div class="landing-glow landing-glow-2"></div>
-        <span class="landing-float landing-float-1">π</span>
-        <span class="landing-float landing-float-2">∑</span>
-        <span class="landing-float landing-float-3">√</span>
-        <span class="landing-float landing-float-4">Δ</span>
-        <span class="landing-float landing-float-5">⚛</span>
-      </div>
-
       <div class="landing-hero-inner">
-        <div class="landing-symbols" aria-hidden="true">⚛ &nbsp; π &nbsp; ∑ &nbsp; √ &nbsp; Δ</div>
+        <div class="landing-hero-text">
+          <div class="landing-eyebrow">JEE HUSTLERS</div>
+          <h1 class="landing-title">JEE Hustlers<br><span class="landing-title-accent">Test Series</span></h1>
+          <p class="landing-subline">Attempt smarter. Compete fairly. See exactly where you stand.</p>
 
-        <h1 class="landing-title" aria-label="JEE HUSTLERS">
-          <span class="landing-title-line" data-typing-text="JEE"></span>
-          <span class="landing-title-line" data-typing-text="HUSTLERS"></span>
-        </h1>
-
-        <div class="landing-stat">
-          <span class="landing-stat-num" id="followerCount">0</span><span class="landing-stat-plus">+</span>
-          <span class="landing-stat-label">Followers</span>
-        </div>
-
-        <p class="landing-tagline">JEE Test Series is Here.</p>
-        <p class="landing-subline">Prepare. Compete. Improve.</p>
-
-        <div class="landing-action-wrap">
-          <span class="landing-new-label">NEW</span>
-          <a href="#/login" class="btn btn-primary btn-block landing-cta-btn">
-            <span class="landing-party-popper" aria-hidden="true">
-              <i></i><i></i><i></i><i></i><i></i><i></i><i></i>
-            </span>
-            <span>🚀 Participate in Test Series</span>
-          </a>
-          <span class="landing-action-note">Free entry · Prizes included</span>
+          <div class="landing-hero-actions">
+            <a href="#/login" class="btn landing-cta-btn landing-participate-btn">Participate</a>
+            <a href="#/login" class="landing-login-btn">Log in <span aria-hidden="true">→</span></a>
+          </div>
         </div>
       </div>
     </header>
 
+    <section class="landing-proof" aria-label="Platform preview">
+      <div class="landing-proof-inner">
+        <div class="landing-proof-copy">
+          <span class="landing-section-kicker">Built for serious preparation</span>
+          <h2>Everything you need to move from practice to performance.</h2>
+          <p>One focused workspace for live tests, clear reports, and the next right step.</p>
+        </div>
+        <div class="landing-product-preview">
+          <div class="preview-window-bar"><span></span><span></span><span></span><b>JEE HUSTLERS</b><em>Live test</em></div>
+          <div class="preview-window-body">
+            <div class="preview-sidebar"><i></i><i></i><i></i><i></i></div>
+            <div class="preview-dashboard"><div class="preview-line preview-line-wide"></div><div class="preview-line"></div><div class="preview-metrics"><span></span><span></span><span></span></div><div class="preview-chart"><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <section class="landing-features" id="lp-features">
       <div class="container">
-        <h2 class="landing-section-title">More Than Just Tests.</h2>
+        <h2 class="landing-section-title">What You Get</h2>
 
         <div class="landing-feature-grid">
           <div class="landing-feature-card">
-            <div class="landing-feature-icon">📚</div>
-            <h3>Short Notes</h3>
-            <p>Quick revision material.</p>
-          </div>
-          <div class="landing-feature-card">
-            <div class="landing-feature-icon">🧠</div>
-            <h3>Quizzes</h3>
-            <p>Test your concepts quickly.</p>
-          </div>
-          <div class="landing-feature-card">
             <div class="landing-feature-icon">📝</div>
-            <h3>Test Series</h3>
-            <p>JEE-focused competitive tests.</p>
+            <h3>Full-Length Test Series</h3>
+            <p>Timed, JEE-style tests across Physics, Chemistry &amp; Maths.</p>
+          </div>
+          <div class="landing-feature-card">
+            <div class="landing-feature-icon">⏱️</div>
+            <h3>Real Exam Interface</h3>
+            <p>Live timer, question palette, and mark-for-review — just like the real thing.</p>
           </div>
           <div class="landing-feature-card">
             <div class="landing-feature-icon">📊</div>
-            <h3>Performance</h3>
-            <p>Understand your performance.</p>
+            <h3>Detailed Reports</h3>
+            <p>Answer-by-answer breakdown with explanations after every test.</p>
           </div>
           <div class="landing-feature-card">
             <div class="landing-feature-icon">🏆</div>
-            <h3>Leaderboard</h3>
-            <p>See how you compare.</p>
+            <h3>Leaderboard &amp; Rank</h3>
+            <p>See your rank and percentile against other students.</p>
           </div>
-          <div class="landing-feature-card">
-            <div class="landing-feature-icon">🎯</div>
-            <h3>Rank & Percentile</h3>
-            <p>Track your competitive performance.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="landing-how" id="lp-how">
+      <div class="container">
+        <h2 class="landing-section-title">How It Works</h2>
+
+        <div class="landing-how-grid">
+          <div class="landing-how-step">
+            <div class="landing-how-num">1</div>
+            <h3>Sign up for free</h3>
+            <p>Create your account in seconds.</p>
+          </div>
+          <div class="landing-how-step">
+            <div class="landing-how-num">2</div>
+            <h3>Pick a test</h3>
+            <p>Choose from the available test series.</p>
+          </div>
+          <div class="landing-how-step">
+            <div class="landing-how-num">3</div>
+            <h3>Attempt it live</h3>
+            <p>Real timer, real exam pressure.</p>
+          </div>
+          <div class="landing-how-step">
+            <div class="landing-how-num">4</div>
+            <h3>Get your report</h3>
+            <p>Instant rank, percentile, and explanations.</p>
           </div>
         </div>
       </div>
@@ -121,38 +170,23 @@
 
     <section class="landing-community" id="lp-community">
       <div class="container">
-        <div class="landing-section-kicker">STAY IN THE LOOP</div>
-        <h2 class="landing-section-title">Join the JEE Hustlers Community</h2>
-        <p class="landing-section-intro">Daily updates, test announcements, study motivation, and a community of serious aspirants.</p>
+        <h2 class="landing-section-title">Join the Community</h2>
 
         <div class="landing-community-grid">
-          <div class="landing-community-card landing-community-card-featured">
-            <div class="landing-community-card-topline"><span class="landing-new-label">NEW</span><span class="landing-community-live">Official channel</span></div>
-            <div class="landing-community-icon landing-whatsapp-icon"><img src="https://cdn.simpleicons.org/whatsapp/ffffff" alt="" aria-hidden="true"></div>
-            <h3>JEE Hustlers WhatsApp</h3>
-            <p class="landing-community-followers"><strong>800+</strong> followers</p>
-            <p class="landing-community-copy">Be the first to get free test-series alerts, study updates, and prize announcements.</p>
-            <a href="https://whatsapp.com/channel/0029Vb7hPew8vd1QgN9cEh2Y" class="btn btn-secondary landing-community-link" target="_blank" rel="noopener">Join WhatsApp Channel <span aria-hidden="true">↗</span></a>
+          <div class="landing-community-card">
+            <div class="landing-community-icon">🟢</div>
+            <h3>WhatsApp</h3>
+            <p>800+ Members</p>
+            <!-- TODO: replace # with your actual WhatsApp community/channel link -->
+            <a href="#" class="btn btn-secondary landing-community-link" target="_blank" rel="noopener">Join WhatsApp →</a>
           </div>
           <div class="landing-community-card">
-            <div class="landing-community-icon">💬</div>
+            <div class="landing-community-icon">🔵</div>
             <h3>Telegram</h3>
             <p>Resources • Updates • Discussions</p>
+            <!-- TODO: replace # with your actual Telegram channel link -->
             <a href="#" class="btn btn-secondary landing-community-link" target="_blank" rel="noopener">Join Telegram →</a>
           </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="landing-cta-section" id="lp-testseries">
-      <div class="container">
-        <div class="landing-section-kicker landing-section-kicker-light">NEW TEST SERIES</div>
-        <h2 class="landing-cta-title">Ready to Test Yourself?</h2>
-        <p class="landing-cta-sub">Don't just prepare. Compete. <strong>Free entry with prizes included.</strong></p>
-        <div class="landing-action-wrap">
-          <span class="landing-new-label landing-new-label-dark">NEW</span>
-          <a href="#/login" class="btn btn-primary btn-block landing-cta-btn">🚀 Participate in Test Series</a>
-          <span class="landing-action-note">Create your account and start competing</span>
         </div>
       </div>
     </section>
@@ -160,34 +194,16 @@
     <footer class="landing-footer">
       <div class="container landing-footer-inner">
         <div class="landing-footer-brand">JEE HUSTLERS</div>
-        <p class="landing-footer-tagline">“Prepare. Compete. Improve.”</p>
+        <p class="landing-footer-tagline">Prepare. Compete. Improve.</p>
         <nav class="landing-footer-links">
           <a href="#lp-home">Home</a>
-          <a href="#lp-testseries">Test Series</a>
+          <a href="#lp-features">Features</a>
           <a href="#lp-community">Community</a>
           <a href="#/login">Login</a>
         </nav>
       </div>
     </footer>
   </section>
-
-  <!-- Landing test-series popup — shown once per browser session -->
-  <div class="modal-backdrop" id="landingPopup">
-    <div class="modal landing-popup-modal">
-      <button type="button" class="landing-popup-close" id="landingPopupClose" aria-label="Close">×</button>
-      <div class="landing-popup-icon">🔥</div>
-      <h3>JEE HUSTLERS TEST SERIES</h3>
-      <p>Test your preparation.<br>Compete with other aspirants.</p>
-      <p class="landing-popup-offer"><strong>Free test series</strong> with exciting prizes included.</p>
-      <ul class="landing-popup-features">
-        <li>✓ JEE-level questions</li>
-        <li>✓ Competitive leaderboard</li>
-        <li>✓ Rank &amp; percentile</li>
-        <li>✓ Detailed performance report</li>
-      </ul>
-      <a href="#/login" class="btn btn-primary btn-block" id="landingPopupCta">🚀 Participate Now</a>
-    </div>
-  </div>
 
   <!-- =====================================================================
      AUTH VIEW — the only entry point for both students and admins
@@ -272,7 +288,85 @@
   <!-- =====================================================================
      DASHBOARD VIEW
      ===================================================================== -->
-  <section id="view-dashboard" class="view">
+  <!-- =====================================================================
+     HOME VIEW — greeting, live-test spotlight, quick stats, quick access.
+     Part 2 of the redesign. Data is real (catalog + attempts), never faked.
+     ===================================================================== -->
+  <section id="view-dashboard" class="view home-page">
+    <header class="home-topbar">
+      <a href="#/dashboard" class="home-brand">🔥 <span>JEE HUSTLERS</span></a>
+      <a href="#/profile" class="home-avatar" id="homeAvatar" aria-label="Profile">S</a>
+    </header>
+
+    <div class="page-body">
+      <div class="container" style="max-width:900px;">
+
+        <div class="home-greeting">
+          <h1><span id="homeGreetingWord">Good Morning</span>, <span id="homeGreetingName">Student</span> <span id="homeGreetingIcon">👋</span></h1>
+          <p id="homeDateLine" class="text-muted"></p>
+        </div>
+
+        <div id="homeSpotlight" class="home-spotlight">
+          <div class="empty-state">Loading…</div>
+        </div>
+
+        <div id="homeStats" class="home-stats"></div>
+
+        <section class="dashboard-test-section">
+          <div class="dashboard-section-heading">
+            <div>
+              <span class="eyebrow-label">Exam workspace</span>
+              <h2>All tests</h2>
+            </div>
+            <a href="#/tests" class="btn btn-sm">Open full list</a>
+          </div>
+          <div id="homeTestsToolbar" class="tests-toolbar"></div>
+          <div id="homeTestsGrid" class="tests-card-grid">
+            <div class="empty-state">Loading…</div>
+          </div>
+        </section>
+
+        <div class="home-section-title">Quick Access</div>
+        <div class="home-quick-grid">
+          <a href="#/tests" class="home-quick-card">
+            <span class="home-quick-icon">📝</span>
+            <span>My Tests</span>
+            <span class="home-quick-sub">View &amp; attempt</span>
+          </a>
+          <a href="#/leaderboard" class="home-quick-card">
+            <span class="home-quick-icon">🏆</span>
+            <span>Leaderboard</span>
+            <span class="home-quick-sub">After results</span>
+          </a>
+          <a href="#/analytics" class="home-quick-card">
+            <span class="home-quick-icon">📊</span>
+            <span>Performance</span>
+            <span class="home-quick-sub">Track your progress</span>
+          </a>
+          <a href="#/profile" class="home-quick-card">
+            <span class="home-quick-icon">👤</span>
+            <span>Profile</span>
+            <span class="home-quick-sub">Manage account</span>
+          </a>
+        </div>
+
+        <div class="home-banner">
+          <span class="home-banner-icon">🚩</span>
+          <div>
+            <div class="home-banner-title">Small steps everyday</div>
+            <div class="home-banner-sub">lead to big results</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- =====================================================================
+     TESTS VIEW — join-a-test box, browsable test catalog (search + Ongoing/
+     Upcoming/Past), and (for admins) the existing admin test list.
+     ===================================================================== -->
+  <section id="view-tests" class="view">
     <header class="appbar">
       <div class="container">
         <a href="#/dashboard" class="appbar-brand"><span class="dot"></span> Test Series</a>
@@ -287,19 +381,6 @@
     <div class="page-body">
       <div class="container">
 
-        <div id="joinPreviewSlot"></div>
-
-        <div class="card">
-          <h2 style="font-size:16px;">Join a test</h2>
-          <p class="text-muted" style="font-size:13.5px;">Enter the test code your admin shared with you — or open the
-            link they sent, which fills this in automatically.</p>
-          <form id="joinForm" class="flex gap-8" style="flex-wrap:wrap;">
-            <input type="text" id="joinCode" placeholder="e.g. A1B2C3"
-              style="flex:1;min-width:160px;text-transform:uppercase;" maxlength="12" required>
-            <button type="submit" class="btn btn-primary">Start / Resume</button>
-          </form>
-        </div>
-
         <div id="adminSegmentWrap" style="display:none;">
           <div class="segmented mt-16">
             <button type="button" id="segStudent" class="active">My tests</button>
@@ -309,9 +390,21 @@
 
         <section id="studentSection" class="mt-16">
           <div class="section-title">
-            <h2>My tests</h2>
+            <h2>My Tests</h2>
           </div>
-          <div id="attemptsList">
+          <div class="tests-toolbar">
+            <div class="tests-search">
+              <span class="tests-search-icon">🔍</span>
+              <input type="search" id="testsSearchInput" placeholder="Search tests…">
+            </div>
+            <div class="segmented tests-status-tabs" id="testsStatusTabs">
+              <button type="button" class="active" data-filter="all">All</button>
+              <button type="button" data-filter="ongoing">Ongoing</button>
+              <button type="button" data-filter="upcoming">Upcoming</button>
+              <button type="button" data-filter="past">Past</button>
+            </div>
+          </div>
+          <div id="testsCardGrid" class="tests-card-grid">
             <div class="empty-state">Loading…</div>
           </div>
         </section>
@@ -319,13 +412,34 @@
         <section id="adminSection" class="mt-16" style="display:none;">
           <div class="section-title">
             <h2>All tests</h2>
-            <a href="#/admin-test" class="btn btn-primary btn-sm">+ Create new test</a>
+            <div class="flex gap-8">
+              <a href="#/bulk-import" class="btn btn-sm">Bulk import</a>
+              <a href="#/admin-test" class="btn btn-primary btn-sm">+ Create new test</a>
           </div>
           <div id="adminTestsList">
             <div class="empty-state">Loading…</div>
           </div>
         </section>
 
+      </div>
+    </div>
+  </section>
+
+  <section id="view-test-details" class="view">
+    <header class="appbar">
+      <div class="container">
+        <a href="#/dashboard" class="appbar-brand"><span class="dot"></span> Test Series</a>
+        <div class="appbar-user">
+          <a href="#/dashboard" class="btn btn-sm">← Dashboard</a>
+          <button class="btn btn-sm js-logout">Log out</button>
+        </div>
+      </div>
+    </header>
+    <div class="page-body">
+      <div class="container test-details-container">
+        <div id="testDetailsContent">
+          <div class="empty-state">Loading test details…</div>
+        </div>
       </div>
     </div>
   </section>
@@ -338,7 +452,7 @@
       <div class="container">
         <a href="#/dashboard" class="appbar-brand"><span class="dot"></span> Test Series</a>
         <div class="appbar-user">
-          <a href="#/dashboard" class="btn btn-sm">← Dashboard</a>
+          <a href="#/tests" class="btn btn-sm">← Tests</a>
           <button class="btn btn-sm js-logout">Log out</button>
         </div>
       </div>
@@ -363,6 +477,10 @@
               <div class="field">
                 <label for="descInput">Description (optional)</label>
                 <textarea id="descInput" placeholder="Instructions or notes for students"></textarea>
+              </div>
+              <div class="field">
+                <label for="instructionsInput">Test instructions</label>
+                <textarea id="instructionsInput" placeholder="Rules, syllabus notes, and instructions students should read before starting"></textarea>
               </div>
               <div class="form-row">
                 <div class="field">
@@ -401,18 +519,10 @@
 
           <div class="card" id="shareCard" style="display:none;">
             <div class="section-title">
-              <h2 style="font-size:16px;">Share with students</h2>
-              <div class="flex gap-8">
-                <span class="status-tag" id="publishTag"></span>
-                <button class="btn btn-sm" id="publishBtn"></button>
-              </div>
+              <h2 style="font-size:16px;">Publication schedule</h2>
+              <span class="status-tag" id="publishTag"></span>
             </div>
-            <div class="copy-link-box">
-              <code id="linkText"></code>
-              <button class="btn btn-sm" id="copyLinkBtn">Copy</button>
-            </div>
-            <p class="helper-text">Code: <strong id="codeText"></strong> — students can also just type this code into
-              the "Join a test" box on their dashboard.</p>
+            <p class="helper-text" id="scheduleSummary">Students will see this exam automatically on their dashboard when it is live.</p>
           </div>
 
           <div class="card admin-question-card" id="questionsCard" style="display:none;">
@@ -570,6 +680,75 @@
   </section>
 
   <!-- =====================================================================
+     BULK QUESTION IMPORT VIEW — admin-only, parse/validate before insert
+     ===================================================================== -->
+  <section id="view-bulk-import" class="view">
+    <header class="appbar">
+      <div class="container">
+        <a href="#/dashboard" class="appbar-brand"><span class="dot"></span> Test Series</a>
+        <div class="appbar-user">
+          <a href="#/tests" class="btn btn-sm">← Tests</a>
+          <a href="#/admin-test" class="btn btn-sm">Admin</a>
+          <button class="btn btn-sm js-logout">Log out</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="page-body">
+      <div class="container admin-page-container">
+        <div id="bulkImportNotAdmin" class="error-box" style="display:none;">Only admin accounts can import questions.</div>
+        <div id="bulkImportContent" style="display:none;">
+          <div class="section-title">
+            <div>
+              <h1 style="font-size:22px;">Bulk question import</h1>
+              <p class="text-muted" style="font-size:13.5px;">Paste the standardized paper, parse it, fix any highlighted fields, then import the valid questions into an existing test.</p>
+            </div>
+            <span class="badge badge-brand">Admin tool</span>
+          </div>
+
+          <div class="card bulk-import-input-card">
+            <div class="form-row">
+              <div class="field">
+                <label for="bulkTestSelect">Import into test</label>
+                <select id="bulkTestSelect" required><option value="">Loading tests…</option></select>
+              </div>
+              <div class="field bulk-import-file-field">
+                <label for="bulkImportFile">Or load a text file</label>
+                <input type="file" id="bulkImportFile" accept=".txt,.text">
+              </div>
+            </div>
+            <div class="field"> 
+              <label for="bulkImportText">Question paper</label>
+              <textarea id="bulkImportText" class="bulk-import-textarea" spellcheck="false" placeholder="[QUESTION 1]\nQUESTION:\n...\n\nOPTION_A:\n...\n\nOPTION_B:\n...\n\nOPTION_C:\n...\n\nOPTION_D:\n...\n\nANSWER:\nB\n\nEXPLANATION:\n...\n\nTYPE:\nMCQ\n\nSUBJECT:\nPhysics\n\nCHAPTER:\n..."></textarea>
+            </div>
+            <div class="bulk-import-actions">
+              <button type="button" class="btn btn-primary" id="parseBulkQuestionsBtn">Extract Questions</button>
+              <button type="button" class="btn" id="clearBulkQuestionsBtn">Clear</button>
+              <span id="bulkImportParseStatus" class="helper-text"></span>
+            </div>
+          </div>
+
+          <div id="bulkImportPreviewCard" class="card" style="display:none;">
+            <div class="section-title">
+              <div>
+                <h2 style="font-size:17px;">Preview and validate</h2>
+                <p class="helper-text">Every field remains editable. Questions with errors are excluded until corrected.</p>
+              </div>
+              <div id="bulkImportSummary" class="bulk-import-summary"></div>
+            </div>
+            <div id="bulkImportErrors" class="bulk-import-errors" style="display:none;"></div>
+            <div id="bulkImportPreview" class="bulk-import-preview"></div>
+            <div class="bulk-import-footer">
+              <button type="button" class="btn btn-success" id="importAllValidQuestionsBtn">Import all valid questions</button>
+              <span id="bulkImportResult" class="helper-text"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =====================================================================
      EXAM VIEW (its own header only — no site nav, on purpose)
      ===================================================================== -->
   <section id="view-exam" class="view">
@@ -700,6 +879,38 @@
 
   </section>
 
+  <section id="view-review" class="view">
+    <div class="review-shell">
+      <header class="review-topbar">
+        <div>
+          <div class="exam-title" id="reviewTitle">Answer review</div>
+          <div class="exam-candidate" id="reviewCandidate">Read-only review</div>
+        </div>
+        <a class="btn btn-sm" id="reviewBackBtn" href="#/result">← Back to report</a>
+      </header>
+      <div class="review-subject-tabs" id="reviewSubjectTabs"></div>
+      <div class="review-body">
+        <main class="review-main">
+          <div class="question-card review-question-card" id="reviewQuestionCard"></div>
+          <div class="review-navigation">
+            <button type="button" class="btn" id="reviewPreviousBtn">← Previous</button>
+            <span id="reviewProgressLabel" class="text-muted"></span>
+            <button type="button" class="btn btn-primary" id="reviewNextBtn">Next →</button>
+          </div>
+        </main>
+        <aside class="review-palette-panel">
+          <div class="palette-header"><h3>Answer palette</h3></div>
+          <div class="palette-legend review-legend">
+            <div class="legend-item"><span class="legend-swatch" style="background:var(--success);"></span>Correct</div>
+            <div class="legend-item"><span class="legend-swatch" style="background:var(--danger);"></span>Wrong</div>
+            <div class="legend-item"><span class="legend-swatch" style="background:var(--not-visited-tint);"></span>Unattempted</div>
+          </div>
+          <div class="palette-grid review-palette-grid" id="reviewPaletteGrid"></div>
+        </aside>
+      </div>
+    </div>
+  </section>
+
   <!-- =====================================================================
      RESULT VIEW
      ===================================================================== -->
@@ -708,7 +919,7 @@
       <div class="container">
         <a href="#/dashboard" class="appbar-brand"><span class="dot"></span> Test Series</a>
         <div class="appbar-user">
-          <a href="#/dashboard" class="btn btn-sm">← Dashboard</a>
+          <a href="#/tests" class="btn btn-sm">← Tests</a>
           <button class="btn btn-sm js-logout">Log out</button>
         </div>
       </div>
@@ -719,6 +930,64 @@
         <div id="resultContent">
           <div class="empty-state">Loading your report…</div>
         </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="view-leaderboard" class="view">
+    <header class="appbar">
+      <div class="container">
+        <a href="#/dashboard" class="appbar-brand"><span class="dot"></span> Test Series</a>
+        <div class="appbar-user">
+          <a href="#/dashboard" class="btn btn-sm">← Dashboard</a>
+          <button class="btn btn-sm js-logout">Log out</button>
+        </div>
+      </div>
+    </header>
+    <div class="page-body">
+      <div class="container leaderboard-container">
+        <div class="section-title analytics-heading">
+          <div><span class="eyebrow-label">Across all declared tests</span><h1>Global leaderboard</h1><p class="text-muted">Ranked by average score across completed tests.</p></div>
+        </div>
+        <div id="leaderboardContent"><div class="empty-state">Loading leaderboard…</div></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="view-analytics" class="view">
+    <header class="appbar">
+      <div class="container">
+        <a href="#/dashboard" class="appbar-brand"><span class="dot"></span> Test Series</a>
+        <div class="appbar-user">
+          <a href="#/dashboard" class="btn btn-sm">← Dashboard</a>
+          <button class="btn btn-sm js-logout">Log out</button>
+        </div>
+      </div>
+    </header>
+    <div class="page-body">
+      <div class="container">
+        <div class="section-title analytics-heading">
+          <div><span class="eyebrow-label">Performance cockpit</span><h1>Analytics</h1><p class="text-muted">A clear view of your pace, accuracy, and progress.</p></div>
+        </div>
+        <div id="analyticsContent"><div class="empty-state">Loading analytics…</div></div>
+        <div id="analysisHistory" class="analysis-history"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="view-profile" class="view">
+    <header class="appbar">
+      <div class="container">
+        <a href="#/dashboard" class="appbar-brand"><span class="dot"></span> Test Series</a>
+        <div class="appbar-user">
+          <a href="#/dashboard" class="btn btn-sm">← Dashboard</a>
+          <button class="btn btn-sm js-logout">Log out</button>
+        </div>
+      </div>
+    </header>
+    <div class="page-body">
+      <div class="container profile-container">
+        <div id="profileContent"><div class="empty-state">Loading profile…</div></div>
       </div>
     </div>
   </section>
@@ -759,13 +1028,13 @@
           placeholder="Tell the admin what needs correction"></textarea></div>
       <div class="fodal-actions"><button class="btn" id="cancelReportBtn">Cancel</button><button class="btn btn-primary"
           id="submitReportBtn">Send report</button></div>
-    </div>  
+    </div>   
   </div> 
- 
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
   <script src="script.js"></script>
-</body>
+</body> 
 
 </html>
