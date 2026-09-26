@@ -209,9 +209,38 @@ function categoryBadge(category) {
 /* =========================================================================
    2. ROUTER — this is a single HTML page; different "views" are just
    sections toggled on/off, and the URL hash carries the route + params,
-   e.g. #/exam?code=ABC123  or  #/result?attempt=<uuid>
+  e.g. #/exam?test=<uuid>  or  #/result?attempt=<uuid>
    ========================================================================= */
-const VIEWS = ["landing", "auth", "dashboard", "admin-test", "exam", "result"];
+const VIEWS = [
+  "landing",
+  "auth",
+  "dashboard",
+  "tests",
+  "test-details",
+  "admin-test",
+  "bulk-import",
+  "exam",
+  "review",
+  "result",
+  "leaderboard",
+  "analytics",
+  "profile",
+];
+
+// Views that show the signed-in app shell (desktop sidebar / mobile bottom
+// nav). The exam view deliberately stays off this list — no site nav during
+// a timed test, on purpose, same as the existing appbar convention.
+const APP_SHELL_VIEWS = new Set([
+  "dashboard",
+  "tests",
+  "test-details",
+  "admin-test",
+  "bulk-import",
+  "result",
+  "leaderboard",
+  "analytics",
+  "profile",
+]);
 let currentRoute = { path: "/login", params: new URLSearchParams() };
 
 // Set to true while a student is actively inside a running exam, so they
@@ -272,17 +301,6 @@ async function router() {
   } = await sb.auth.getSession();
 
   if (!session) {
-    // Landing-page section hashes are anchors, not application routes.
-    if (parsed.path.startsWith("/lp-")) {
-      showView("landing");
-      requestAnimationFrame(() => {
-        document.getElementById(parsed.path.slice(1))?.scrollIntoView({
-          behavior: "smooth",
-          block: "start",
-        });
-      });
-      return;
-    }
     // Public, signed-out visitors land on the marketing page first; only an
     // explicit "/login" request (e.g. the Participate buttons) — or a deep
     // link to a page that requires a session — opens the existing auth view.
@@ -291,6 +309,7 @@ async function router() {
     } else {
       showView("auth");
     }
+    syncAppShell(null, false);
     return;
   }
 
@@ -302,11 +321,23 @@ async function router() {
   switch (parsed.path) {
     case "/dashboard":
       showView("dashboard");
-      await enterDashboardView();
+      await enterHomeView();
+      break;
+    case "/tests":
+      showView("tests");
+      await enterTestsView();
+      break;
+    case "/test-details":
+      showView("test-details");
+      await enterTestDetailsView();
       break;
     case "/admin-test":
       showView("admin-test");
       await enterAdminTestView();
+      break;
+    case "/bulk-import":
+      showView("bulk-import");
+      await enterBulkImportView();
       break;
     case "/exam":
       lastExamHash =
@@ -319,9 +350,31 @@ async function router() {
       showView("result");
       await enterResultView();
       break;
+    case "/review":
+      showView("review");
+      await enterReviewView();
+      break;
+    case "/leaderboard":
+      showView("leaderboard");
+      await enterGlobalLeaderboardView();
+      break;
+    case "/analytics":
+      showView("analytics");
+      await enterAnalyticsView();
+      break;
+    case "/profile":
+      showView("profile");
+      await enterProfilePlaceholder();
+      break;
     default:
       navigate("/dashboard");
+      return;
   }
+
+  await syncAppShell(
+    document.querySelector(".view.active")?.id.replace("view-", ""),
+    true,
+  );
 }
 
 window.addEventListener("hashchange", router);
@@ -433,7 +486,7 @@ function setupAuthListeners() {
 }
 
 /* =========================================================================
-   4. DASHBOARD VIEW
+   4. TESTS VIEW (join-a-test, my attempts, admin's test list)
    ========================================================================= */
 let myProfile = null;
 
@@ -450,15 +503,12 @@ function setupDashboardListeners() {
     document.getElementById("studentSection").style.display = "none";
     document.getElementById("adminSection").style.display = "block";
   });
-  document.getElementById("joinForm").addEventListener("submit", (e) => {
-    e.preventDefault();
-    const code = document.getElementById("joinCode").value.trim().toUpperCase();
-    if (!code) return;
-    navigate(`/exam?code=${encodeURIComponent(code)}`);
-  });
 }
 
-async function enterDashboardView() {
+// Powers the "Tests" page (join-a-test box, my attempts, admin's test
+// list) — kept as its own function/route so old shared links and all the
+// existing join/admin logic below work completely unchanged.
+async function enterTestsView() {
   myProfile = await getMyProfile();
   const {
     data: { session },
@@ -471,8 +521,6 @@ async function enterDashboardView() {
   document.getElementById("segAdmin").classList.remove("active");
   document.getElementById("studentSection").style.display = "block";
   document.getElementById("adminSection").style.display = "none";
-  document.getElementById("joinCode").value = "";
-  document.getElementById("joinPreviewSlot").innerHTML = "";
 
   const roleChip = document.getElementById("roleChip");
   roleChip.className = "role-chip";
@@ -485,83 +533,440 @@ async function enterDashboardView() {
     document.getElementById("adminSegmentWrap").style.display = "none";
   }
 
-  await handleCodeInUrl();
-  await loadMyAttempts();
+  // reset the tests catalog's search/filter UI to a known default each time
+  testsFilterState = { status: "all", query: "" };
+  const searchInput = document.getElementById("testsSearchInput");
+  if (searchInput) searchInput.value = "";
+  document
+    .querySelectorAll("#testsStatusTabs button")
+    .forEach((b) => b.classList.toggle("active", b.dataset.filter === "all"));
+
+  await loadTestsCatalog();
   if (myProfile?.role === "admin") await loadAdminTests();
 }
 
-async function handleCodeInUrl() {
-  const code = qs("code");
-  const slot = document.getElementById("joinPreviewSlot");
-  if (!code) return;
+/* ---- Tests catalog: every published test the student can see, merged
+   with their own attempt (if any), filterable by search + Ongoing/
+   Upcoming/Past. Replaces the old plain "my attempts" list. ---- */
+let testsCatalogCache = [];
+let testsFilterState = { status: "all", query: "" };
 
-  document.getElementById("joinCode").value = code.toUpperCase();
-
-  const { data, error } = await sb
-    .from("tests")
-    .select(
-      "title, description, category, duration_minutes, available_from, available_until, is_published",
-    )
-    .eq("test_code", code.toUpperCase())
-    .maybeSingle();
-
-  if (error || !data || !data.is_published) {
-    slot.innerHTML = `<div class="error-box">No published test was found for code <strong>${escapeHtml(code.toUpperCase())}</strong>. Double check the link with your admin.</div>`;
-    return;
-  }
-
-  slot.innerHTML = `
-    <div class="card" style="border-color: var(--brand);">
-      <div class="section-title"><h2 style="font-size:16px;">${escapeHtml(data.title)}</h2><span class="flex gap-8">${categoryBadge(data.category)}<span class="status-tag published">Test found</span></span></div>
-      ${data.description ? `<p class="text-muted">${escapeHtml(data.description)}</p>` : ""}
-      <p class="list-row-meta">Duration once started: ${data.duration_minutes} minutes &nbsp;·&nbsp; Open: ${formatDateTime(data.available_from)} → ${formatDateTime(data.available_until)}</p>
-      <button class="btn btn-primary mt-8" id="startFromPreviewBtn">Start test</button>
-    </div>
-  `;
-  document
-    .getElementById("startFromPreviewBtn")
-    .addEventListener("click", () => {
-      navigate(`/exam?code=${encodeURIComponent(code.toUpperCase())}`);
-    });
+function fetchTestsCatalog() {
+  return sb.rpc("get_student_test_catalog").then(({ data, error }) => ({
+    data: (data || []).map((entry) => ({
+      ...entry,
+      windowState: entry.lifecycle === "live" ? "ongoing" : entry.lifecycle === "locked" ? "upcoming" : "past",
+      myAttempt: entry.attempt_id
+        ? { id: entry.attempt_id, status: entry.attempt_status, total_score: entry.attempt_score, submitted_at: entry.attempt_submitted_at }
+        : null,
+    })),
+    error,
+  }));
 }
 
-async function loadMyAttempts() {
-  const list = document.getElementById("attemptsList");
-  const { data, error } = await sb
-    .from("test_attempts")
-    .select(
-      "id, status, total_score, started_at, submitted_at, tests(id, title, test_code, duration_minutes, category)",
+function classifyTestWindow(test, nowMs = Date.now()) {
+  if (test.lifecycle) {
+    return test.lifecycle === "live" ? "ongoing" : test.lifecycle === "locked" ? "upcoming" : "past";
+  }
+  const from = test.available_from ? new Date(test.available_from).getTime() : null;
+  const until = test.available_until ? new Date(test.available_until).getTime() : null;
+  if (from !== null && nowMs < from) return "upcoming";
+  if (until !== null && nowMs > until) return "past";
+  return "ongoing";
+}
+
+function mergeCatalogWithAttempts(catalog, attempts) {
+  const latestByTest = new Map();
+  (attempts || []).forEach((a) => {
+    const existing = latestByTest.get(a.test_id);
+    if (!existing || new Date(a.started_at) > new Date(existing.started_at)) {
+      latestByTest.set(a.test_id, a);
+    }
+  });
+  return (catalog || [])
+    .filter((t) => t.is_published)
+    .map((t) => ({
+      ...t,
+      myAttempt: latestByTest.get(t.id) || null,
+      windowState: classifyTestWindow(t),
+    }));
+}
+
+function reminderKey(testId) {
+  return `jh_reminder_${testId}`;
+}
+function isReminderSet(testId) {
+  try {
+    return localStorage.getItem(reminderKey(testId)) === "1";
+  } catch (e) {
+    return false;
+  }
+}
+function setReminder(testId, on) {
+  try {
+    if (on) localStorage.setItem(reminderKey(testId), "1");
+    else localStorage.removeItem(reminderKey(testId));
+  } catch (e) {
+    /* localStorage unavailable (private browsing etc) — reminder is a
+       best-effort local convenience, never worth erroring over */
+  }
+}
+
+function testCardCta(entry) {
+  const a = entry.myAttempt;
+  if (a && a.status !== "in_progress") {
+    return `<a class="btn btn-sm" href="#/result?attempt=${a.id}">View Report</a>`;
+  }
+  if (entry.windowState === "past") {
+    return `<a class="btn btn-sm" href="#/test-details?test=${encodeURIComponent(entry.id)}">View details</a>`;
+  }
+  if (entry.windowState === "upcoming") {
+    return `<a class="btn btn-sm" href="#/test-details?test=${encodeURIComponent(entry.id)}">View syllabus</a>`;
+  }
+  const label = a && a.status === "in_progress" ? "Resume" : "Attempt Now";
+  return `<a class="btn btn-primary btn-sm" href="#/exam?test=${encodeURIComponent(entry.id)}">${label}</a>`;
+}
+
+function testCardMeta(entry) {
+  const parts = [`${entry.duration_minutes} min`];
+  if (entry.windowState === "upcoming") {
+    parts.push(`Opens ${formatDateTime(entry.available_from)}`);
+  } else if (entry.windowState === "past") {
+    parts.push(`Closed ${formatDateTime(entry.available_until)}`);
+  } else {
+    parts.push(`Closes ${formatDateTime(entry.available_until)}`);
+  }
+  return parts.join(" · ");
+}
+
+function testCardHtml(entry) {
+  const liveBadge =
+    entry.windowState === "ongoing" ? `<span class="badge badge-live">Live</span>` : "";
+  const lifecycleBadge = entry.windowState === "upcoming"
+    ? `<span class="status-tag locked">🔒 Locked</span>`
+    : entry.windowState === "past"
+      ? `<span class="status-tag closed">🔴 Closed</span>`
+      : "";
+  const attemptTag = entry.myAttempt
+    ? `<span class="status-tag ${entry.myAttempt.status}">${entry.myAttempt.status.replace("_", " ")}</span>`
+    : "";
+  return `
+    <div class="test-card">
+      <div class="test-card-top">${liveBadge}${lifecycleBadge}${categoryBadge(entry.category)}${attemptTag}</div>
+      <h3 class="test-card-title">${escapeHtml(entry.title)}</h3>
+      <div class="test-card-meta">${testCardMeta(entry)}</div>
+      <div class="test-card-cta">${testCardCta(entry)}</div>
+    </div>
+  `;
+}
+
+function renderTestsCards(entries) {
+  const grid = document.getElementById("testsCardGrid");
+  if (!grid) return;
+  if (!entries.length) {
+    grid.innerHTML = `<div class="empty-state">No tests match this filter yet.</div>`;
+    return;
+  }
+  grid.innerHTML = entries.map(testCardHtml).join("");
+}
+
+function renderHomeTestsToolbar() {
+  const toolbar = document.getElementById("homeTestsToolbar");
+  if (!toolbar) return;
+  toolbar.innerHTML = `
+    <div class="tests-search"><span class="tests-search-icon">⌕</span><input type="search" id="homeTestsSearch" placeholder="Search exams"></div>
+    <div class="segmented tests-status-tabs" id="homeTestsStatusTabs">
+      <button type="button" class="active" data-filter="all">All</button>
+      <button type="button" data-filter="ongoing">Live</button>
+      <button type="button" data-filter="upcoming">Locked</button>
+      <button type="button" data-filter="past">Closed</button>
+    </div>`;
+  toolbar.querySelector("input").addEventListener("input", (event) => {
+    const query = event.target.value.trim().toLowerCase();
+    renderHomeTests(testsCatalogCache.filter((entry) =>
+      (!query || entry.title.toLowerCase().includes(query)) &&
+      (testsFilterState.status === "all" || entry.windowState === testsFilterState.status),
+    ));
+  });
+  toolbar.querySelectorAll("button[data-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      toolbar.querySelectorAll("button").forEach((item) => item.classList.remove("active"));
+      button.classList.add("active");
+      testsFilterState.status = button.dataset.filter;
+      renderHomeTests(testsCatalogCache);
+    });
+  });
+}
+
+function renderHomeTests(entries) {
+  const grid = document.getElementById("homeTestsGrid");
+  if (!grid) return;
+  const filtered = entries.filter((entry) =>
+    testsFilterState.status === "all" || entry.windowState === testsFilterState.status,
+  );
+  grid.innerHTML = filtered.length
+    ? filtered.slice(0, 6).map(testCardHtml).join("")
+    : `<div class="empty-state">No exams match this view yet.</div>`;
+}
+
+function applyTestsFilter() {
+  const { status, query } = testsFilterState;
+  const q = query.trim().toLowerCase();
+  const filtered = testsCatalogCache.filter((t) => {
+    if (status !== "all" && t.windowState !== status) return false;
+    if (q && !t.title.toLowerCase().includes(q)) return false;
+    return true;
+  });
+  renderTestsCards(filtered);
+}
+
+async function loadTestsCatalog() {
+  const grid = document.getElementById("testsCardGrid");
+  grid.innerHTML = `<div class="empty-state">Loading…</div>`;
+
+  const [{ data: catalog, error: catErr }, { data: attempts, error: attErr }] =
+    await Promise.all([
+      fetchTestsCatalog(),
+      sb
+        .from("test_attempts")
+        .select("id, test_id, status, total_score, started_at, submitted_at")
+        .eq("user_id", myProfile.id),
+    ]);
+
+  if (catErr || attErr) {
+    grid.innerHTML = `<div class="error-box">${escapeHtml(friendlyError(catErr || attErr))}</div>`;
+    return;
+  }
+
+  testsCatalogCache = mergeCatalogWithAttempts(catalog, attempts);
+  applyTestsFilter();
+}
+
+function setupTestsCatalogListeners() {
+  const searchInput = document.getElementById("testsSearchInput");
+  const tabs = document.getElementById("testsStatusTabs");
+  const grid = document.getElementById("testsCardGrid");
+  if (!searchInput || !tabs || !grid) return;
+
+  searchInput.addEventListener("input", (e) => {
+    testsFilterState.query = e.target.value;
+    applyTestsFilter();
+  });
+
+  tabs.addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-filter]");
+    if (!btn) return;
+    tabs.querySelectorAll("button").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    testsFilterState.status = btn.dataset.filter;
+    applyTestsFilter();
+  });
+
+  grid.addEventListener("click", (e) => {
+    const btn = e.target.closest(".js-remind");
+    if (!btn) return;
+    const id = btn.dataset.testId;
+    const nowSet = !isReminderSet(id);
+    setReminder(id, nowSet);
+    toast(nowSet ? "We'll remind you when this test opens" : "Reminder removed");
+    const entry = testsCatalogCache.find((t) => String(t.id) === String(id));
+    if (entry) btn.outerHTML = testCardCta(entry);
+  });
+}
+
+/* =========================================================================
+   4b. HOME VIEW — greeting, live-test spotlight, quick stats, quick access
+   ========================================================================= */
+const MONTHS_SHORT = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+function firstNameOf(fullName) {
+  if (!fullName) return "";
+  return fullName.trim().split(/\s+/)[0];
+}
+
+function greetingWord(date = new Date()) {
+  const h = date.getHours();
+  if (h < 12) return "Good Morning";
+  if (h < 17) return "Good Afternoon";
+  return "Good Evening";
+}
+
+function formatHomeDate(date = new Date()) {
+  return `${date.getDate()} ${MONTHS_SHORT[date.getMonth()]}, ${date.getFullYear()}`;
+}
+
+async function enterTestDetailsView() {
+  const content = document.getElementById("testDetailsContent");
+  const testId = qs("test");
+  if (!testId) {
+    content.innerHTML = `<div class="error-box">No test was selected.</div>`;
+    return;
+  }
+  content.innerHTML = `<div class="empty-state">Loading syllabus…</div>`;
+  const { data, error } = await sb.rpc("get_student_test_details", { p_test_id: testId });
+  if (error || !data) {
+    content.innerHTML = `<div class="error-box">${escapeHtml(friendlyError(error) || "Test details could not be loaded.")}</div>`;
+    return;
+  }
+  const state = data.lifecycle;
+  const stateLabel = state === "live" ? "🟢 Live" : state === "closed" ? "🔴 Closed" : "🔒 Locked";
+  const subjectRows = (data.subjects || []).map((subject) => `
+    <div class="syllabus-row">
+      <div><strong>${subjectDot(subject.subject)}${escapeHtml(subject.subject)}</strong><div class="text-muted syllabus-chapters">${(subject.chapters || []).map(escapeHtml).join(" · ") || "Chapter details will be announced"}</div></div>
+      <span>${subject.question_count} questions · ${subject.total_marks} marks</span>
+    </div>`).join("");
+  const marking = (data.marking_scheme || []).map((scheme) => `<span class="detail-chip">+${scheme.positive_marks} / −${scheme.negative_marks}</span>`).join("");
+  const attempt = data.attempt;
+  const action = attempt && attempt.status !== "in_progress"
+    ? `<a class="btn btn-primary" href="#/result?attempt=${encodeURIComponent(attempt.id)}">View report</a>`
+    : state === "live"
+      ? `<a class="btn btn-primary" href="#/exam?test=${encodeURIComponent(data.id)}">${attempt ? "Resume test" : "Start test"}</a>`
+      : `<button class="btn btn-primary" disabled>${state === "closed" ? "Test closed" : `Starts ${formatDateTime(data.available_from)}`}</button>`;
+  content.innerHTML = `
+    <div class="details-hero">
+      <div><span class="eyebrow-label">${escapeHtml(data.category || "Test series")}</span><h1>${escapeHtml(data.title)}</h1><p>${escapeHtml(data.description || "Review the syllabus and marking scheme before you begin.")}</p></div>
+      <span class="details-state details-state-${state}">${stateLabel}</span>
+    </div>
+    <div class="details-metric-grid">
+      <div class="details-metric"><strong>${data.duration_minutes}m</strong><span>Duration</span></div>
+      <div class="details-metric"><strong>${data.question_count}</strong><span>Questions</span></div>
+      <div class="details-metric"><strong>${data.total_marks}</strong><span>Total marks</span></div>
+      <div class="details-metric"><strong>${formatDateTime(data.available_until)}</strong><span>Closes</span></div>
+    </div>
+    <div class="details-grid">
+      <section class="card"><div class="section-title"><h2>Syllabus</h2><span class="text-muted">${data.question_count} questions</span></div><div class="syllabus-list">${subjectRows || `<div class="empty-state">Syllabus will be added soon.</div>`}</div></section>
+      <section class="card"><h2>Marking scheme</h2><div class="detail-chip-row">${marking || `<span class="text-muted">Not specified</span>`}</div><h2 class="details-subheading">Schedule</h2><dl class="details-dl"><div><dt>Publishes</dt><dd>${formatDateTime(data.available_from)}</dd></div><div><dt>Closes</dt><dd>${formatDateTime(data.available_until)}</dd></div></dl><div class="details-actions">${action}</div></section>
+    </div>
+    <section class="card details-instructions"><h2>Instructions</h2><p>${escapeHtml(data.instructions || "Read every question carefully. Unattempted questions receive zero marks. Your attempt is timed from the moment you begin.")}</p></section>`;
+}
+
+function renderHomeSpotlight(merged) {
+  const el = document.getElementById("homeSpotlight");
+  if (!el) return;
+
+  // The single most urgent live test: ongoing, and either never attempted
+  // or still in progress. Soonest-closing first.
+  const candidates = merged
+    .filter(
+      (t) =>
+        t.windowState === "ongoing" &&
+        (!t.myAttempt || t.myAttempt.status === "in_progress"),
     )
-    .eq("user_id", myProfile.id)
-    .order("started_at", { ascending: false });
+    .sort((a, b) => new Date(a.available_until) - new Date(b.available_until));
 
-  if (error) {
-    list.innerHTML = `<div class="error-box">${escapeHtml(friendlyError(error))}</div>`;
-    return;
-  }
-  if (!data || data.length === 0) {
-    list.innerHTML = `<div class="empty-state">You haven't joined any test yet. Enter a code above to begin.</div>`;
-    return;
-  }
-
-  list.innerHTML = data
-    .map((a) => {
-      const t = a.tests;
-      const actionHtml =
-        a.status === "in_progress"
-          ? `<a class="btn btn-primary btn-sm" href="#/exam?code=${encodeURIComponent(t.test_code)}">Resume</a>`
-          : `<a class="btn btn-sm" href="#/result?attempt=${a.id}">View report</a>`;
-      return `
-      <div class="list-row">
-        <div class="list-row-main">
-          <div class="list-row-title">${escapeHtml(t.title)} ${categoryBadge(t.category)}</div>
-          <div class="list-row-meta">Started ${formatDateTime(a.started_at)} · <span class="status-tag ${a.status}">${a.status.replace("_", " ")}</span>${a.status !== "in_progress" ? ` · Score: ${a.total_score}` : ""}</div>
-        </div>
-        <div class="list-row-actions">${actionHtml}</div>
+  if (!candidates.length) {
+    el.innerHTML = `
+      <div class="home-spotlight-empty">
+        <div class="pes-icon">📭</div>
+        <h2>No live test right now</h2>
+        <p>Check the Tests tab for upcoming tests, or revisit ones you've already completed.</p>
+        <a href="#/tests" class="btn btn-primary btn-sm">Go to Tests</a>
       </div>
     `;
-    })
-    .join("");
+    return;
+  }
+
+  const t = candidates[0];
+  const label =
+    t.myAttempt && t.myAttempt.status === "in_progress" ? "Resume Test" : "Take Test";
+  el.innerHTML = `
+    <div class="home-spotlight-card">
+      <div class="home-spotlight-top">
+        <span class="badge badge-live">Live</span>
+        ${categoryBadge(t.category)}
+      </div>
+      <h2 class="home-spotlight-title">${escapeHtml(t.title)}</h2>
+      <div class="home-spotlight-meta">${t.duration_minutes} minutes · Closes ${formatDateTime(t.available_until)}</div>
+      <a href="#/exam?test=${encodeURIComponent(t.id)}" class="btn btn-primary home-spotlight-cta">🚀 ${label} →</a>
+    </div>
+  `;
+}
+
+// Total Tests / Attempted come straight from the catalog + attempts rows
+// already fetched. Avg Score is a true marks-weighted percentage, matching
+// the same math the Result page uses (total_score / sum of subject totals)
+// — computed via the same get_full_report RPC, capped to the most recent
+// 25 submitted attempts so this stays fast for very active students.
+async function renderHomeStats(merged, attempts) {
+  const el = document.getElementById("homeStats");
+  if (!el) return;
+
+  const totalTests = merged.length;
+  const attemptedCount = new Set(attempts.map((a) => a.test_id)).size;
+
+  const submittedAttempts = attempts
+    .filter((a) => a.status !== "in_progress")
+    .sort((a, b) => new Date(b.submitted_at) - new Date(a.submitted_at))
+    .slice(0, 25);
+
+  let avgScoreLabel = "—";
+  if (submittedAttempts.length) {
+    const reports = await Promise.all(
+      submittedAttempts.map((a) =>
+        sb
+          .rpc("get_full_report", { p_attempt_id: a.id })
+          .then((r) => r.data, () => null),
+      ),
+    );
+    let scoreSum = 0;
+    let maxSum = 0;
+    reports.forEach((report) => {
+      if (!report || !report.subject_rows) return;
+      const max = report.subject_rows.reduce((s, r) => s + Number(r.total), 0);
+      if (max > 0) {
+        scoreSum += Number(report.total_score) || 0;
+        maxSum += max;
+      }
+    });
+    if (maxSum > 0) avgScoreLabel = `${((scoreSum / maxSum) * 100).toFixed(1)}%`;
+  }
+
+  el.innerHTML = `
+    <div class="home-stat-card"><div class="home-stat-val">${totalTests}</div><div class="home-stat-lbl">Total Tests</div></div>
+    <div class="home-stat-card"><div class="home-stat-val">${attemptedCount}</div><div class="home-stat-lbl">Attempted</div></div>
+    <div class="home-stat-card"><div class="home-stat-val">${avgScoreLabel}</div><div class="home-stat-lbl">Avg Score</div></div>
+  `;
+}
+
+async function enterHomeView() {
+  myProfile = myProfile || (await getMyProfile());
+  const name = myProfile?.full_name || "Student";
+
+  document.getElementById("homeGreetingWord").textContent = greetingWord();
+  document.getElementById("homeGreetingName").textContent = firstNameOf(name) || "Student";
+  document.getElementById("homeDateLine").textContent = formatHomeDate();
+  const avatarEl = document.getElementById("homeAvatar");
+  if (avatarEl) avatarEl.textContent = name.trim().charAt(0).toUpperCase() || "S";
+
+  const spotlightEl = document.getElementById("homeSpotlight");
+  const statsEl = document.getElementById("homeStats");
+  spotlightEl.innerHTML = `<div class="empty-state">Loading…</div>`;
+  statsEl.innerHTML = "";
+
+  const [{ data: catalog, error: catErr }, { data: attempts, error: attErr }] =
+    await Promise.all([
+      fetchTestsCatalog(),
+      sb
+        .from("test_attempts")
+        .select("id, test_id, status, total_score, started_at, submitted_at")
+        .eq("user_id", myProfile.id),
+    ]);
+
+  if (catErr || attErr) {
+    spotlightEl.innerHTML = `<div class="error-box">${escapeHtml(friendlyError(catErr || attErr))}</div>`;
+    return;
+  }
+
+  const merged = mergeCatalogWithAttempts(catalog, attempts);
+  testsCatalogCache = merged;
+  testsFilterState = { status: "all", query: "" };
+  renderHomeTestsToolbar();
+  renderHomeTests(merged);
+  renderHomeSpotlight(merged);
+  await renderHomeStats(merged, attempts || []);
 }
 
 async function loadAdminTests() {
@@ -591,19 +996,17 @@ async function loadAdminTests() {
 
   list.innerHTML = data
     .map((t, i) => {
-      const link = `${window.location.origin}${window.location.pathname}#/dashboard?code=${t.test_code}`;
       const attemptCount = counts[i]?.count ?? 0;
       return `
       <div class="list-row">
         <div class="list-row-main">
           <div class="list-row-title">${escapeHtml(t.title)} ${categoryBadge(t.category)}</div>
           <div class="list-row-meta">
-            Code: <strong>${t.test_code}</strong> · <span class="status-tag ${t.is_published ? "published" : "draft"}">${t.is_published ? "Published" : "Draft"}</span>
+            <span class="status-tag ${t.is_published ? "published" : "draft"}">${t.is_published ? "Scheduled" : "Locked"}</span>
             · ${attemptCount} attempt${attemptCount === 1 ? "" : "s"} · Duration ${t.duration_minutes}m
           </div>
         </div>
         <div class="list-row-actions">
-          <button class="btn btn-sm js-copy-link" data-link="${escapeHtml(link)}">Copy link</button>
           <a class="btn btn-primary btn-sm" href="#/admin-test?test=${t.id}">Manage</a>
           <button class="btn btn-sm btn-danger js-delete-test" data-id="${t.id}">Delete</button>
         </div>
@@ -612,13 +1015,6 @@ async function loadAdminTests() {
     })
     .join("");
 
-  list.querySelectorAll(".js-copy-link").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      navigator.clipboard
-        .writeText(btn.dataset.link)
-        .then(() => toast("Link copied"));
-    });
-  });
   list
     .querySelectorAll(".js-delete-test")
     .forEach((btn) =>
@@ -778,6 +1174,7 @@ function setupAdminTestListeners() {
       const payload = {
         title: document.getElementById("titleInput").value.trim(),
         description: document.getElementById("descInput").value.trim() || null,
+        instructions: document.getElementById("instructionsInput").value.trim() || null,
         category: document.getElementById("categoryInput").value,
         duration_minutes: parseInt(
           document.getElementById("durationInput").value,
@@ -789,6 +1186,7 @@ function setupAdminTestListeners() {
         available_until: new Date(
           document.getElementById("untilInput").value,
         ).toISOString(),
+        is_published: true,
       };
 
       if (
@@ -1026,6 +1424,7 @@ async function loadExistingTest(testId) {
   document.getElementById("saveDetailsBtn").textContent = "Save changes";
   document.getElementById("titleInput").value = data.title;
   document.getElementById("descInput").value = data.description || "";
+  document.getElementById("instructionsInput").value = data.instructions || "";
   document.getElementById("categoryInput").value = data.category || "JEE Main";
   document.getElementById("durationInput").value = data.duration_minutes;
   document.getElementById("fromInput").value = toLocalInputValue(
@@ -1050,42 +1449,18 @@ function showPostCreateSections() {
   document.getElementById("leaderboardCard").style.display = "block";
   document.getElementById("reportsCard").style.display = "block";
   renderShareCard();
-
-  document.getElementById("publishBtn").onclick = async () => {
-    const newState = !currentTest.is_published;
-    const { data, error } = await sb
-      .from("tests")
-      .update({ is_published: newState })
-      .eq("id", currentTest.id)
-      .select()
-      .single();
-    if (error) {
-      toast(friendlyError(error), "error");
-      return;
-    }
-    currentTest = data;
-    renderShareCard();
-    toast(
-      newState ? "Test published — students can now join" : "Test unpublished",
-      "success",
-    );
-  };
 }
 
 function renderShareCard() {
-  const link = `${window.location.origin}${window.location.pathname}#/dashboard?code=${currentTest.test_code}`;
-  document.getElementById("linkText").textContent = link;
-  document.getElementById("codeText").textContent = currentTest.test_code;
   const tag = document.getElementById("publishTag");
-  tag.textContent = currentTest.is_published ? "Published" : "Draft";
-  tag.className =
-    "status-tag " + (currentTest.is_published ? "published" : "draft");
-  document.getElementById("publishBtn").textContent = currentTest.is_published
-    ? "Unpublish"
-    : "Publish";
-  document.getElementById("copyLinkBtn").onclick = () => {
-    navigator.clipboard.writeText(link).then(() => toast("Link copied"));
-  };
+  const now = Date.now();
+  const state = !currentTest.is_published || now < new Date(currentTest.available_from).getTime()
+    ? "locked"
+    : now >= new Date(currentTest.available_until).getTime() ? "closed" : "live";
+  tag.textContent = state === "live" ? "Live" : state === "closed" ? "Closed" : "Locked";
+  tag.className = "status-tag " + state;
+  document.getElementById("scheduleSummary").textContent =
+    `Students see this test automatically. Publishes ${formatDateTime(currentTest.available_from)} · closes ${formatDateTime(currentTest.available_until)}.`;
 }
 
 async function loadQuestions() {
@@ -1457,7 +1832,7 @@ let candidateName = "";
 // The test code being entered, resolved once in enterExamView and used by
 // onBegin — the actual attempt (and its clock) is only created once the
 // student clicks Begin Test, not the moment this page loads.
-let pendingTestCode = null;
+let pendingTestId = null;
 let questions = [];
 let bySubject = {};
 let subjects = [];
@@ -1736,46 +2111,44 @@ async function enterExamView() {
   const profile = myProfile || (await getMyProfile());
   candidateName = profile?.full_name || session.user.email;
 
-  const code = qs("code");
-  if (!code) {
+  const selectedTestId = qs("test");
+  if (!selectedTestId) {
     showTerminal(
-      "No test code",
-      "No test code was given in the link. Go back to your dashboard and enter a code.",
+      "No test selected",
+      "Choose a test from your dashboard before starting an exam.",
       "#/dashboard",
       "Back to dashboard",
     );
     document.getElementById("loadingScreen").style.display = "none";
     return;
   }
-  pendingTestCode = code.toUpperCase();
+  pendingTestId = selectedTestId;
 
   // Look up the test and any existing attempt WITHOUT starting the exam —
-  // start_attempt (which stamps the server-side started_at the countdown
+  // start_attempt_by_test (which stamps the server-side started_at the countdown
   // is based on) only runs once the student clicks Begin Test, so reading
   // the instructions never eats into the exam clock.
   const [{ data: testMeta, error: testMetaError }, { data: previousAttempt }] =
     await Promise.all([
       sb
         .from("tests")
-        .select("title, category, duration_minutes, is_published")
-        .eq("test_code", pendingTestCode)
+        .select("id, title, category, duration_minutes, available_from, available_until, is_published")
+        .eq("id", selectedTestId)
         .maybeSingle(),
       sb
         .from("test_attempts")
-        .select(
-          "id, status, disqualified_at, warning_count, tests!inner(test_code)",
-        )
+        .select("id, status, disqualified_at, warning_count")
         .eq("user_id", session.user.id)
-        .eq("tests.test_code", pendingTestCode)
+        .eq("test_id", selectedTestId)
         .order("started_at", { ascending: false })
         .limit(1)
         .maybeSingle(),
     ]);
 
-  if (testMetaError || !testMeta || !testMeta.is_published) {
+  if (testMetaError || !testMeta || !testMeta.is_published || Date.now() < new Date(testMeta.available_from).getTime() || Date.now() >= new Date(testMeta.available_until).getTime()) {
     showTerminal(
-      "Test not found",
-      "No published test was found for this code. Go back to your dashboard and check the link.",
+      "Test is not live",
+      "This test is locked or closed. Return to your dashboard to see the current status.",
       "#/dashboard",
       "Back to dashboard",
     );
@@ -1787,8 +2160,8 @@ async function enterExamView() {
     showTerminal(
       "Test access removed",
       "An administrator has removed you from this test. Contact your admin if you believe this is a mistake.",
-      "#/dashboard",
-      "Back to dashboard",
+      "#/tests",
+      "Back to Tests",
     );
     return;
   }
@@ -1832,8 +2205,8 @@ async function loadQuestionsAndAnswers() {
     showTerminal(
       "Couldn't load questions",
       friendlyError(qErr),
-      "#/dashboard",
-      "Back to dashboard",
+      "#/tests",
+      "Back to Tests",
     );
     return;
   }
@@ -2179,8 +2552,8 @@ async function doSubmit(reason) {
     showTerminal(
       "Couldn't submit",
       friendlyError(error),
-      "#/dashboard",
-      "Back to dashboard",
+      "#/tests",
+      "Back to Tests",
     );
     return;
   }
@@ -2197,6 +2570,18 @@ async function doSubmit(reason) {
 }
 
 async function onBegin() {
+  myProfile = myProfile || (await getMyProfile());
+  const missingProfileFields = [];
+  if (!myProfile?.full_name?.trim()) missingProfileFields.push("Full name");
+  if (!myProfile?.email?.trim()) missingProfileFields.push("Email");
+  if (!myProfile?.class_grade?.trim()) missingProfileFields.push("Class / grade");
+  if (missingProfileFields.length) {
+    closeModal("beginModal");
+    toast(`Complete your profile first: ${missingProfileFields.join(", ")}.`, "error");
+    navigate("/profile?complete=1");
+    return;
+  }
+
   const beginBtn = document.getElementById("beginBtn");
   const originalBtnText = beginBtn.textContent;
   beginBtn.disabled = true;
@@ -2227,8 +2612,8 @@ async function onBegin() {
 
   // This is the moment the exam clock actually starts — start_attempt
   // stamps started_at server-side right now, not back when the page loaded.
-  const { data, error } = await sb.rpc("start_attempt", {
-    p_test_code: pendingTestCode,
+  const { data, error } = await sb.rpc("start_attempt_by_test", {
+    p_test_id: pendingTestId,
   });
 
   if (error) {
@@ -2236,8 +2621,8 @@ async function onBegin() {
     showTerminal(
       "Can't start this test",
       friendlyError(error),
-      "#/dashboard",
-      "Back to dashboard",
+      "#/tests",
+      "Back to Tests",
     );
     return;
   }
@@ -2246,8 +2631,8 @@ async function onBegin() {
     showTerminal(
       "Can't start this test",
       "This test has already been attempted or is no longer available.",
-      "#/dashboard",
-      "Back to dashboard",
+      "#/tests",
+      "Back to Tests",
     );
     return;
   }
@@ -2281,8 +2666,8 @@ async function onBegin() {
     showTerminal(
       "Test access removed",
       "An administrator has removed you from this test. Contact your admin if you believe this is a mistake.",
-      "#/dashboard",
-      "Back to dashboard",
+      "#/tests",
+      "Back to Tests",
     );
     return;
   }
@@ -2464,11 +2849,13 @@ function renderReviewQuestion(r) {
             : isPicked
               ? "review-wrong"
               : "";
-          const tag = isCorrect
-            ? `<span class="status-tag published" style="margin-left:auto;">Correct answer</span>`
-            : isPicked
-              ? `<span class="status-tag" style="margin-left:auto;background:var(--danger-tint);color:var(--danger);">Your answer</span>`
-              : "";
+          const tag = isCorrect && isPicked
+            ? `<span class="status-tag published" style="margin-left:auto;">Your answer · Correct</span>`
+            : isCorrect
+              ? `<span class="status-tag published" style="margin-left:auto;">Correct answer</span>`
+              : isPicked
+                ? `<span class="status-tag" style="margin-left:auto;background:var(--danger-tint);color:var(--danger);">Your answer · Wrong</span>`
+                : "";
           return `
         <div class="option-item ${cls}">
           <span class="option-letter">${o.id}</span>
@@ -2482,7 +2869,7 @@ function renderReviewQuestion(r) {
   } else {
     bodyHtml = `
       <p style="font-size:14px;">
-        <span style="color:var(--danger);font-weight:650;">Your answer: ${r.integer_answer ?? "—"}</span>
+        <span style="color:${r.is_correct ? "var(--success)" : "var(--danger)"};font-weight:650;">Your answer: ${r.integer_answer ?? "—"}</span>
         &nbsp;·&nbsp;
         <span style="color:var(--success);font-weight:650;">Correct answer: ${r.correct_integer_value}</span>
       </p>
@@ -2490,13 +2877,126 @@ function renderReviewQuestion(r) {
   }
   return `
     <div class="card" style="box-shadow:none;">
-      <div class="list-row-meta" style="margin-bottom:6px;">${subjectDot(r.subject)}${escapeHtml(r.subject)} · ${r.marks_obtained} marks</div>
+      <div class="review-question-heading"><div class="list-row-meta">${subjectDot(r.subject)}${escapeHtml(r.subject)} · Question ${r.question_order || ""}</div><span class="review-result-pill ${r.is_correct === true ? "review-result-correct" : r.is_correct === false ? "review-result-wrong" : "review-result-skipped"}">${r.is_correct === true ? "Correct" : r.is_correct === false ? "Wrong" : "Unattempted"} · ${r.marks_obtained} marks</span></div>
       ${questionImageHtml(r.image_url)}
       <div class="question-text" style="font-size:14.5px;margin-bottom:12px;">${escapeHtml(r.question_text)}</div>
       ${bodyHtml}
       ${r.explanation ? `<div class="explanation-box mt-8">${escapeHtml(r.explanation)}</div>` : ""}
     </div>
   `;
+}
+
+function renderReportAnalysis(report, subjectRows, review) {
+  const totalMax = subjectRows.reduce((sum, row) => sum + Number(row.total || 0), 0);
+  const scorePct = totalMax > 0 ? Math.max(0, Math.min(100, (Number(report.total_score || 0) / totalMax) * 100)) : 0;
+  const attempted = review.filter((row) => row.is_correct !== null && row.is_correct !== undefined).length;
+  const correct = review.filter((row) => row.is_correct === true).length;
+  const accuracy = attempted ? (correct / attempted) * 100 : 0;
+  return `<section class="report-analysis-grid"><div class="card report-chart-card"><div class="section-title"><h2>Test performance</h2><span class="text-muted">Score and accuracy</span></div><div class="report-radials">${renderRadialProgress(scorePct, { size: 132, stroke: 10, color: "var(--brand)", subLabel: "Score" })}${renderRadialProgress(accuracy, { size: 132, stroke: 10, color: "var(--success)", subLabel: "Accuracy" })}</div></div><div class="card report-chart-card"><div class="section-title"><h2>Subject breakdown</h2><span class="text-muted">Marks earned</span></div><div class="subject-performance-list">${subjectRows.map((row) => `<div class="subject-performance-row"><div class="subject-performance-label"><span>${subjectDot(row.subject)}${escapeHtml(row.subject)}</span><strong>${row.obtained} / ${row.total}</strong></div>${analyticsBar(Number(row.obtained), Number(row.total), subjectColor(row.subject))}</div>`).join("")}</div></div></section>`;
+}
+
+let reviewQuestions = [];
+let reviewBySubject = {};
+let reviewSubjects = [];
+let reviewSubject = null;
+let reviewIndex = 0;
+
+function reviewState(question) {
+  if (question.is_correct === true) return "correct";
+  if (question.is_correct === false) return "wrong";
+  return "unattempted";
+}
+
+function renderReviewPalette() {
+  const grid = document.getElementById("reviewPaletteGrid");
+  const list = reviewBySubject[reviewSubject] || [];
+  grid.innerHTML = list.map((question, index) => `<button type="button" class="palette-btn review-palette-btn ${reviewState(question)} ${index === reviewIndex ? "current" : ""}" data-review-index="${index}">${index + 1}</button>`).join("");
+  grid.querySelectorAll("button").forEach((button) => button.addEventListener("click", () => {
+    reviewIndex = Number(button.dataset.reviewIndex);
+    renderReviewQuestionCard();
+  }));
+}
+
+function renderReviewQuestionCard() {
+  const question = (reviewBySubject[reviewSubject] || [])[reviewIndex];
+  const card = document.getElementById("reviewQuestionCard");
+  if (!question) {
+    card.innerHTML = `<div class="empty-state">No question selected.</div>`;
+    return;
+  }
+  const options = (question.options || []).map((option) => {
+    const correct = option.id === question.correct_option;
+    const selected = option.id === question.selected_option;
+    const stateClass = correct ? "review-correct" : selected ? "review-wrong" : "";
+    const label = correct && selected ? "Your answer · Correct" : correct ? "Correct answer" : selected ? "Your answer · Wrong" : "";
+    return `<div class="option-item ${stateClass}"><span class="option-letter">${escapeHtml(option.id)}</span><span class="option-text">${escapeHtml(option.text)}</span>${label ? `<span class="review-option-label">${label}</span>` : ""}</div>`;
+  }).join("");
+  const integerAnswer = question.integer_answer == null ? "—" : question.integer_answer;
+  const correctInteger = question.correct_integer_value == null ? "—" : question.correct_integer_value;
+  card.innerHTML = `<div class="review-question-heading"><div class="question-number-badge">${subjectDot(question.subject)}${escapeHtml(question.subject)} · Question ${reviewQuestions.indexOf(question) + 1}</div><span class="review-result-pill ${reviewState(question) === "correct" ? "review-result-correct" : reviewState(question) === "wrong" ? "review-result-wrong" : "review-result-skipped"}">${reviewState(question)} · ${question.marks_obtained || 0} marks</span></div>${questionImageHtml(question.image_url)}<div class="question-text">${escapeHtml(question.question_text)}</div>${question.question_type === "mcq" ? `<div class="option-list">${options}</div>` : `<div class="review-integer-answer"><span class="${question.is_correct ? "answer-good" : "answer-bad"}">Your answer: ${escapeHtml(String(integerAnswer))}</span><span class="answer-good">Correct answer: ${escapeHtml(String(correctInteger))}</span></div>`}${question.explanation ? `<div class="explanation-box mt-8">${escapeHtml(question.explanation)}</div>` : ""}`;
+  document.getElementById("reviewProgressLabel").textContent = `${reviewQuestions.indexOf(question) + 1} of ${reviewQuestions.length}`;
+  document.getElementById("reviewPreviousBtn").disabled = reviewIndex === 0;
+  document.getElementById("reviewNextBtn").disabled = reviewIndex === (reviewBySubject[reviewSubject] || []).length - 1 && reviewSubjects.indexOf(reviewSubject) === reviewSubjects.length - 1;
+  renderReviewPalette();
+  renderMath(card);
+}
+
+async function enterReviewView() {
+  const attemptId = qs("attempt");
+  const card = document.getElementById("reviewQuestionCard");
+  if (!attemptId) {
+    card.innerHTML = `<div class="error-box">No attempt was selected.</div>`;
+    return;
+  }
+  card.innerHTML = `<div class="empty-state">Loading answer review…</div>`;
+  const { data: report, error } = await sb.rpc("get_full_report", { p_attempt_id: attemptId });
+  if (error || !report) {
+    card.innerHTML = `<div class="error-box">${escapeHtml(friendlyError(error))}</div>`;
+    return;
+  }
+  reviewQuestions = report.review || [];
+  reviewBySubject = {};
+  reviewSubjects = [];
+  reviewQuestions.forEach((question) => {
+    if (!reviewBySubject[question.subject]) {
+      reviewBySubject[question.subject] = [];
+      reviewSubjects.push(question.subject);
+    }
+    reviewBySubject[question.subject].push(question);
+  });
+  reviewSubject = reviewSubjects[0] || null;
+  reviewIndex = 0;
+  document.getElementById("reviewTitle").textContent = report.test_title;
+  document.getElementById("reviewCandidate").textContent = `${report.full_name || "Student"} · Read-only answer review`;
+  document.getElementById("reviewBackBtn").href = `#/result?attempt=${encodeURIComponent(attemptId)}`;
+  const tabs = document.getElementById("reviewSubjectTabs");
+  tabs.innerHTML = reviewSubjects.map((subject) => `<button type="button" class="${subject === reviewSubject ? "active" : ""}" data-review-subject="${escapeHtml(subject)}">${subjectDot(subject)}${escapeHtml(subject)}</button>`).join("");
+  tabs.querySelectorAll("button").forEach((button) => button.addEventListener("click", () => {
+    reviewSubject = button.dataset.reviewSubject;
+    reviewIndex = 0;
+    tabs.querySelectorAll("button").forEach((item) => item.classList.toggle("active", item === button));
+    renderReviewQuestionCard();
+  }));
+  document.getElementById("reviewPreviousBtn").onclick = () => {
+    if (reviewIndex > 0) reviewIndex -= 1;
+    else if (reviewSubjects.indexOf(reviewSubject) > 0) {
+      reviewSubject = reviewSubjects[reviewSubjects.indexOf(reviewSubject) - 1];
+      reviewIndex = (reviewBySubject[reviewSubject] || []).length - 1;
+      tabs.querySelectorAll("button").forEach((item) => item.classList.toggle("active", item.dataset.reviewSubject === reviewSubject));
+    }
+    renderReviewQuestionCard();
+  };
+  document.getElementById("reviewNextBtn").onclick = () => {
+    const currentList = reviewBySubject[reviewSubject] || [];
+    if (reviewIndex < currentList.length - 1) reviewIndex += 1;
+    else if (reviewSubjects.indexOf(reviewSubject) < reviewSubjects.length - 1) {
+      reviewSubject = reviewSubjects[reviewSubjects.indexOf(reviewSubject) + 1];
+      reviewIndex = 0;
+      tabs.querySelectorAll("button").forEach((item) => item.classList.toggle("active", item.dataset.reviewSubject === reviewSubject));
+    }
+    renderReviewQuestionCard();
+  };
+  renderReviewQuestionCard();
 }
 
 async function enterResultView() {
@@ -2523,7 +3023,7 @@ async function enterResultView() {
       <div class="card">
         <h2 style="font-size:16px;">Still in progress</h2>
         <p class="text-muted">This test hasn't been submitted yet.</p>
-        <a class="btn btn-primary" href="#/exam?code=${report.test_code}">Resume test</a>
+        <a class="btn btn-primary" href="#/exam?test=${report.test_id}">Resume test</a>
       </div>
     `;
     return;
@@ -2537,7 +3037,7 @@ async function enterResultView() {
   const subjectRows = report.subject_rows || [];
   const review = report.review || [];
   const board = report.board || [];
-  const incorrectAnswers = review.filter((r) => r.is_correct === false);
+  const allAnswers = review;
   const totalMax = subjectRows.reduce((s, r) => s + Number(r.total), 0);
   const timeTakenSec = report.submitted_at
     ? (new Date(report.submitted_at) - new Date(report.started_at)) / 1000
@@ -2570,6 +3070,8 @@ async function enterResultView() {
       <div class="stat-card"><div class="val">${declared ? report.percentile + "%" : "🔒"}</div><div class="lbl">Percentile</div></div>
       <div class="stat-card"><div class="val">${formatDurationPrecise(timeTakenSec)}</div><div class="lbl">Time taken</div></div>
     </div>
+
+    ${report.is_owner || report.is_public_top3 ? renderReportAnalysis(report, subjectRows, review) : ""}
 
     <div class="card">
       <h2 style="font-size:16px;">Subject-wise performance</h2>
@@ -2605,19 +3107,7 @@ async function enterResultView() {
       </div>
     </div>
 
-    ${
-      report.is_owner || report.is_public_top3
-        ? `
-    <div class="card">
-      <h2 style="font-size:16px;">Review ${viewingSomeoneElse ? "their" : "your"} incorrect answers</h2>
-      ${
-        incorrectAnswers.length === 0
-          ? `<div class="empty-state">No incorrect answers — nice work! (Unattempted questions aren't shown here.)</div>`
-          : incorrectAnswers.map(renderReviewQuestion).join("")
-      }
-    </div>`
-        : ""
-    }
+    ${report.is_owner || report.is_public_top3 ? `<div class="card report-review-cta"><div><span class="eyebrow-label">Detailed review</span><h2>Review every answer</h2><p class="text-muted">Open the exam-style review to see selected answers, correct answers, explanations, and question status.</p></div><a class="btn btn-primary" href="#/review?attempt=${encodeURIComponent(attemptIdParam)}">Review answers</a></div>` : ""}
 
     <div class="card">
       <h2 style="font-size:16px;">Leaderboard</h2>
@@ -2627,6 +3117,7 @@ async function enterResultView() {
           : board.length === 0
             ? `<div class="empty-state">No submissions yet.</div>`
             : `
+          <div class="report-podium">${board.slice(0, 3).map((row, index) => `<div class="podium-card podium-${index + 1}"><span>${medalFor(index + 1)}</span><strong>${escapeHtml(row.full_name || "Student")}</strong><b>#${row.rnk}</b><small>${row.total_score} marks · ${row.percentile}%</small></div>`).join("")}</div>
       <div class="table-scroll">
         <table class="report-table">
           <thead><tr><th>Rank</th><th>Student</th><th>Score</th><th>Percentile</th></tr></thead>
@@ -2662,6 +3153,479 @@ async function enterResultView() {
 }
 
 /* =========================================================================
+   BULK QUESTION IMPORT
+   The format is deliberately line-oriented: field values continue until the
+   next known label, so pasted paragraphs and displayed LaTeX stay intact.
+   ========================================================================= */
+const BULK_IMPORT_FIELDS = [
+  "QUESTION", "OPTION_A", "OPTION_B", "OPTION_C", "OPTION_D",
+  "ANSWER", "EXPLANATION", "TYPE", "SUBJECT", "CHAPTER",
+];
+let bulkQuestions = [];
+
+function parseBulkQuestions(source) {
+  const text = String(source || "").replace(/\r\n?/g, "\n");
+  const headers = [...text.matchAll(/^\s*\[QUESTION(?:\s+(\d+))?\]\s*$/gim)];
+  if (!headers.length) {
+    throw new Error("No [QUESTION 1] sections were found. Check the required format.");
+  }
+
+  return headers.map((header, index) => {
+    const section = text
+      .slice(header.index + header[0].length, headers[index + 1]?.index ?? text.length)
+      .trim();
+    const matches = [...section.matchAll(new RegExp(
+      `^\\s*(${BULK_IMPORT_FIELDS.join("|")})\\s*:\\s*(.*)$`, "gim",
+    ))];
+    const values = {};
+    matches.forEach((match, fieldIndex) => {
+      const end = matches[fieldIndex + 1]?.index ?? section.length;
+      const continuation = section.slice(match.index + match[0].length, end);
+      values[match[1].toUpperCase()] = [match[2], continuation].join("").trim();
+    });
+    return {
+      sourceNumber: header[1] || String(index + 1),
+      question: values.QUESTION || "",
+      optionA: values.OPTION_A || "",
+      optionB: values.OPTION_B || "",
+      optionC: values.OPTION_C || "",
+      optionD: values.OPTION_D || "",
+      answer: values.ANSWER || "",
+      explanation: values.EXPLANATION || "",
+      type: values.TYPE || "MCQ",
+      subject: values.SUBJECT || "",
+      chapter: values.CHAPTER || "",
+      errors: [],
+      removed: false,
+    };
+  });
+}
+
+function validateBulkQuestion(question) {
+  const errors = [];
+  const type = String(question.type).trim().toLowerCase().replace(/[\s/_-]+/g, "");
+  if (!question.question.trim()) errors.push("Question text is missing.");
+  if (!question.subject.trim()) errors.push("Subject is missing.");
+  if (!["mcq", "integer", "numerical"].includes(type)) {
+    errors.push("TYPE must be MCQ or Integer/Numerical.");
+  }
+  if (type === "mcq") {
+    const answer = question.answer.trim().toUpperCase();
+    ["A", "B", "C", "D"].forEach((letter) => {
+      if (!question[`option${letter}`].trim()) errors.push(`OPTION_${letter} is missing.`);
+    });
+    if (!["A", "B", "C", "D"].includes(answer)) errors.push("ANSWER must be A, B, C, or D for MCQ.");
+  } else if (type === "integer" || type === "numerical") {
+    if (!question.answer.trim() || !Number.isFinite(Number(question.answer.trim()))) {
+      errors.push("ANSWER must be a number for Integer/Numerical questions.");
+    }
+  }
+  question.errors = errors;
+  return errors;
+}
+
+function bulkQuestionField(question, field, label, multiline = true) {
+  const value = question[field] || "";
+  const invalid = question.errors.some((error) =>
+    error.toLowerCase().includes(label.toLowerCase().replace("_", " ")),
+  );
+  const tag = multiline ? "textarea" : "input";
+  const extra = multiline ? " rows=3" : "";
+  const valueAttribute = multiline ? "" : ` value="${escapeHtml(value)}"`;
+  const inputHtml = multiline
+    ? `<textarea data-bulk-index="${bulkQuestions.indexOf(question)}" data-bulk-field="${field}"${extra}>${escapeHtml(value)}</textarea>`
+    : `<input data-bulk-index="${bulkQuestions.indexOf(question)}" data-bulk-field="${field}"${valueAttribute}>`;
+  return `<label class="bulk-field ${invalid ? "bulk-field-invalid" : ""}">${label}${invalid ? `<span class="bulk-field-error">Check this field</span>` : ""}${inputHtml}</label>`;
+}
+
+function renderBulkQuestionPreview(question, index) {
+  validateBulkQuestion(question);
+  const type = question.type.trim().toLowerCase().replace(/[\s/_-]+/g, "");
+  const renderedOptions = type === "mcq"
+    ? ["A", "B", "C", "D"].map((letter) => `<div class="bulk-render-option"><strong>${letter}</strong><span>${escapeHtml(question[`option${letter}`])}</span></div>`).join("")
+    : `<div class="bulk-render-answer">Correct numerical answer: <strong>${escapeHtml(question.answer)}</strong></div>`;
+  return `
+    <article class="bulk-question-card ${question.errors.length ? "has-errors" : "is-valid"}" data-bulk-card="${index}">
+      <div class="bulk-question-heading">
+        <div><span class="badge ${question.errors.length ? "badge-live" : "badge-brand"}">${question.errors.length ? `${question.errors.length} error${question.errors.length === 1 ? "" : "s"}` : "Valid"}</span><strong>Question ${escapeHtml(question.sourceNumber || String(index + 1))}</strong></div>
+        <button type="button" class="btn btn-sm btn-danger js-remove-bulk-question" data-bulk-remove="${index}">Remove</button>
+      </div>
+      ${question.errors.length ? `<div class="bulk-question-error-list">${question.errors.map(escapeHtml).map((error) => `<div>${error}</div>`).join("")}</div>` : ""}
+      <div class="bulk-question-fields">
+        ${bulkQuestionField(question, "question", "Question")}
+        ${bulkQuestionField(question, "optionA", "Option A")}
+        ${bulkQuestionField(question, "optionB", "Option B")}
+        ${bulkQuestionField(question, "optionC", "Option C")}
+        ${bulkQuestionField(question, "optionD", "Option D")}
+        ${bulkQuestionField(question, "answer", "Answer", false)}
+        ${bulkQuestionField(question, "explanation", "Explanation")}
+        ${bulkQuestionField(question, "subject", "Subject", false)}
+        ${bulkQuestionField(question, "chapter", "Chapter", false)}
+        <label class="bulk-field">Type<select data-bulk-index="${index}" data-bulk-field="type"><option value="MCQ" ${type === "mcq" ? "selected" : ""}>MCQ</option><option value="INTEGER" ${["integer", "numerical"].includes(type) ? "selected" : ""}>Integer / Numerical</option></select></label>
+      </div>
+      <div class="bulk-rendered-preview"><div class="preview-field-label">Rendered preview</div><div class="question-text">${escapeHtml(question.question)}</div>${renderedOptions}${question.explanation ? `<div class="explanation-box">${escapeHtml(question.explanation)}</div>` : ""}</div>
+    </article>`;
+}
+
+function renderBulkImportPreview() {
+  const preview = document.getElementById("bulkImportPreview");
+  const active = bulkQuestions.filter((question) => !question.removed);
+  active.forEach(validateBulkQuestion);
+  const validCount = active.filter((question) => !question.errors.length).length;
+  document.getElementById("bulkImportSummary").textContent = `${validCount} valid / ${active.length} questions`;
+  document.getElementById("importAllValidQuestionsBtn").disabled = validCount === 0;
+  preview.innerHTML = active.length
+    ? active.map((question) => renderBulkQuestionPreview(question, bulkQuestions.indexOf(question))).join("")
+    : `<div class="empty-state">All parsed questions were removed.</div>`;
+  const errors = document.getElementById("bulkImportErrors");
+  errors.style.display = active.some((question) => question.errors.length) ? "block" : "none";
+  errors.textContent = active.some((question) => question.errors.length)
+    ? "Fix the highlighted questions before importing. Invalid questions will be skipped."
+    : "";
+  preview.querySelectorAll("[data-bulk-field]").forEach((field) => {
+    field.addEventListener("input", updateBulkQuestionFromField);
+    field.addEventListener("change", updateBulkQuestionFromField);
+  });
+  preview.querySelectorAll("[data-bulk-remove]").forEach((button) => {
+    button.addEventListener("click", () => {
+      bulkQuestions[Number(button.dataset.bulkRemove)].removed = true;
+      renderBulkImportPreview();
+    });
+  });
+  renderMath(preview);
+}
+
+function updateBulkQuestionFromField(event) {
+  const field = event.currentTarget;
+  const question = bulkQuestions[Number(field.dataset.bulkIndex)];
+  if (!question) return;
+  question[field.dataset.bulkField] = field.value;
+  renderBulkImportPreview();
+}
+
+async function loadBulkImportTests() {
+  const select = document.getElementById("bulkTestSelect");
+  const { data, error } = await sb.from("tests").select("id,title,test_code,is_published").order("created_at", { ascending: false });
+  if (error) {
+    select.innerHTML = `<option value="">${escapeHtml(friendlyError(error))}</option>`;
+    return;
+  }
+  select.innerHTML = `<option value="">Select an existing test…</option>` + (data || []).map((test) =>
+    `<option value="${test.id}">${escapeHtml(test.title)} (${escapeHtml(test.test_code)})${test.is_published ? "" : " — draft"}</option>`,
+  ).join("");
+}
+
+async function importBulkQuestions() {
+  const testId = document.getElementById("bulkTestSelect").value;
+  const result = document.getElementById("bulkImportResult");
+  const valid = bulkQuestions.filter(
+    (question) => !question.removed && validateBulkQuestion(question).length === 0,
+  );
+  if (!testId) { toast("Select a test first.", "error"); return; }
+  if (!valid.length) { toast("There are no valid questions to import.", "error"); return; }
+  const button = document.getElementById("importAllValidQuestionsBtn");
+  button.disabled = true;
+  result.textContent = "Importing…";
+  const { data: existing, error: existingError } = await sb.from("questions").select("question_order").eq("test_id", testId).order("question_order", { ascending: false }).limit(1);
+  if (existingError) { button.disabled = false; result.textContent = ""; toast(friendlyError(existingError), "error"); return; }
+  const nextOrder = existing?.[0]?.question_order == null ? 0 : Number(existing[0].question_order) + 1;
+  const rows = valid.map((question, index) => {
+    const type = question.type.trim().toLowerCase().replace(/[\s/_-]+/g, "");
+    const isMcq = type === "mcq";
+    const row = {
+      test_id: testId,
+      question_order: nextOrder + index,
+      subject: question.subject.trim(),
+      question_type: isMcq ? "mcq" : "integer",
+      question_text: question.question.trim(),
+      options: isMcq ? ["A", "B", "C", "D"].map((id) => ({ id, text: question[`option${id}`].trim() })) : null,
+      correct_option: isMcq ? question.answer.trim().toUpperCase() : null,
+      correct_integer_value: isMcq ? null : Number(question.answer.trim()),
+      explanation: question.explanation.trim() || null,
+      positive_marks: 4,
+      negative_marks: 1,
+      chapter: question.chapter.trim() || null,
+    };
+    return row;
+  });
+  let response = await sb.from("questions").insert(rows);
+  if (response.error && /chapter|column/i.test(response.error.message || "")) {
+    response = await sb.from("questions").insert(rows.map(({ chapter, ...row }) => row));
+  }
+  button.disabled = false;
+  if (response.error) {
+    result.textContent = "";
+    toast(friendlyError(response.error), "error");
+    return;
+  }
+  result.textContent = `${valid.length} question${valid.length === 1 ? "" : "s"} imported successfully.`;
+  toast(`${valid.length} questions imported`, "success");
+  bulkQuestions = [];
+  document.getElementById("bulkImportPreviewCard").style.display = "none";
+}
+
+async function enterBulkImportView() {
+  myProfile = myProfile || (await getMyProfile());
+  const allowed = myProfile?.role === "admin";
+  document.getElementById("bulkImportNotAdmin").style.display = allowed ? "none" : "block";
+  document.getElementById("bulkImportContent").style.display = allowed ? "block" : "none";
+  if (allowed) await loadBulkImportTests();
+}
+
+function setupBulkImportListeners() {
+  document.getElementById("parseBulkQuestionsBtn").addEventListener("click", () => {
+    try {
+      bulkQuestions = parseBulkQuestions(document.getElementById("bulkImportText").value);
+      document.getElementById("bulkImportPreviewCard").style.display = "block";
+      document.getElementById("bulkImportParseStatus").textContent = `${bulkQuestions.length} question${bulkQuestions.length === 1 ? "" : "s"} detected.`;
+      renderBulkImportPreview();
+    } catch (error) {
+      document.getElementById("bulkImportPreviewCard").style.display = "none";
+      document.getElementById("bulkImportParseStatus").textContent = "";
+      toast(error.message, "error");
+    }
+  });
+  document.getElementById("clearBulkQuestionsBtn").addEventListener("click", () => {
+    bulkQuestions = [];
+    document.getElementById("bulkImportText").value = "";
+    document.getElementById("bulkImportPreviewCard").style.display = "none";
+    document.getElementById("bulkImportParseStatus").textContent = "";
+  });
+  document.getElementById("bulkImportFile").addEventListener("change", async (event) => {
+    const file = event.target.files?.[0];
+    if (file) document.getElementById("bulkImportText").value = await file.text();
+  });
+  document.getElementById("importAllValidQuestionsBtn").addEventListener("click", importBulkQuestions);
+}
+
+/* =========================================================================
+   APP SHELL — desktop sidebar + mobile bottom nav (Part 1 of the redesign)
+   ========================================================================= */
+
+// Builds an SVG ring for any "percent complete" style stat (score, accuracy,
+// time-left, etc). Returns an HTML string; callers set it via innerHTML.
+// value: 0-100. size/stroke in px. color: any CSS color or var(--token).
+function renderRadialProgress(value, { size = 120, stroke = 10, color = "var(--brand)", numLabel = null, subLabel = "" } = {}) {
+  const pct = Math.max(0, Math.min(100, value));
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const offset = c - (pct / 100) * c;
+  const label = numLabel === null ? `${Math.round(pct)}%` : numLabel;
+  return `
+    <div class="radial-progress" style="--rp-size:${size}px;--rp-color:${color};">
+      <svg viewBox="0 0 ${size} ${size}">
+        <circle class="radial-progress-track" cx="${size / 2}" cy="${size / 2}" r="${r}" stroke-width="${stroke}"></circle>
+        <circle class="radial-progress-value" cx="${size / 2}" cy="${size / 2}" r="${r}" stroke-width="${stroke}"
+          stroke-dasharray="${c}" stroke-dashoffset="${c}"
+          data-target-offset="${offset}"></circle>
+      </svg>
+      <div class="radial-progress-label">
+        <span class="radial-progress-num">${label}</span>
+        ${subLabel ? `<span class="radial-progress-sub">${subLabel}</span>` : ""}
+      </div>
+    </div>
+  `;
+}
+
+// Animates a just-inserted radial-progress ring from empty to its target.
+function animateRadialProgress(container) {
+  container.querySelectorAll(".radial-progress-value").forEach((circle) => {
+    const target = circle.getAttribute("data-target-offset");
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        circle.style.strokeDashoffset = target;
+      });
+    });
+  });
+}
+
+// Analytics view is a scaffold in Part 1 — this just proves the radial
+// progress component works. Explicitly labelled as a design preview, not
+// real user data.
+function renderAnalyticsDemo() {
+  const row = document.getElementById("analyticsDemoRow");
+  if (!row || row.dataset.rendered) return;
+  row.dataset.rendered = "1";
+  row.innerHTML =
+    renderRadialProgress(72, { size: 108, stroke: 9, color: "var(--brand)", subLabel: "Accuracy" }) +
+    renderRadialProgress(88, { size: 108, stroke: 9, color: "var(--success)", subLabel: "Answered" }) +
+    renderRadialProgress(46, { size: 108, stroke: 9, color: "var(--review)", subLabel: "Time used" });
+  animateRadialProgress(row);
+}
+
+function analyticsBar(value, max, color) {
+  const width = max > 0 ? Math.max(0, Math.min(100, (Number(value) / max) * 100)) : 0;
+  return `<div class="analytics-bar"><span style="width:${width}%;background:${color}"></span></div>`;
+}
+
+function renderAnalyticsCharts(data) {
+  const summary = data.summary || {};
+  const outcomes = data.outcomes || {};
+  const subjects = data.subjects || [];
+  const trend = data.trend || [];
+  const totalOutcome = Number(outcomes.correct || 0) + Number(outcomes.wrong || 0) + Number(outcomes.unattempted || 0);
+  const correctPct = totalOutcome ? (Number(outcomes.correct || 0) / totalOutcome) * 100 : 0;
+  const wrongPct = totalOutcome ? (Number(outcomes.wrong || 0) / totalOutcome) * 100 : 0;
+  const trendMax = Math.max(...trend.map((item) => Number(item.percentage) || 0), 1);
+
+  return `
+    <div class="analytics-stat-grid">
+      <div class="analytics-stat-card"><span class="analytics-stat-icon">◔</span><strong>${summary.average_score || 0}%</strong><span>Average score</span></div>
+      <div class="analytics-stat-card"><span class="analytics-stat-icon">✓</span><strong>${summary.accuracy || 0}%</strong><span>Accuracy</span></div>
+      <div class="analytics-stat-card"><span class="analytics-stat-icon">▣</span><strong>${summary.completed_tests || 0}</strong><span>Tests completed</span></div>
+      <div class="analytics-stat-card"><span class="analytics-stat-icon">↗</span><strong>${summary.questions_answered || 0}</strong><span>Questions answered</span></div>
+    </div>
+    <div class="analytics-chart-grid">
+      <section class="card analytics-panel"><div class="section-title"><h2>Question outcomes</h2><span class="text-muted">${totalOutcome} answered</span></div><div class="outcome-chart-row"><div class="outcome-donut" style="--correct:${correctPct}%;--wrong:${wrongPct}%"><span>${Math.round(correctPct)}%</span></div><div class="outcome-legend"><span><i class="legend-dot correct"></i>Correct <b>${outcomes.correct || 0}</b></span><span><i class="legend-dot wrong"></i>Wrong <b>${outcomes.wrong || 0}</b></span><span><i class="legend-dot skipped"></i>Unattempted <b>${outcomes.unattempted || 0}</b></span></div></div></section>
+      <section class="card analytics-panel"><div class="section-title"><h2>Score trend</h2><span class="text-muted">Last ${trend.length} tests</span></div><div class="trend-chart">${trend.length ? trend.map((item) => `<div class="trend-column"><span>${Math.round(Number(item.percentage) || 0)}%</span><i style="height:${Math.max(8, ((Number(item.percentage) || 0) / trendMax) * 100)}%"></i><small>${formatDateTime(item.submitted_at).split(",")[0]}</small></div>`).join("") : `<div class="empty-state">Submit a test to start your trend.</div>`}</div></section>
+    </div>
+    <section class="card analytics-panel"><div class="section-title"><h2>Subject performance</h2><span class="text-muted">Correct answers by subject</span></div><div class="subject-performance-list">${subjects.length ? subjects.map((subject) => `<div class="subject-performance-row"><div class="subject-performance-label"><span>${subjectDot(subject.subject)}${escapeHtml(subject.subject)}</span><strong>${subject.correct_count || 0}/${subject.question_count || 0}</strong></div>${analyticsBar(subject.correct_count, subject.question_count, subjectColor(subject.subject))}<small>${subject.obtained || 0} / ${subject.total || 0} marks · ${subject.wrong_count || 0} wrong</small></div>`).join("") : `<div class="empty-state">Subject analytics will appear after your first submitted test.</div>`}</div></section>`;
+}
+
+async function enterAnalyticsView() {
+  const content = document.getElementById("analyticsContent");
+  content.innerHTML = `<div class="empty-state">Loading analytics…</div>`;
+  const { data, error } = await sb.rpc("get_student_analytics");
+  if (error || !data) {
+    content.innerHTML = `<div class="error-box">${escapeHtml(friendlyError(error) || "Analytics could not be loaded.")}</div>`;
+    return;
+  }
+  content.innerHTML = renderAnalyticsCharts(data);
+  await renderAnalysisHistory();
+}
+
+function renderHistoryCards(history, targetId) {
+  const target = document.getElementById(targetId);
+  if (!target) return;
+  if (!history.length) {
+    target.innerHTML = `<div class="empty-state">No submitted tests yet. Your detailed reports will appear here.</div>`;
+    return;
+  }
+  target.innerHTML = history.map((item) => `
+    <article class="history-card">
+      <div class="history-card-main">
+        <div class="history-card-title">${escapeHtml(item.test_title)}</div>
+        <div class="history-card-meta">${categoryBadge(item.category)} · ${formatDateTime(item.submitted_at)} · ${item.status.replace("_", " ")}</div>
+      </div>
+      <div class="history-card-score"><strong>${item.percentage ?? 0}%</strong><span>${item.total_score} / ${item.total_marks}</span></div>
+      <div class="history-card-stats"><span>${item.correct_count} correct</span><span>${item.wrong_count} wrong</span><span>${item.accuracy ?? 0}% accuracy</span></div>
+      <a class="btn btn-primary btn-sm" href="#/result?attempt=${encodeURIComponent(item.attempt_id)}">View full report</a>
+    </article>`).join("");
+}
+
+async function renderAnalysisHistory() {
+  const target = document.getElementById("analysisHistory");
+  if (!target) return;
+  target.innerHTML = `<div class="empty-state">Loading test reports…</div>`;
+  const { data, error } = await sb.rpc("get_student_test_history");
+  if (error) {
+    target.innerHTML = `<div class="error-box">${escapeHtml(friendlyError(error))}</div>`;
+    return;
+  }
+  target.innerHTML = `<div class="section-title"><div><span class="eyebrow-label">Attempt history</span><h2>Every test report</h2></div><span class="text-muted">${(data || []).length} completed</span></div><div class="history-list" id="analysisHistoryList"></div>`;
+  renderHistoryCards(data || [], "analysisHistoryList");
+}
+
+async function enterGlobalLeaderboardView() {
+  const content = document.getElementById("leaderboardContent");
+  content.innerHTML = `<div class="empty-state">Loading leaderboard…</div>`;
+  const { data, error } = await sb.rpc("get_global_leaderboard");
+  if (error) {
+    content.innerHTML = `<div class="error-box">${escapeHtml(friendlyError(error))}</div>`;
+    return;
+  }
+  if (!data?.length) {
+    content.innerHTML = `<div class="empty-state">The global leaderboard will appear after declared results are available.</div>`;
+    return;
+  }
+  const myId = myProfile?.id;
+  const top = data.slice(0, 3);
+  content.innerHTML = `
+    <div class="leaderboard-podium">${top.map((row, index) => `<div class="podium-card podium-${index + 1}"><span>${medalFor(index + 1)}</span><strong>${escapeHtml(row.full_name || "Student")}</strong><b>#${row.rnk}</b><small>${row.average_score}% average · ${row.tests_completed} tests</small></div>`).join("")}</div>
+    <div class="card leaderboard-table-card"><div class="table-scroll"><table class="report-table"><thead><tr><th>Rank</th><th>Student</th><th>Tests</th><th>Average score</th><th>Accuracy</th><th>Best score</th></tr></thead><tbody>${data.map((row) => `<tr class="${row.user_id === myId ? "me" : ""}"><td>${medalFor(row.rnk)}${row.rnk}</td><td>${escapeHtml(row.full_name || "Student")}${row.user_id === myId ? " (you)" : ""}</td><td>${row.tests_completed}</td><td>${row.average_score}%</td><td>${row.average_accuracy}%</td><td>${row.best_score}%</td></tr>`).join("")}</tbody></table></div></div>`;
+}
+
+async function enterProfilePlaceholder() {
+  myProfile = myProfile || (await getMyProfile());
+  const name = myProfile?.full_name || "Student";
+  const roleLine = myProfile?.role === "admin" ? "Admin" : "JEE Aspirant";
+  const content = document.getElementById("profileContent");
+  const options = (values) => values.map((value) => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join("");
+  content.innerHTML = `<div class="profile-hero"><div class="profile-avatar-large">${escapeHtml(name.trim().charAt(0).toUpperCase() || "S")}</div><div><span class="eyebrow-label">Your account</span><h1>${escapeHtml(name)}</h1><p>${roleLine} · ${escapeHtml(myProfile?.email || "")}</p></div><a class="btn btn-sm" href="#/analytics">Open analytics</a></div><section class="card profile-edit-card"><div class="section-title"><div><span class="eyebrow-label">Required before your first test</span><h2>Student profile</h2></div><span id="profileSaveStatus" class="text-muted"></span></div><form id="profileEditForm" class="profile-edit-form profile-details-form"><label>Full name *<input type="text" id="profileNameInput" value="${escapeHtml(myProfile?.full_name || "")}" maxlength="120" required></label><label>Email *<input type="email" id="profileEmailInput" value="${escapeHtml(myProfile?.email || "")}" required></label><label>Mobile number<input type="tel" id="profileMobileInput" value="${escapeHtml(myProfile?.mobile_number || "")}" maxlength="20"></label><label>Date of birth / age<input type="date" id="profileDobInput" value="${escapeHtml(myProfile?.date_of_birth || "")}"></label><label>Gender (optional)<select id="profileGenderInput"><option value="">Prefer not to say</option>${options(["Female", "Male", "Non-binary", "Other"])}</select></label><label>Class / grade *<input type="text" id="profileClassInput" value="${escapeHtml(myProfile?.class_grade || "")}" maxlength="40" required></label><label>Target exam<select id="profileTargetInput"><option value="">Select target exam</option>${options(["JEE Main", "JEE Advanced", "NEET", "Olympiads", "Other"])}</select></label><label>Board<select id="profileBoardInput"><option value="">Select board</option>${options(["CBSE", "ICSE", "State Board", "Other"])}</select></label><button type="submit" class="btn btn-primary">Save profile</button></form></section><div class="section-title profile-history-heading"><div><span class="eyebrow-label">Your activity</span><h2>Test history</h2></div></div><div id="profileHistory" class="history-list"><div class="empty-state">Loading test history…</div></div>`;
+  if (qs("complete")) {
+    const notice = document.createElement("div");
+    notice.className = "locked-banner profile-required-notice";
+    notice.textContent = "Complete the required fields below before starting your test.";
+    content.insertBefore(notice, content.firstChild);
+  }
+  document.getElementById("profileGenderInput").value = myProfile?.gender || "";
+  document.getElementById("profileTargetInput").value = myProfile?.target_exam || "";
+  document.getElementById("profileBoardInput").value = myProfile?.board || "";
+  document.getElementById("profileEditForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const button = event.currentTarget.querySelector("button");
+    const nextName = document.getElementById("profileNameInput").value.trim();
+    const nextEmail = document.getElementById("profileEmailInput").value.trim();
+    const nextClass = document.getElementById("profileClassInput").value.trim();
+    if (!nextName || !nextEmail || !nextClass) return;
+    button.disabled = true;
+    const { data, error } = await sb.from("profiles").update({
+      full_name: nextName,
+      email: nextEmail,
+      mobile_number: document.getElementById("profileMobileInput").value.trim() || null,
+      date_of_birth: document.getElementById("profileDobInput").value || null,
+      gender: document.getElementById("profileGenderInput").value || null,
+      class_grade: nextClass,
+      target_exam: document.getElementById("profileTargetInput").value || null,
+      board: document.getElementById("profileBoardInput").value || null,
+    }).eq("id", myProfile.id).select().single();
+    button.disabled = false;
+    if (error) {
+      toast(friendlyError(error), "error");
+      return;
+    }
+    myProfile = data;
+    document.getElementById("profileSaveStatus").textContent = "Saved";
+    toast("Profile updated", "success");
+    await syncAppShell(currentRoute.path.slice(1), true);
+  });
+  const { data, error } = await sb.rpc("get_student_test_history");
+  if (error) {
+    document.getElementById("profileHistory").innerHTML = `<div class="error-box">${escapeHtml(friendlyError(error))}</div>`;
+    return;
+  }
+  renderHistoryCards(data || [], "profileHistory");
+}
+
+// Shows/hides the signed-in app shell (sidebar on desktop, bottom nav on
+// mobile) and keeps it in sync with the active view + signed-in user.
+// viewName is one of VIEWS (e.g. "dashboard"), or null when signed out.
+async function syncAppShell(viewName, signedIn) {
+  const show = signedIn && APP_SHELL_VIEWS.has(viewName);
+  document.body.classList.toggle("app-shell-on", show);
+  if (!show) return;
+
+  document.querySelectorAll(".app-nav-item, .app-bottom-item").forEach((el) => {
+    el.classList.toggle("active", el.dataset.nav === viewName);
+  });
+
+  myProfile = myProfile || (await getMyProfile());
+  const name = myProfile?.full_name || "Student";
+  const isAdmin = myProfile?.role === "admin";
+
+  const avatarEl = document.getElementById("appSidebarAvatar");
+  const nameEl = document.getElementById("appSidebarUserName");
+  const roleEl = document.getElementById("appSidebarUserRole");
+  const adminLink = document.getElementById("appNavAdmin");
+  const bulkImportLink = document.getElementById("appNavBulkImport");
+  if (avatarEl) avatarEl.textContent = name.trim().charAt(0).toUpperCase() || "S";
+  if (nameEl) nameEl.textContent = name;
+  if (roleEl) roleEl.textContent = isAdmin ? "Admin" : "Student";
+  if (adminLink) adminLink.style.display = isAdmin ? "" : "none";
+  if (bulkImportLink) bulkImportLink.style.display = isAdmin ? "" : "none";
+}
+
+/* =========================================================================
    8. BOOTSTRAP
    ========================================================================= */
 function setupGlobalListeners() {
@@ -2675,7 +3639,9 @@ setupGlobalListeners();
 setupLandingPage();
 setupAuthListeners();
 setupDashboardListeners();
+setupTestsCatalogListeners();
 setupAdminTestListeners();
+setupBulkImportListeners();
 setupExamStaticListeners();
 router();
 
@@ -2781,21 +3747,6 @@ function setupLandingPage() {
     "(prefers-reduced-motion: reduce)",
   ).matches;
 
-  const titleLines = root.querySelectorAll("[data-typing-text]");
-  if (titleLines.length) {
-    const typeTitle = async () => {
-      for (const line of titleLines) {
-        const text = line.dataset.typingText || "";
-        for (let i = 1; i <= text.length; i += 1) {
-          line.textContent = text.slice(0, i);
-          await new Promise((resolve) => setTimeout(resolve, 105));
-        }
-        await new Promise((resolve) => setTimeout(resolve, 130));
-      }
-    };
-    typeTitle();
-  }
-
   // Mobile hamburger menu
   const hamburger = document.getElementById("landingHamburger");
   const navLinks = document.getElementById("landingNavLinks");
@@ -2819,10 +3770,6 @@ function setupLandingPage() {
   const popupClose = document.getElementById("landingPopupClose");
   if (popup && popupClose) {
     popupClose.addEventListener("click", () => closeModal("landingPopup"));
-    document.getElementById("landingPopupCta")?.addEventListener("click", () => {
-      closeModal("landingPopup");
-      toast("Opening the free test series. Prizes included!", "success");
-    });
     popup.addEventListener("click", (e) => {
       if (e.target === popup) closeModal("landingPopup");
     });
@@ -2832,6 +3779,47 @@ function setupLandingPage() {
     if (sessionStorage.getItem("jee_landing_popup_shown")) return;
     sessionStorage.setItem("jee_landing_popup_shown", "1");
     setTimeout(() => openModal("landingPopup"), 600);
+  }
+
+  // Typewriter effect — cycles a few endings for the hero headline
+  const typedEl = document.getElementById("landingTypedText");
+  if (typedEl) {
+    const phrases = ["Rank Higher.", "Score Better.", "Ace The JEE."];
+    if (reduceMotion) {
+      typedEl.textContent = phrases[0];
+    } else {
+      let phraseIndex = 0;
+      let charIndex = 0;
+      let deleting = false;
+      let typeTimer = null;
+
+      function tick() {
+        const current = phrases[phraseIndex];
+
+        if (!deleting) {
+          charIndex++;
+          typedEl.textContent = current.slice(0, charIndex);
+          if (charIndex === current.length) {
+            deleting = true;
+            typeTimer = setTimeout(tick, 1600);
+            return;
+          }
+          typeTimer = setTimeout(tick, 65);
+        } else {
+          charIndex--;
+          typedEl.textContent = current.slice(0, charIndex);
+          if (charIndex === 0) {
+            deleting = false;
+            phraseIndex = (phraseIndex + 1) % phrases.length;
+            typeTimer = setTimeout(tick, 300);
+            return;
+          }
+          typeTimer = setTimeout(tick, 35);
+        }
+      }
+
+      typeTimer = setTimeout(tick, 900);
+    }
   }
 
   // Follower counter — animates once when the hero scrolls into view
@@ -2856,9 +3844,9 @@ function setupLandingPage() {
     requestAnimationFrame(step);
   }
 
-  // Scroll-reveal for feature/community cards
+  // Scroll-reveal for feature/how-it-works/community cards
   const revealTargets = root.querySelectorAll(
-    ".landing-feature-card, .landing-community-card",
+    ".landing-feature-card, .landing-how-step, .landing-community-card",
   );
   if (revealTargets.length) {
     if (reduceMotion || !("IntersectionObserver" in window)) {
@@ -2958,4 +3946,4 @@ function setupTheme() {
   if (btn) {
     btn.addEventListener("click", toggleTheme);
   }
-} 
+}
