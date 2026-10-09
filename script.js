@@ -218,6 +218,8 @@ const VIEWS = [
   "tests",
   "practice",
   "practice-library",
+  "practice-report",
+  "practice-stats",
   "test-details",
   "admin-test",
   "bulk-import",
@@ -238,6 +240,8 @@ const APP_SHELL_VIEWS = new Set([
   "tests",
   "practice",
   "practice-library",
+  "practice-report",
+  "practice-stats",
   "test-details",
   "admin-test",
   "bulk-import",
@@ -340,6 +344,14 @@ async function router() {
     case "/practice":
       showView("practice");
       await enterPracticeView();
+      break;
+    case "/practice-report":
+      showView("practice-report");
+      await enterPracticeReportView();
+      break;
+    case "/practice-stats":
+      showView("practice-stats");
+      await enterPracticeStatsView();
       break;
     case "/practice-library":
       showView("practice-library");
@@ -494,8 +506,10 @@ const NOTIFICATION_BLOCKED_HELP =
    ========================================================================= */
 const PAGE_TITLES = {
   dashboard: "Home",
-  tests: "Past & practice tests",
-  practice: "Infinite Practice",
+  tests: "Live Tests",
+  practice: "Practice",
+  "practice-report": "Practice report",
+  "practice-stats": "My practice progress",
   "practice-library": "Practice library",
   "test-details": "Test details",
   "admin-test": "Manage test",
@@ -582,7 +596,7 @@ async function syncAppShell(viewName, signedIn) {
   if (!show) return;
 
   document.querySelectorAll(".app-nav-item, .app-bottom-item").forEach((el) => {
-    el.classList.toggle("active", el.dataset.nav === viewName);
+    el.classList.toggle("active", el.dataset.nav === (viewName === "practice-report" || viewName === "practice-stats" || viewName === "practice-library" ? "practice" : viewName));
   });
   document.getElementById("topbarTitle").textContent =
     PAGE_TITLES[viewName] || "JEE Hustlers";
@@ -858,10 +872,339 @@ async function enterTestsView() {
   if (myProfile?.role === "admin") await loadAdminTests();
 }
 
+
+/* =========================================================================
+   TEST MODE — Live Test vs Infinite Practice (admin side)
+   ========================================================================= */
+function getTestMode() {
+  return document.querySelector('input[name="testMode"]:checked')?.value || "live";
+}
+
+function syncModeUI() {
+  const practice = getTestMode() === "practice";
+  const row = document.getElementById("scheduleRow");
+  const cat = document.getElementById("practiceCategoryField");
+  if (row) row.style.display = practice ? "none" : "";
+  if (cat) cat.style.display = practice ? "" : "none";
+  document.getElementById("fromInput").required = !practice;
+  document.getElementById("untilInput").required = !practice;
+}
+
+function setTestMode(mode) {
+  const radio = document.querySelector(`input[name="testMode"][value="${mode}"]`);
+  if (radio) radio.checked = true;
+  syncModeUI();
+}
+
+// Practice tests have no schedule: they are always open. The database also
+// enforces this, so the values below are only what the browser sends.
+function scheduleForMode() {
+  if (getTestMode() === "practice") {
+    return {
+      available_from: new Date().toISOString(),
+      available_until: "2100-01-01T00:00:00.000Z",
+    };
+  }
+  return {
+    available_from: new Date(document.getElementById("fromInput").value).toISOString(),
+    available_until: new Date(document.getElementById("untilInput").value).toISOString(),
+  };
+}
+
+function applyModeToAdminCards() {
+  const practice = currentTest?.test_mode === "practice";
+  const card = document.getElementById("practiceAdminCard");
+  if (card) card.style.display = practice ? "block" : "none";
+  if (practice) {
+    ["shareCard", "studentResultsCard"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = "none";
+    });
+    loadPracticeAdminStats();
+  }
+}
+
+async function loadPracticeAdminStats() {
+  const body = document.getElementById("practiceAdminBody");
+  if (!body || !currentTest) return;
+  body.innerHTML = `<div class="empty-state">Loading…</div>`;
+  const { data, error } = await sb.rpc("admin_get_practice_test_stats", { p_test_id: currentTest.id });
+  if (error) {
+    body.innerHTML = `<div class="error-box">${escapeHtml(friendlyError(error))}</div>`;
+    return;
+  }
+  const sm = data?.summary || {};
+  const qs_ = data?.questions || [];
+  if (!sm.attempts) {
+    body.innerHTML = `<div class="empty-state">No student has finished a practice attempt yet.</div>`;
+    return;
+  }
+  const rows = qs_
+    .map((q) => {
+      const acc = q.accuracy == null ? null : Number(q.accuracy);
+      const tone = acc == null ? "" : acc < 40 ? "pr-bad" : acc < 70 ? "pr-mid" : "pr-good";
+      return `<tr><td>Q${q.question_order}</td><td>${escapeHtml(q.subject || "")}${q.chapter ? " · " + escapeHtml(q.chapter) : ""}</td><td>${q.tries}</td><td class="${tone}">${acc == null ? "—" : acc + "%"}</td><td>${formatDurationShort(q.avg_seconds)}</td></tr>`;
+    })
+    .join("");
+  body.innerHTML = `
+    <div class="pr-stat-row">
+      <div class="pr-stat"><b>${sm.attempts}</b><span>Attempts</span></div>
+      <div class="pr-stat"><b>${sm.students}</b><span>Students</span></div>
+      <div class="pr-stat"><b>${sm.avg_pct}%</b><span>Average score</span></div>
+      <div class="pr-stat"><b>${sm.repeat_rate}</b><span>Attempts per student</span></div>
+    </div>
+    <div class="pr-table-wrap"><table class="pr-table"><thead><tr><th>Q</th><th>Subject · chapter</th><th>Tries</th><th>Accuracy</th><th>Avg time</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <p class="hint">Questions in red are answered correctly less than 40% of the time. Check them for errors or add explanations.</p>`;
+}
+
+/* =========================================================================
+   INFINITE PRACTICE (student side) — hub, per-test report, overall report.
+   Separate from live tests: unlimited attempts, personal reports only,
+   no rank and no leaderboard anywhere in this section.
+   ========================================================================= */
+const practiceHub = { rows: [], cat: "all", q: "", bound: false };
+const PR_CAT_LABEL = { all: "Practice", pyq: "PYQ", topic: "Topic", full: "Full syllabus", custom: "Custom" };
+
+const prPct = (v) => (v == null || v === "" ? "—" : `${Math.round(Number(v))}%`);
+const prTone = (v) => (v == null ? "" : Number(v) >= 70 ? "pr-good" : Number(v) >= 40 ? "pr-mid" : "pr-bad");
+
+function prDeploymentHint(error) {
+  const msg = friendlyError(error);
+  return /function|schema cache|does not exist/i.test(String(error?.message || ""))
+    ? "Practice reports are not set up yet. Ask the admin to run the latest migration.sql in Supabase."
+    : msg;
+}
+
+function prBar(label, pct, sub) {
+  const v = Math.max(0, Math.min(100, Number(pct) || 0));
+  return `<div class="pr-hbar"><div class="pr-hbar-top"><span>${escapeHtml(label)}</span><b class="${prTone(v)}">${Math.round(v)}%</b></div><div class="pr-hbar-track"><i class="${prTone(v)}" style="width:${v}%"></i></div>${sub ? `<small>${escapeHtml(sub)}</small>` : ""}</div>`;
+}
+
+function prStat(value, label) {
+  return `<div class="pr-stat"><b>${value}</b><span>${escapeHtml(label)}</span></div>`;
+}
+
+function bindPracticeHub() {
+  if (practiceHub.bound) return;
+  practiceHub.bound = true;
+  document.getElementById("practiceSearch").addEventListener("input", (e) => {
+    practiceHub.q = e.target.value.trim().toLowerCase();
+    renderPracticeHubList();
+  });
+  document.getElementById("practiceChips").addEventListener("click", (e) => {
+    const btn = e.target.closest(".pr-chip");
+    if (!btn) return;
+    practiceHub.cat = btn.dataset.cat;
+    document.querySelectorAll("#practiceChips .pr-chip").forEach((b) => b.classList.toggle("active", b === btn));
+    renderPracticeHubList();
+  });
+}
+
+function renderPracticeOverallStrip(strip, data, error) {
+  if (!strip) return;
+  if (error) {
+    strip.innerHTML = "";
+    return;
+  }
+  const t = data?.totals || {};
+  if (!t.attempts) {
+    strip.innerHTML = `<div class="pr-welcome"><b>Start your first practice test</b><span>Pick any test below. Your progress, weak chapters and streak will appear here.</span></div>`;
+    return;
+  }
+  strip.innerHTML = `<div class="pr-stat-row">
+    ${prStat(t.attempts, "Attempts")}
+    ${prStat(t.questions_attempted, "Questions solved")}
+    ${prStat(prPct(t.accuracy), "Accuracy")}
+    ${prStat(`🔥 ${data.streak_days || 0}`, "Day streak")}
+  </div>`;
+}
+
+function renderPracticeHubList() {
+  const target = document.getElementById("practiceCatalog");
+  const rows = practiceHub.rows.filter((r) => {
+    if (practiceHub.cat !== "all" && r.practice_category !== practiceHub.cat) return false;
+    if (practiceHub.q && !String(r.title || "").toLowerCase().includes(practiceHub.q)) return false;
+    return true;
+  });
+  if (!practiceHub.rows.length) {
+    target.innerHTML = `<div class="empty-state">No practice tests are published yet. Check back soon.</div>`;
+    return;
+  }
+  if (!rows.length) {
+    target.innerHTML = `<div class="empty-state">No tests match. Try another filter.</div>`;
+    return;
+  }
+  target.innerHTML = rows
+    .map((r) => {
+      const href = `#/exam?test=${encodeURIComponent(r.test_id)}&practice=1`;
+      const cta = r.in_progress_attempt_id ? "Continue" : r.attempts ? "Practice again" : "Start";
+      const progress = r.attempts
+        ? `<div class="pr-mini"><span><b>${r.attempts}</b> attempt${r.attempts === 1 ? "" : "s"}</span><span>Best <b class="${prTone(r.best_pct)}">${prPct(r.best_pct)}</b></span><span>Avg <b class="${prTone(r.avg_pct)}">${prPct(r.avg_pct)}</b></span></div>`
+        : `<div class="pr-mini pr-new">Not attempted yet</div>`;
+      return `<article class="pr-card">
+        <div class="pr-card-tags"><span class="pr-tag">${escapeHtml(PR_CAT_LABEL[r.practice_category] || "Practice")}</span>${r.test_mode === "live" ? `<span class="pr-tag pr-tag-live">Past live test</span>` : ""}</div>
+        <h3>${escapeHtml(r.title)}</h3>
+        <div class="pr-meta">${r.question_count} questions · ${r.duration_minutes} min · ${Number(r.total_marks)} marks</div>
+        ${progress}
+        <div class="pr-actions">
+          <a class="btn btn-primary btn-sm" href="${href}">${cta}</a>
+          ${r.attempts ? `<a class="btn btn-sm" href="#/practice-report?test=${encodeURIComponent(r.test_id)}">My report</a>` : ""}
+        </div></article>`;
+    })
+    .join("");
+}
+
 async function enterPracticeView() {
   const target = document.getElementById("practiceCatalog");
   if (!target) return;
-  await renderPracticeCategory(target, qs("category") || "all");
+  bindPracticeHub();
+  practiceHub.cat = "all";
+  practiceHub.q = "";
+  document.getElementById("practiceSearch").value = "";
+  document.querySelectorAll("#practiceChips .pr-chip").forEach((b) => b.classList.toggle("active", b.dataset.cat === "all"));
+  target.innerHTML = `<div class="empty-state">Loading practice tests…</div>`;
+  const [hub, overall] = await Promise.all([sb.rpc("get_practice_hub"), sb.rpc("get_practice_overall_report")]);
+  if (hub.error) {
+    target.innerHTML = `<div class="error-box">${escapeHtml(prDeploymentHint(hub.error))}</div>`;
+    return;
+  }
+  practiceHub.rows = hub.data || [];
+  renderPracticeOverallStrip(document.getElementById("practiceOverallStrip"), overall.data, overall.error);
+  renderPracticeHubList();
+}
+
+async function enterPracticeReportView() {
+  const body = document.getElementById("practiceReportBody");
+  const testId = qs("test");
+  if (!testId) {
+    navigate("/practice");
+    return;
+  }
+  body.innerHTML = `<div class="empty-state">Loading report…</div>`;
+  const { data, error } = await sb.rpc("get_practice_test_report", { p_test_id: testId });
+  if (error || !data) {
+    body.innerHTML = `<a class="practice-back-link" href="#/practice">← Practice</a><div class="error-box">${escapeHtml(prDeploymentHint(error))}</div>`;
+    return;
+  }
+  const attempts = data.attempts || [];
+  const startHref = `#/exam?test=${encodeURIComponent(testId)}&practice=1`;
+  if (!attempts.length) {
+    body.innerHTML = `<a class="practice-back-link" href="#/practice">← Practice</a>
+      <div class="pr-head"><div><h1>${escapeHtml(data.title)}</h1></div><a class="btn btn-primary" href="${startHref}">Start practice</a></div>
+      <div class="empty-state">Finish one attempt to see your report here.</div>`;
+    return;
+  }
+  const last = attempts[attempts.length - 1];
+  const prev = attempts.length > 1 ? attempts[attempts.length - 2] : null;
+  const best = Math.max(...attempts.map((a) => Number(a.percentage)));
+  const avgAcc = attempts.reduce((n, a) => n + Number(a.accuracy), 0) / attempts.length;
+  const delta = prev ? Math.round(Number(last.percentage) - Number(prev.percentage)) : null;
+  const deltaHtml =
+    delta == null
+      ? ""
+      : `<p class="pr-delta ${delta >= 0 ? "pr-good" : "pr-bad"}">${delta >= 0 ? "▲" : "▼"} ${Math.abs(delta)}% compared with your previous attempt</p>`;
+
+  const bars = attempts
+    .slice(-12)
+    .map(
+      (a) =>
+        `<div class="pr-vbar"><b>${Math.round(a.percentage)}%</b><div class="pr-vbar-track"><i class="${prTone(a.percentage)}" style="height:${Math.max(4, Math.min(100, Number(a.percentage)))}%"></i></div><span>#${a.attempt_no}</span></div>`,
+    )
+    .join("");
+
+  const history = [...attempts]
+    .reverse()
+    .map(
+      (a) => `<a class="pr-row" href="#/result?attempt=${a.attempt_id}">
+        <div><b>Attempt ${a.attempt_no}</b><small>${formatDateTime(a.submitted_at)}</small></div>
+        <div class="pr-row-mid"><b class="${prTone(a.percentage)}">${Math.round(a.percentage)}%</b><small>${Number(a.score)}/${Number(a.total_marks)}</small></div>
+        <div class="pr-row-end"><small>✔ ${a.correct} · ✖ ${a.wrong} · ○ ${a.unanswered}</small><small>${formatDurationShort(a.time_seconds)}</small></div>
+      </a>`,
+    )
+    .join("");
+
+  const subjects = (data.subjects || [])
+    .map((x) => prBar(x.subject, x.accuracy, `${x.correct} right · ${x.wrong} wrong · ${x.unanswered} skipped`))
+    .join("");
+  const weak = (data.chapters || [])
+    .slice(0, 5)
+    .map((x) => prBar(`${x.chapter}`, x.accuracy, x.subject))
+    .join("");
+  const hard = (data.hardest_questions || [])
+    .map(
+      (q) => `<div class="pr-hq"><b>Q${q.question_order}</b><span>${escapeHtml(q.subject || "")}${q.chapter ? " · " + escapeHtml(q.chapter) : ""}</span><em class="pr-bad">missed ${q.misses} of ${q.tries}</em></div>`,
+    )
+    .join("");
+
+  body.innerHTML = `
+    <a class="practice-back-link" href="#/practice">← Practice</a>
+    <div class="pr-head"><div><span class="eyebrow-label">Practice report</span><h1>${escapeHtml(data.title)}</h1>${deltaHtml}</div>
+      <a class="btn btn-primary" href="${startHref}">Practice again</a></div>
+    <div class="pr-stat-row">
+      ${prStat(attempts.length, "Attempts")}
+      ${prStat(prPct(last.percentage), "Latest score")}
+      ${prStat(prPct(best), "Best score")}
+      ${prStat(prPct(avgAcc), "Avg accuracy")}
+    </div>
+    <section class="card pr-section"><h2>Score over attempts</h2><div class="pr-vbars">${bars}</div></section>
+    <div class="pr-two">
+      <section class="card pr-section"><h2>Subjects</h2>${subjects || `<p class="text-muted">No data.</p>`}</section>
+      <section class="card pr-section"><h2>Chapters to revise</h2>${weak || `<p class="text-muted">Not enough data yet.</p>`}</section>
+    </div>
+    ${hard ? `<section class="card pr-section"><h2>Questions you miss most</h2>${hard}</section>` : ""}
+    <section class="card pr-section"><h2>All attempts</h2><div class="pr-rows">${history}</div></section>`;
+}
+
+async function enterPracticeStatsView() {
+  const body = document.getElementById("practiceStatsBody");
+  body.innerHTML = `<div class="empty-state">Loading your progress…</div>`;
+  const { data, error } = await sb.rpc("get_practice_overall_report");
+  if (error || !data) {
+    body.innerHTML = `<a class="practice-back-link" href="#/practice">← Practice</a><div class="error-box">${escapeHtml(prDeploymentHint(error))}</div>`;
+    return;
+  }
+  const t = data.totals || {};
+  if (!t.attempts) {
+    body.innerHTML = `<a class="practice-back-link" href="#/practice">← Practice</a><div class="pr-head"><div><h1>My practice progress</h1></div></div><div class="empty-state">Finish a practice test and your progress will show here.</div>`;
+    return;
+  }
+  // Fill the last 30 days (India time) so quiet days show as empty bars.
+  const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" });
+  const byDay = new Map((data.daily || []).map((d) => [String(d.day).slice(0, 10), Number(d.questions || 0)]));
+  const days = [];
+  for (let i = 29; i >= 0; i--) {
+    const key = fmt.format(new Date(Date.now() - i * 86400000));
+    days.push({ key, n: byDay.get(key) || 0 });
+  }
+  const maxN = Math.max(1, ...days.map((d) => d.n));
+  const activity = days
+    .map((d) => `<i title="${d.key}: ${d.n} questions" style="height:${d.n ? Math.max(8, (d.n / maxN) * 100) : 3}%" class="${d.n ? "on" : ""}"></i>`)
+    .join("");
+  const activeDays = days.filter((d) => d.n).length;
+  const subjects = (data.subjects || []).map((x) => prBar(x.subject, x.accuracy, `${x.correct} right · ${x.wrong} wrong`)).join("");
+  const chap = (list) => (list || []).map((x) => prBar(x.chapter, x.accuracy, x.subject)).join("");
+  body.innerHTML = `
+    <a class="practice-back-link" href="#/practice">← Practice</a>
+    <div class="pr-head"><div><span class="eyebrow-label">All practice tests together</span><h1>My practice progress</h1>
+      <p class="text-muted">Only you can see this. It never affects any rank.</p></div></div>
+    <div class="pr-stat-row">
+      ${prStat(t.attempts, "Attempts")}
+      ${prStat(t.questions_attempted, "Questions solved")}
+      ${prStat(prPct(t.accuracy), "Accuracy")}
+      ${prStat(`🔥 ${data.streak_days || 0}`, "Day streak")}
+    </div>
+    <div class="pr-stat-row">
+      ${prStat(t.tests_practiced, "Tests practised")}
+      ${prStat(prPct(t.avg_pct), "Average score")}
+      ${prStat(prPct(t.best_pct), "Best score")}
+      ${prStat(`${t.sec_per_question || 0}s`, "Time per question")}
+    </div>
+    <section class="card pr-section"><h2>Last 30 days</h2><div class="pr-activity">${activity}</div><p class="text-muted pr-note">You practised on ${activeDays} of the last 30 days.</p></section>
+    <div class="pr-two">
+      <section class="card pr-section"><h2>Subjects</h2>${subjects || `<p class="text-muted">No data.</p>`}</section>
+      <section class="card pr-section"><h2>Revise these first</h2>${chap(data.weak_chapters) || `<p class="text-muted">Answer at least 5 questions in a chapter to see it here.</p>`}</section>
+    </div>
+    <section class="card pr-section"><h2>Your strongest chapters</h2>${chap(data.strong_chapters) || `<p class="text-muted">Not enough data yet.</p>`}</section>`;
 }
 
 async function enterPracticeLibraryView() {
@@ -1678,7 +2021,7 @@ function renderAdminTests() {
         <span class="state-pill ${t.state}">${ADMIN_STATE_LABEL[t.state]}</span>
         ${categoryBadge(t.category)}
       </div>
-      <h3 class="atc-title">${escapeHtml(t.title)}</h3>
+      <h3 class="atc-title">${t.test_mode === "practice" ? "♾️ " : "🔴 "}${escapeHtml(t.title)}</h3>
       <div class="atc-window"><div><span>Opens</span> ${when(t.available_from)}</div><div><span>Closes</span> ${when(t.available_until)}</div></div>
       <div class="atc-stats">
         <div><strong>${t.questions}</strong><span>Questions</span></div>
@@ -1836,6 +2179,9 @@ function updateQuestionPreview() {
 }
 
 function setupAdminTestListeners() {
+  document.querySelectorAll('input[name="testMode"]').forEach((r) =>
+    r.addEventListener("change", syncModeUI),
+  );
   document.getElementById("typeInput").addEventListener("change", (e) => {
     const isMcq = e.target.value === "mcq";
     document.getElementById("mcqFields").style.display = isMcq
@@ -1898,17 +2244,13 @@ function setupAdminTestListeners() {
           document.getElementById("instructionsInput").value.trim() || null,
         category: document.getElementById("categoryInput").value,
         practice_category: document.getElementById("practiceCategoryInput").value,
-        practice_only: document.getElementById("practiceOnlyInput").checked,
+        test_mode: getTestMode(),
+        practice_only: getTestMode() === "practice",
         duration_minutes: parseInt(
           document.getElementById("durationInput").value,
           10,
         ),
-        available_from: new Date(
-          document.getElementById("fromInput").value,
-        ).toISOString(),
-        available_until: new Date(
-          document.getElementById("untilInput").value,
-        ).toISOString(),
+        ...scheduleForMode(),
         is_published: true,
       };
 
@@ -1934,6 +2276,7 @@ function setupAdminTestListeners() {
         }
         currentTest = data;
         toast("Test details saved", "success");
+        applyModeToAdminCards();
       } else {
         const { data, error } = await sb
           .from("tests")
@@ -2112,6 +2455,7 @@ async function enterAdminTestView() {
   document.getElementById("mcqFields").style.display = "block";
   document.getElementById("integerFields").style.display = "none";
   document.getElementById("typeInput").value = "mcq";
+  syncModeUI();
 
   if (!myProfile || myProfile.role !== "admin") {
     document.getElementById("notAdminNotice").style.display = "block";
@@ -2186,7 +2530,7 @@ async function loadExistingTest(testId) {
   document.getElementById("instructionsInput").value = data.instructions || "";
   document.getElementById("categoryInput").value = data.category || "JEE Main";
   document.getElementById("practiceCategoryInput").value = data.practice_category || "all";
-  document.getElementById("practiceOnlyInput").checked = data.practice_only === true;
+  setTestMode(data.test_mode || "live");
   document.getElementById("durationInput").value = data.duration_minutes;
   document.getElementById("fromInput").value = toLocalInputValue(
     data.available_from,
@@ -2210,6 +2554,7 @@ function showPostCreateSections() {
   document.getElementById("adminJump").style.display = "flex";
   renderShareCard();
   renderAdminSummary();
+  applyModeToAdminCards();
 }
 
 function renderShareCard() {
@@ -5933,20 +6278,20 @@ async function loadBulkImportTests() {
   const select = document.getElementById("bulkTestSelect");
   const { data, error } = await sb
     .from("tests")
-    .select("id,title,test_code,is_published")
+    .select("id,title,test_code,is_published,test_mode")
     .order("created_at", { ascending: false });
   if (error) {
     select.innerHTML = `<option value="">${escapeHtml(friendlyError(error))}</option>`;
     return;
   }
+  const opt = (test) =>
+    `<option value="${test.id}">${escapeHtml(test.title)} (${escapeHtml(test.test_code)})${test.is_published ? "" : " — draft"}</option>`;
+  const live = (data || []).filter((t) => t.test_mode !== "practice");
+  const practice = (data || []).filter((t) => t.test_mode === "practice");
   select.innerHTML =
     `<option value="">Select an existing test…</option>` +
-    (data || [])
-      .map(
-        (test) =>
-          `<option value="${test.id}">${escapeHtml(test.title)} (${escapeHtml(test.test_code)})${test.is_published ? "" : " — draft"}</option>`,
-      )
-      .join("");
+    (live.length ? `<optgroup label="🔴 Live tests">${live.map(opt).join("")}</optgroup>` : "") +
+    (practice.length ? `<optgroup label="♾️ Infinite Practice tests">${practice.map(opt).join("")}</optgroup>` : "");
 }
 
 async function importBulkQuestions() {
@@ -7446,4 +7791,4 @@ function setupTheme() {
   applyTheme(savedTheme);
 
   setupThemeDrag();
-} 
+}

@@ -27,10 +27,10 @@
       <a href="#/dashboard" class="app-sidebar-logo" title="JEE Hustlers"><span class="logo-mark">JH</span><span class="logo-text">JEE <span>HUSTLERS</span></span></a>
       <nav class="app-sidebar-nav">
         <a href="#/dashboard" class="app-nav-item" data-nav="dashboard" title="Home"><span class="app-nav-icon">🏠</span><span class="app-nav-label">Home</span></a>
-        <a href="#/tests" class="app-nav-item" data-nav="tests" title="Tests"><span class="app-nav-icon">📝</span><span class="app-nav-label">Tests</span></a>
+        <a href="#/tests" class="app-nav-item" data-nav="tests" title="Live Tests"><span class="app-nav-icon">🔴</span><span class="app-nav-label">Live Tests</span></a>
         <a href="#/practice" class="app-nav-item" data-nav="practice" title="Infinite practice"><span class="app-nav-icon">♾️</span><span class="app-nav-label">Practice</span></a>
         <a href="#/leaderboard" class="app-nav-item" data-nav="leaderboard" title="Leaderboard"><span class="app-nav-icon">🏆</span><span class="app-nav-label">Leaderboard</span></a>
-        <a href="#/analytics" class="app-nav-item" data-nav="analytics" title="Analytics"><span class="app-nav-icon">📊</span><span class="app-nav-label">Analytics</span></a>
+        <a href="#/analytics" class="app-nav-item" data-nav="analytics" title="Live test report"><span class="app-nav-icon">📊</span><span class="app-nav-label">Live Report</span></a>
         <a href="#/errors" class="app-nav-item" data-nav="errors" title="Error book"><span class="app-nav-icon">📖</span><span class="app-nav-label">Error book</span></a>
         <a href="#/profile" class="app-nav-item" data-nav="profile" title="Profile"><span class="app-nav-icon">👤</span><span class="app-nav-label">Profile</span></a>
         <a href="#/admin-test" class="app-nav-item" data-nav="admin-test" title="Admin" id="appNavAdmin" style="display:none;"><span class="app-nav-icon">🛠️</span><span class="app-nav-label">Admin</span></a>
@@ -41,11 +41,10 @@
 
   <nav class="app-bottom-nav" id="appBottomNav">
     <a href="#/dashboard" class="app-bottom-item" data-nav="dashboard"><span class="app-bottom-icon">🏠</span><span>Home</span></a>
-    <a href="#/tests" class="app-bottom-item" data-nav="tests"><span class="app-bottom-icon">📝</span><span>Tests</span></a>
+    <a href="#/tests" class="app-bottom-item" data-nav="tests"><span class="app-bottom-icon">🔴</span><span>Live</span></a>
     <a href="#/practice" class="app-bottom-item" data-nav="practice"><span class="app-bottom-icon">♾️</span><span>Practice</span></a>
-    <a href="#/leaderboard" class="app-bottom-item" data-nav="leaderboard"><span class="app-bottom-icon">🏆</span><span>Board</span></a>
-    <a href="#/analytics" class="app-bottom-item" data-nav="analytics"><span class="app-bottom-icon">📊</span><span>Stats</span></a>
-    <a href="#/errors" class="app-bottom-item" data-nav="errors"><span class="app-bottom-icon">📖</span><span>Error book</span></a>
+    <a href="#/analytics" class="app-bottom-item" data-nav="analytics"><span class="app-bottom-icon">📊</span><span>Report</span></a>
+    <a href="#/profile" class="app-bottom-item" data-nav="profile"><span class="app-bottom-icon">👤</span><span>Me</span></a>
   </nav>
 
 
@@ -392,17 +391,33 @@
   </section>
 
   <section id="view-practice" class="view">
-    <div class="page-body"><div class="container practice-container">
-      <div class="section-title"><div><span class="eyebrow-label">Practice without limits</span><h1>Infinite Practice</h1><p class="text-muted">Choose a focused collection or keep building your preparation with manual tests published by the admin team.</p></div></div>
-      <div class="practice-collection-grid">
-        <a class="practice-collection-card" href="#/practice-library?category=all"><span>📚</span><strong>All practice tests</strong><small>Browse every available test</small></a>
-        <a class="practice-collection-card" href="#/practice-library?category=pyq"><span>🧾</span><strong>PYQ practice</strong><small>Previous-year and shift papers</small></a>
-        <a class="practice-collection-card" href="#/practice-library?category=topic"><span>🎯</span><strong>Topic practice</strong><small>Build accuracy one topic at a time</small></a>
-        <a class="practice-collection-card" href="#/practice-library?category=full"><span>🚀</span><strong>Full syllabus</strong><small>Mixed revision under time pressure</small></a>
-        <a class="practice-collection-card" href="#/practice-library?category=custom"><span>🛠️</span><strong>Custom test</strong><small>Request a test that is not listed</small></a>
+    <div class="page-body"><div class="container practice-container pr-page">
+      <div class="pr-head">
+        <div><span class="eyebrow-label">♾️ Infinite Practice</span><h1>Practice</h1>
+        <p class="text-muted">Unlimited attempts. No rank, no leaderboard. Only you see your progress.</p></div>
+        <a class="btn btn-sm" href="#/practice-stats">My progress →</a>
       </div>
-      <section class="card"><div class="section-title"><div><h2>Available practice</h2><span class="text-muted">Practice attempts do not affect official rank.</span></div></div><div id="practiceCatalog"><div class="empty-state">Loading practice tests…</div></div></section>
+      <div id="practiceOverallStrip" class="pr-strip"></div>
+      <div class="pr-toolbar">
+        <input type="search" id="practiceSearch" class="pr-search" placeholder="Search practice tests" aria-label="Search practice tests">
+        <div class="pr-chips" id="practiceChips">
+          <button type="button" class="pr-chip active" data-cat="all">All</button>
+          <button type="button" class="pr-chip" data-cat="pyq">PYQ</button>
+          <button type="button" class="pr-chip" data-cat="topic">Topic</button>
+          <button type="button" class="pr-chip" data-cat="full">Full syllabus</button>
+        </div>
+      </div>
+      <div id="practiceCatalog" class="pr-grid"><div class="empty-state">Loading practice tests…</div></div>
+      <p class="pr-foot">Can't find what you need? <a href="#/practice-library?category=custom">Request a custom practice test</a></p>
     </div></div>
+  </section>
+
+  <section id="view-practice-report" class="view">
+    <div class="page-body"><div class="container practice-container pr-page" id="practiceReportBody"><div class="empty-state">Loading report…</div></div></div>
+  </section>
+
+  <section id="view-practice-stats" class="view">
+    <div class="page-body"><div class="container practice-container pr-page" id="practiceStatsBody"><div class="empty-state">Loading your progress…</div></div></div>
   </section>
 
   <section id="view-practice-library" class="view">
@@ -564,6 +579,16 @@
             <h2 style="font-size:16px;" id="detailsTitle">Test details</h2>
             <form id="testDetailsForm">
               <div class="field">
+                <label>Test type</label>
+                <div class="mode-picker" role="radiogroup" aria-label="Test type">
+                  <label class="mode-card"><input type="radio" name="testMode" value="live" checked>
+                    <span class="mode-card-body"><b>🔴 Live Test</b><small>Opens and closes at set times. Ranked, with leaderboard and result release.</small></span></label>
+                  <label class="mode-card"><input type="radio" name="testMode" value="practice">
+                    <span class="mode-card-body"><b>♾️ Infinite Practice</b><small>Always open. Unlimited attempts. Personal reports only. No rank or leaderboard.</small></span></label>
+                </div>
+                <div class="hint">Live and Practice tests are kept completely separate for students.</div>
+              </div>
+              <div class="field">
                 <label for="titleInput">Title</label>
                 <input type="text" id="titleInput" placeholder="e.g. JEE Main Full Mock Test 1" required>
               </div>
@@ -589,7 +614,7 @@
                     <option>Other</option>
                   </select>
                 </div>
-                <div class="field">
+                <div class="field" id="practiceCategoryField">
                   <label for="practiceCategoryInput">Practice category</label>
                   <select id="practiceCategoryInput">
                     <option value="all">All practice tests</option>
@@ -598,14 +623,14 @@
                     <option value="full">Full syllabus</option>
                     <option value="custom">Custom/requested test</option>
                   </select>
-                  <label class="check-label"><input type="checkbox" id="practiceOnlyInput"> Infinite Practice only</label>
+                  
                 </div>
                 <div class="field">
                   <label for="durationInput">Exam duration (minutes)</label>
                   <input type="number" id="durationInput" min="5" value="180" required>
                 </div>
               </div>
-              <div class="form-row">
+              <div class="form-row" id="scheduleRow">
                 <div class="field">
                   <label for="fromInput">Opens at</label>
                   <input type="datetime-local" id="fromInput" required>
@@ -619,6 +644,11 @@
               </div>
               <button type="submit" class="btn btn-primary" id="saveDetailsBtn">Create test</button>
             </form>
+          </div>
+
+          <div class="card" id="practiceAdminCard" style="display:none;">
+            <div class="section-title"><h2 style="font-size:16px;">Practice analytics</h2><span class="status-tag">♾️ Infinite Practice</span></div>
+            <div id="practiceAdminBody"><div class="empty-state">No data yet.</div></div>
           </div>
 
           <div class="card" id="shareCard" style="display:none;">
