@@ -329,19 +329,25 @@
           <p id="homeDateLine" class="text-muted"></p>
         </div>
 
+        <div id="homeStats" class="home-stats home-stats-2"></div>
+
+        <a href="#/practice" class="home-practice-hero">
+          <span class="home-practice-icon">♾️</span>
+          <span class="home-practice-text"><b>Infinite Practice</b><small>PYQs, chapter tests, JEE and NEET papers. Unlimited attempts, no rank.</small></span>
+          <span class="home-practice-go">Start →</span>
+        </a>
+
         <div id="homeSpotlight" class="home-spotlight">
           <div class="empty-state">Loading…</div>
         </div>
 
-        <div id="homeStats" class="home-stats"></div>
-
-        <section class="dashboard-test-section">
+                <section class="dashboard-test-section">
           <div class="dashboard-section-heading">
             <div>
               <span class="eyebrow-label">Exam workspace</span>
               <h2>Live tests</h2>
             </div>
-            <a href="#/tests" class="btn btn-sm">Past &amp; practice</a>
+            <a href="#/tests" class="btn btn-sm">All live tests</a>
           </div>
           <div id="homeTestsGrid" class="tests-card-grid">
             <div class="empty-state">Loading…</div>
@@ -392,21 +398,39 @@
 
   <section id="view-practice" class="view">
     <div class="page-body"><div class="container practice-container pr-page">
-      <div class="pr-head">
-        <div><span class="eyebrow-label">♾️ Infinite Practice</span><h1>Practice</h1>
-        <p class="text-muted">Unlimited attempts. No rank, no leaderboard. Only you see your progress.</p></div>
-        <a class="btn btn-sm" href="#/practice-stats">My progress →</a>
+      <div class="pr-hero">
+        <div class="pr-hero-text">
+          <span class="pr-hero-pill">♾️ Main feature</span>
+          <h1>Infinite Practice</h1>
+          <p>Practise as much as you want, whenever you want. No rank, no pressure. Every attempt makes you stronger.</p>
+        </div>
+        <a class="btn pr-hero-btn" href="#/analytics?tab=practice">My progress →</a>
       </div>
       <div id="practiceOverallStrip" class="pr-strip"></div>
-      <div class="pr-toolbar">
-        <input type="search" id="practiceSearch" class="pr-search" placeholder="Search practice tests" aria-label="Search practice tests">
-        <div class="pr-chips" id="practiceChips">
-          <button type="button" class="pr-chip active" data-cat="all">All</button>
-          <button type="button" class="pr-chip" data-cat="pyq">PYQ</button>
-          <button type="button" class="pr-chip" data-cat="topic">Topic</button>
-          <button type="button" class="pr-chip" data-cat="full">Full syllabus</button>
-        </div>
+
+      <h2 class="pr-h2">Choose what to practise</h2>
+      <div id="practiceCategories" class="pr-cats"></div>
+
+      <div class="pr-filters">
+        <input type="search" id="practiceSearch" class="pr-search" placeholder="Search tests" aria-label="Search tests">
+        <select id="practiceExam" class="pr-select" aria-label="Exam">
+          <option value="">All exams</option>
+          <option>JEE Main</option><option>JEE Advanced</option><option>NEET</option><option>Class 11th</option><option>Class 12th</option>
+        </select>
+        <select id="practiceSubject" class="pr-select" aria-label="Subject">
+          <option value="">All subjects</option>
+          <option>Physics</option><option>Chemistry</option><option>Mathematics</option><option>Biology</option>
+        </select>
+        <select id="practiceChapter" class="pr-select" aria-label="Chapter"><option value="">All chapters</option></select>
+        <select id="practiceSort" class="pr-select" aria-label="Sort">
+          <option value="new">Newest first</option>
+          <option value="fresh">Not attempted first</option>
+          <option value="most">Most practised</option>
+          <option value="weak">Lowest score first</option>
+          <option value="az">A to Z</option>
+        </select>
       </div>
+      <div class="pr-count" id="practiceCount"></div>
       <div id="practiceCatalog" class="pr-grid"><div class="empty-state">Loading practice tests…</div></div>
       <p class="pr-foot">Can't find what you need? <a href="#/practice-library?category=custom">Request a custom practice test</a></p>
     </div></div>
@@ -617,12 +641,23 @@
                 <div class="field" id="practiceCategoryField">
                   <label for="practiceCategoryInput">Practice category</label>
                   <select id="practiceCategoryInput">
-                    <option value="all">All practice tests</option>
+                    <option value="all">General practice</option>
                     <option value="pyq">PYQ practice</option>
-                    <option value="topic">Topic practice</option>
-                    <option value="full">Full syllabus</option>
-                    <option value="custom">Custom/requested test</option>
+                    <option value="topic">Topic / chapter-wise</option>
+                    <option value="subject">Subject-wise</option>
+                    <option value="jee_main_paper">JEE Main paper</option>
+                    <option value="jee_adv_paper">JEE Advanced paper</option>
+                    <option value="neet_paper">NEET paper</option>
+                    <option value="full">Full syllabus test</option>
+                    <option value="custom">Custom / requested test</option>
                   </select>
+                  <label for="practiceSubjectInput" style="margin-top:10px;display:block;">Subject (optional)</label>
+                  <select id="practiceSubjectInput">
+                    <option value="">Mixed / not set</option>
+                    <option>Physics</option><option>Chemistry</option><option>Mathematics</option><option>Biology</option>
+                  </select>
+                  <label for="practiceChapterInput" style="margin-top:10px;display:block;">Chapter (optional)</label>
+                  <select id="practiceChapterInput"><option value="">Not set</option></select>
                   
                 </div>
                 <div class="field">
@@ -1097,7 +1132,7 @@
     <div class="page-body">
       <div class="container">
         <div class="section-title analytics-heading">
-          <div><span class="eyebrow-label">Performance cockpit</span><h1>Analytics</h1><p class="text-muted">A clear view of your pace, accuracy, and progress.</p></div>
+          <div><span class="eyebrow-label">Performance cockpit</span><h1>Analytics</h1><p class="text-muted">Live tests and practice together, in one place.</p></div>
         </div>
         <div id="analyticsContent"><div class="empty-state">Loading analytics…</div></div>
         <div id="analysisHistory" class="analysis-history"></div>

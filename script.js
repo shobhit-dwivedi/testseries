@@ -963,7 +963,6 @@ async function loadPracticeAdminStats() {
    no rank and no leaderboard anywhere in this section.
    ========================================================================= */
 const practiceHub = { rows: [], cat: "all", q: "", bound: false };
-const PR_CAT_LABEL = { all: "Practice", pyq: "PYQ", topic: "Topic", full: "Full syllabus", custom: "Custom" };
 
 const prPct = (v) => (v == null || v === "" ? "—" : `${Math.round(Number(v))}%`);
 const prTone = (v) => (v == null ? "" : Number(v) >= 70 ? "pr-good" : Number(v) >= 40 ? "pr-mid" : "pr-bad");
@@ -984,20 +983,142 @@ function prStat(value, label) {
   return `<div class="pr-stat"><b>${value}</b><span>${escapeHtml(label)}</span></div>`;
 }
 
-function bindPracticeHub() {
-  if (practiceHub.bound) return;
-  practiceHub.bound = true;
-  document.getElementById("practiceSearch").addEventListener("input", (e) => {
-    practiceHub.q = e.target.value.trim().toLowerCase();
-    renderPracticeHubList();
+
+
+/* =========================================================================
+   ERROR BOOK POPUP — opens straight away from any report review.
+   Note, photo and voice note, then save.
+   ========================================================================= */
+async function openErrorBookModal(question, attemptId, onSaved) {
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) return;
+  const { data: existing } = await sb
+    .from("error_book_entries")
+    .select("id, category, comment, image_path, voice_note_path")
+    .eq("student_id", user.id).eq("attempt_id", attemptId).eq("question_id", question.id).maybeSingle();
+  const categories = document.getElementById("errorCategory")?.innerHTML || "<option>Other</option>";
+
+  document.getElementById("ebModal")?.remove();
+  const wrap = document.createElement("div");
+  wrap.id = "ebModal";
+  wrap.className = "eb-overlay";
+  wrap.innerHTML = `
+    <div class="eb-sheet" role="dialog" aria-modal="true" aria-labelledby="ebTitle">
+      <div class="eb-head"><h2 id="ebTitle">📒 Add to Error Book</h2><button type="button" class="eb-x" id="ebClose" aria-label="Close">✕</button></div>
+      <div class="eb-body">
+        <p class="eb-q">${escapeHtml(String(question.question_text || "").slice(0, 160))}${String(question.question_text || "").length > 160 ? "…" : ""}</p>
+        <label class="eb-field">Why did this go wrong?<select id="ebCategory">${categories}</select></label>
+        <label class="eb-field">My note<textarea id="ebNote" rows="3" placeholder="What will you do differently next time?"></textarea></label>
+        <div class="eb-field">Photo
+          <div class="eb-row"><label class="btn btn-sm eb-file">📷 Add photo<input type="file" id="ebImage" accept="image/*" hidden></label><span id="ebImageName" class="text-muted"></span></div>
+          <img id="ebImagePreview" class="eb-preview" hidden alt="Selected photo">
+        </div>
+        <div class="eb-field">Voice note
+          <div class="eb-row"><button type="button" class="btn btn-sm" id="ebRec">🎙️ Record</button><button type="button" class="btn btn-sm" id="ebStop" disabled>⏹ Stop</button><button type="button" class="btn btn-sm" id="ebDel" disabled>🗑 Delete</button></div>
+          <span id="ebVoiceStatus" class="text-muted"></span>
+          <audio id="ebAudio" controls hidden></audio>
+        </div>
+        <div id="ebMsg" class="eb-msg" aria-live="polite"></div>
+      </div>
+      <div class="eb-foot"><button type="button" class="btn" id="ebCancel">Cancel</button><button type="button" class="btn btn-primary" id="ebSave">Save to Error Book</button></div>
+    </div>`;
+  document.body.appendChild(wrap);
+  document.body.classList.add("eb-open");
+  const $ = (id) => wrap.querySelector("#" + id);
+  if (existing) {
+    $("ebCategory").value = existing.category;
+    $("ebNote").value = existing.comment || "";
+    $("ebVoiceStatus").textContent = existing.voice_note_path ? "A voice note is already saved. Record again to replace it." : "";
+  } else {
+    $("ebCategory").value = question.is_correct === false ? "Concept gap" : "Other";
+  }
+
+  let recorder = null, chunks = [], voiceBlob = null, imageFile = null;
+  const close = () => {
+    if (recorder?.state === "recording") recorder.stop();
+    if ($("ebAudio").src) URL.revokeObjectURL($("ebAudio").src);
+    wrap.remove();
+    document.body.classList.remove("eb-open");
+  };
+  $("ebClose").onclick = close;
+  $("ebCancel").onclick = close;
+  wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
+
+  $("ebImage").addEventListener("change", (e) => {
+    imageFile = e.target.files?.[0] || null;
+    $("ebImageName").textContent = imageFile ? imageFile.name : "";
+    const img = $("ebImagePreview");
+    if (imageFile) { img.src = URL.createObjectURL(imageFile); img.hidden = false; } else img.hidden = true;
   });
-  document.getElementById("practiceChips").addEventListener("click", (e) => {
-    const btn = e.target.closest(".pr-chip");
-    if (!btn) return;
-    practiceHub.cat = btn.dataset.cat;
-    document.querySelectorAll("#practiceChips .pr-chip").forEach((b) => b.classList.toggle("active", b === btn));
-    renderPracticeHubList();
+
+  $("ebRec").addEventListener("click", async () => {
+    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+      $("ebVoiceStatus").textContent = "Voice recording is not supported in this browser.";
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      chunks = [];
+      recorder = new MediaRecorder(stream);
+      recorder.addEventListener("dataavailable", (ev) => { if (ev.data.size) chunks.push(ev.data); });
+      recorder.addEventListener("stop", () => {
+        stream.getTracks().forEach((t) => t.stop());
+        voiceBlob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
+        $("ebAudio").src = URL.createObjectURL(voiceBlob);
+        $("ebAudio").hidden = false;
+        $("ebVoiceStatus").textContent = "Recorded. Press play to listen.";
+        $("ebRec").disabled = false; $("ebStop").disabled = true; $("ebDel").disabled = false;
+      });
+      recorder.start();
+      $("ebRec").disabled = true; $("ebStop").disabled = false;
+      $("ebVoiceStatus").textContent = "Recording… speak, then press Stop.";
+    } catch (err) {
+      $("ebVoiceStatus").textContent = err?.name === "NotAllowedError" ? "Microphone is blocked. Allow it in browser settings." : "Could not start recording.";
+    }
   });
+  $("ebStop").addEventListener("click", () => { if (recorder?.state === "recording") recorder.stop(); });
+  $("ebDel").addEventListener("click", () => {
+    voiceBlob = null; $("ebAudio").hidden = true; $("ebAudio").removeAttribute("src");
+    $("ebDel").disabled = true; $("ebVoiceStatus").textContent = "Recording deleted.";
+  });
+
+  $("ebSave").addEventListener("click", async () => {
+    const msg = $("ebMsg");
+    const btn = $("ebSave");
+    btn.disabled = true; btn.textContent = "Saving…"; msg.textContent = "";
+    const payload = {
+      student_id: user.id, attempt_id: attemptId, question_id: question.id,
+      question_text: question.question_text, category: $("ebCategory").value,
+      comment: $("ebNote").value.trim() || null, updated_at: new Date().toISOString(),
+    };
+    for (const [file, column, prefix, ext] of [[imageFile, "image_path", "images", ""], [voiceBlob, "voice_note_path", "voice-notes", ".webm"]]) {
+      if (!file) continue;
+      const name = file.name ? file.name.replace(/[^a-zA-Z0-9._-]/g, "_") : `voice-${Date.now()}${ext}`;
+      const path = `${user.id}/${prefix}/${Date.now()}-${name}`;
+      const { error: upErr } = await sb.storage.from("error-book").upload(path, file, { upsert: false, contentType: file.type || undefined });
+      if (upErr) {
+        msg.textContent = /bucket/i.test(upErr.message || "") ? "Attachment storage is not set up yet. Ask the admin to run migration.sql." : `Upload failed: ${friendlyError(upErr)}`;
+        btn.disabled = false; btn.textContent = "Save to Error Book";
+        return;
+      }
+      payload[column] = path;
+    }
+    const { error } = await sb.from("error_book_entries").upsert(payload, { onConflict: "student_id,attempt_id,question_id" });
+    if (error) {
+      msg.textContent = friendlyError(error);
+      btn.disabled = false; btn.textContent = "Save to Error Book";
+      return;
+    }
+    close();
+    toast("Saved to your Error Book", "success");
+    if (onSaved) onSaved();
+  });
+}
+
+function practiceAccuracyLabel(rows) {
+  const c = rows.reduce((n, r) => n + Number(r.correct_count || 0), 0);
+  const w = rows.reduce((n, r) => n + Number(r.wrong_count || 0), 0);
+  return c + w > 0 ? Math.round((c / (c + w)) * 100) + "%" : "—";
 }
 
 function renderPracticeOverallStrip(strip, data, error) {
@@ -1019,31 +1140,129 @@ function renderPracticeOverallStrip(strip, data, error) {
   </div>`;
 }
 
+
+
+/* =========================================================================
+   SYLLABUS CHAPTERS — JEE Main, JEE Advanced and NEET (grouped by subject)
+   ========================================================================= */
+const CHAPTER_GROUPS = [
+  { subject: "Physics", group: "Physics", chapters: ["Units and Measurements","Kinematics","Laws of Motion","Work, Energy and Power","Centre of Mass and Collisions","Rotational Motion","Gravitation","Mechanical Properties of Solids","Fluid Mechanics","Thermal Properties of Matter","Thermodynamics","Kinetic Theory of Gases","Oscillations (SHM)","Waves and Sound","Electrostatics","Capacitance","Current Electricity","Magnetic Effects of Current","Magnetism and Matter","Electromagnetic Induction","Alternating Current","Electromagnetic Waves","Ray Optics","Wave Optics","Dual Nature of Matter and Radiation","Atoms","Nuclei","Semiconductor Electronics","Communication Systems","Experimental Skills"] },
+  { subject: "Chemistry", group: "Chemistry: Physical", chapters: ["Some Basic Concepts (Mole Concept)","Atomic Structure","States of Matter","Chemical Thermodynamics","Chemical Equilibrium","Ionic Equilibrium","Redox Reactions","Solutions","Electrochemistry","Chemical Kinetics","Surface Chemistry","Solid State"] },
+  { subject: "Chemistry", group: "Chemistry: Inorganic", chapters: ["Periodic Table and Periodicity","Chemical Bonding and Molecular Structure","Hydrogen","s-Block Elements","p-Block Elements (Group 13 and 14)","p-Block Elements (Group 15 to 18)","d and f Block Elements","Coordination Compounds","Metallurgy","Qualitative Analysis","Environmental Chemistry"] },
+  { subject: "Chemistry", group: "Chemistry: Organic", chapters: ["General Organic Chemistry (GOC)","Isomerism","Hydrocarbons","Haloalkanes and Haloarenes","Alcohols, Phenols and Ethers","Aldehydes, Ketones and Carboxylic Acids","Amines","Biomolecules","Polymers","Chemistry in Everyday Life","Practical Organic Chemistry"] },
+  { subject: "Mathematics", group: "Mathematics", chapters: ["Sets, Relations and Functions","Complex Numbers","Quadratic Equations","Sequences and Series","Permutations and Combinations","Binomial Theorem","Matrices and Determinants","Trigonometry","Inverse Trigonometric Functions","Limits, Continuity and Differentiability","Application of Derivatives","Indefinite Integration","Definite Integration and Area","Differential Equations","Straight Lines","Circles","Parabola, Ellipse and Hyperbola","Vector Algebra","3D Geometry","Probability","Statistics","Mathematical Reasoning"] },
+  { subject: "Biology", group: "Biology: Botany (NEET)", chapters: ["The Living World","Biological Classification","Plant Kingdom","Morphology of Flowering Plants","Anatomy of Flowering Plants","Cell: The Unit of Life","Cell Cycle and Cell Division","Transport in Plants","Mineral Nutrition","Photosynthesis","Respiration in Plants","Plant Growth and Development","Sexual Reproduction in Flowering Plants","Principles of Inheritance and Variation","Molecular Basis of Inheritance","Microbes in Human Welfare","Biotechnology: Principles and Processes","Biotechnology and its Applications","Organisms and Populations","Ecosystem","Biodiversity and Conservation","Environmental Issues"] },
+  { subject: "Biology", group: "Biology: Zoology (NEET)", chapters: ["Animal Kingdom","Structural Organisation in Animals","Biomolecules (Biology)","Digestion and Absorption","Breathing and Exchange of Gases","Body Fluids and Circulation","Excretory Products and Elimination","Locomotion and Movement","Neural Control and Coordination","Chemical Coordination and Integration","Human Reproduction","Reproductive Health","Evolution","Human Health and Disease"] },
+];
+
+function fillChapterSelect(select, placeholder, subject) {
+  if (!select) return;
+  const keep = select.value;
+  const groups = CHAPTER_GROUPS.filter((g) => !subject || g.subject === subject);
+  select.innerHTML =
+    `<option value="">${escapeHtml(placeholder)}</option>` +
+    groups
+      .map((g) => `<optgroup label="${escapeHtml(g.group)}">${g.chapters.map((c) => `<option>${escapeHtml(c)}</option>`).join("")}</optgroup>`)
+      .join("");
+  if (keep && [...select.options].some((o) => o.value === keep)) select.value = keep;
+}
+
+const PR_CATS = [
+  { key: "pyq", icon: "📜", title: "PYQ Practice", sub: "Previous year questions" },
+  { key: "topic", icon: "🎯", title: "Chapter-wise", sub: "One chapter at a time" },
+  { key: "subject", icon: "📚", title: "Subject-wise", sub: "Physics, Chemistry, Maths, Biology" },
+  { key: "jee_main_paper", icon: "🧪", title: "JEE Main Papers", sub: "Full shift papers" },
+  { key: "jee_adv_paper", icon: "🚀", title: "JEE Advanced Papers", sub: "Paper 1 and Paper 2" },
+  { key: "neet_paper", icon: "🧬", title: "NEET Papers", sub: "Full NEET papers" },
+  { key: "full", icon: "🏁", title: "Full Syllabus Tests", sub: "Complete exam practice" },
+  { key: "custom", icon: "✨", title: "Custom Tests", sub: "Made on your request" },
+];
+const PR_CAT_LABEL = Object.fromEntries([["all", "Practice"], ...PR_CATS.map((c) => [c.key, c.title])]);
+Object.assign(practiceHub, { subject: "", chapter: "", exam: "", sort: "new" });
+
+function renderPracticeCategories() {
+  const box = document.getElementById("practiceCategories");
+  if (!box) return;
+  const count = (key) => practiceHub.rows.filter((r) => r.practice_category === key).length;
+  const card = (key, icon, title, sub, n) =>
+    `<button type="button" class="pr-cat ${practiceHub.cat === key ? "active" : ""}" data-cat="${key}"><span class="pr-cat-icon">${icon}</span><span class="pr-cat-text"><b>${escapeHtml(title)}</b><small>${escapeHtml(sub)}</small></span><span class="pr-cat-n">${n}</span></button>`;
+  box.innerHTML =
+    card("all", "♾️", "All Practice", "Every test in one list", practiceHub.rows.length) +
+    PR_CATS.map((c) => card(c.key, c.icon, c.title, c.sub, count(c.key))).join("");
+}
+
+function bindPracticeHub() {
+  if (practiceHub.bound) return;
+  practiceHub.bound = true;
+  fillChapterSelect(document.getElementById("practiceChapter"), "All chapters");
+  const on = (id, key, evt = "change") =>
+    document.getElementById(id).addEventListener(evt, (e) => {
+      practiceHub[key] = e.target.value.trim();
+      if (key === "q") practiceHub.q = practiceHub.q.toLowerCase();
+      if (key === "subject") {
+        practiceHub.chapter = "";
+        fillChapterSelect(document.getElementById("practiceChapter"), "All chapters", practiceHub.subject);
+        document.getElementById("practiceChapter").value = "";
+      }
+      renderPracticeHubList();
+    });
+  on("practiceSearch", "q", "input");
+  on("practiceExam", "exam");
+  on("practiceSubject", "subject");
+  on("practiceChapter", "chapter");
+  on("practiceSort", "sort");
+  document.getElementById("practiceCategories").addEventListener("click", (e) => {
+    const btn = e.target.closest(".pr-cat");
+    if (!btn) return;
+    practiceHub.cat = btn.dataset.cat;
+    renderPracticeCategories();
+    renderPracticeHubList();
+    document.getElementById("practiceCatalog").scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+}
+
 function renderPracticeHubList() {
   const target = document.getElementById("practiceCatalog");
-  const rows = practiceHub.rows.filter((r) => {
-    if (practiceHub.cat !== "all" && r.practice_category !== practiceHub.cat) return false;
-    if (practiceHub.q && !String(r.title || "").toLowerCase().includes(practiceHub.q)) return false;
+  const h = practiceHub;
+  const has = (arr, v) => (arr || []).some((x) => String(x).toLowerCase() === v.toLowerCase());
+  let rows = h.rows.filter((r) => {
+    if (h.cat !== "all" && r.practice_category !== h.cat) return false;
+    if (h.q && !String(r.title || "").toLowerCase().includes(h.q)) return false;
+    if (h.exam && r.exam !== h.exam) return false;
+    if (h.subject && r.practice_subject !== h.subject && !has(r.subjects, h.subject)) return false;
+    if (h.chapter && String(r.practice_chapter || "").toLowerCase() !== h.chapter.toLowerCase() && !has(r.chapters, h.chapter)) return false;
     return true;
   });
-  if (!practiceHub.rows.length) {
+  const sorters = {
+    new: (a, b) => new Date(b.created_at) - new Date(a.created_at),
+    fresh: (a, b) => (a.attempts ? 1 : 0) - (b.attempts ? 1 : 0) || new Date(b.created_at) - new Date(a.created_at),
+    most: (a, b) => b.attempts - a.attempts,
+    weak: (a, b) => (a.avg_pct ?? 101) - (b.avg_pct ?? 101),
+    az: (a, b) => String(a.title).localeCompare(String(b.title)),
+  };
+  rows = rows.sort(sorters[h.sort] || sorters.new);
+  const countEl = document.getElementById("practiceCount");
+  if (countEl) countEl.textContent = h.rows.length ? `${rows.length} test${rows.length === 1 ? "" : "s"}${h.cat !== "all" ? " in " + (PR_CAT_LABEL[h.cat] || "") : ""}` : "";
+  if (!h.rows.length) {
     target.innerHTML = `<div class="empty-state">No practice tests are published yet. Check back soon.</div>`;
     return;
   }
   if (!rows.length) {
-    target.innerHTML = `<div class="empty-state">No tests match. Try another filter.</div>`;
+    target.innerHTML = `<div class="empty-state">No tests match these filters.</div>`;
     return;
   }
   target.innerHTML = rows
     .map((r) => {
       const href = `#/exam?test=${encodeURIComponent(r.test_id)}&practice=1`;
       const cta = r.in_progress_attempt_id ? "Continue" : r.attempts ? "Practice again" : "Start";
+      const where = [r.practice_subject, r.practice_chapter].filter(Boolean).join(" · ");
       const progress = r.attempts
         ? `<div class="pr-mini"><span><b>${r.attempts}</b> attempt${r.attempts === 1 ? "" : "s"}</span><span>Best <b class="${prTone(r.best_pct)}">${prPct(r.best_pct)}</b></span><span>Avg <b class="${prTone(r.avg_pct)}">${prPct(r.avg_pct)}</b></span></div>`
         : `<div class="pr-mini pr-new">Not attempted yet</div>`;
       return `<article class="pr-card">
-        <div class="pr-card-tags"><span class="pr-tag">${escapeHtml(PR_CAT_LABEL[r.practice_category] || "Practice")}</span>${r.test_mode === "live" ? `<span class="pr-tag pr-tag-live">Past live test</span>` : ""}</div>
+        <div class="pr-card-tags"><span class="pr-tag">${escapeHtml(PR_CAT_LABEL[r.practice_category] || "Practice")}</span>${r.exam ? `<span class="pr-tag pr-tag-soft">${escapeHtml(r.exam)}</span>` : ""}${r.test_mode === "live" ? `<span class="pr-tag pr-tag-live">Past live test</span>` : ""}</div>
         <h3>${escapeHtml(r.title)}</h3>
+        ${where ? `<div class="pr-where">${escapeHtml(where)}</div>` : ""}
         <div class="pr-meta">${r.question_count} questions · ${r.duration_minutes} min · ${Number(r.total_marks)} marks</div>
         ${progress}
         <div class="pr-actions">
@@ -1058,10 +1277,10 @@ async function enterPracticeView() {
   const target = document.getElementById("practiceCatalog");
   if (!target) return;
   bindPracticeHub();
-  practiceHub.cat = "all";
-  practiceHub.q = "";
-  document.getElementById("practiceSearch").value = "";
-  document.querySelectorAll("#practiceChips .pr-chip").forEach((b) => b.classList.toggle("active", b.dataset.cat === "all"));
+  Object.assign(practiceHub, { cat: "all", q: "", subject: "", chapter: "", exam: "", sort: "new" });
+  ["practiceSearch", "practiceExam", "practiceSubject", "practiceChapter"].forEach((id) => (document.getElementById(id).value = ""));
+  fillChapterSelect(document.getElementById("practiceChapter"), "All chapters");
+  document.getElementById("practiceSort").value = "new";
   target.innerHTML = `<div class="empty-state">Loading practice tests…</div>`;
   const [hub, overall] = await Promise.all([sb.rpc("get_practice_hub"), sb.rpc("get_practice_overall_report")]);
   if (hub.error) {
@@ -1070,6 +1289,7 @@ async function enterPracticeView() {
   }
   practiceHub.rows = hub.data || [];
   renderPracticeOverallStrip(document.getElementById("practiceOverallStrip"), overall.data, overall.error);
+  renderPracticeCategories();
   renderPracticeHubList();
 }
 
@@ -1156,55 +1376,7 @@ async function enterPracticeReportView() {
 }
 
 async function enterPracticeStatsView() {
-  const body = document.getElementById("practiceStatsBody");
-  body.innerHTML = `<div class="empty-state">Loading your progress…</div>`;
-  const { data, error } = await sb.rpc("get_practice_overall_report");
-  if (error || !data) {
-    body.innerHTML = `<a class="practice-back-link" href="#/practice">← Practice</a><div class="error-box">${escapeHtml(prDeploymentHint(error))}</div>`;
-    return;
-  }
-  const t = data.totals || {};
-  if (!t.attempts) {
-    body.innerHTML = `<a class="practice-back-link" href="#/practice">← Practice</a><div class="pr-head"><div><h1>My practice progress</h1></div></div><div class="empty-state">Finish a practice test and your progress will show here.</div>`;
-    return;
-  }
-  // Fill the last 30 days (India time) so quiet days show as empty bars.
-  const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" });
-  const byDay = new Map((data.daily || []).map((d) => [String(d.day).slice(0, 10), Number(d.questions || 0)]));
-  const days = [];
-  for (let i = 29; i >= 0; i--) {
-    const key = fmt.format(new Date(Date.now() - i * 86400000));
-    days.push({ key, n: byDay.get(key) || 0 });
-  }
-  const maxN = Math.max(1, ...days.map((d) => d.n));
-  const activity = days
-    .map((d) => `<i title="${d.key}: ${d.n} questions" style="height:${d.n ? Math.max(8, (d.n / maxN) * 100) : 3}%" class="${d.n ? "on" : ""}"></i>`)
-    .join("");
-  const activeDays = days.filter((d) => d.n).length;
-  const subjects = (data.subjects || []).map((x) => prBar(x.subject, x.accuracy, `${x.correct} right · ${x.wrong} wrong`)).join("");
-  const chap = (list) => (list || []).map((x) => prBar(x.chapter, x.accuracy, x.subject)).join("");
-  body.innerHTML = `
-    <a class="practice-back-link" href="#/practice">← Practice</a>
-    <div class="pr-head"><div><span class="eyebrow-label">All practice tests together</span><h1>My practice progress</h1>
-      <p class="text-muted">Only you can see this. It never affects any rank.</p></div></div>
-    <div class="pr-stat-row">
-      ${prStat(t.attempts, "Attempts")}
-      ${prStat(t.questions_attempted, "Questions solved")}
-      ${prStat(prPct(t.accuracy), "Accuracy")}
-      ${prStat(`🔥 ${data.streak_days || 0}`, "Day streak")}
-    </div>
-    <div class="pr-stat-row">
-      ${prStat(t.tests_practiced, "Tests practised")}
-      ${prStat(prPct(t.avg_pct), "Average score")}
-      ${prStat(prPct(t.best_pct), "Best score")}
-      ${prStat(`${t.sec_per_question || 0}s`, "Time per question")}
-    </div>
-    <section class="card pr-section"><h2>Last 30 days</h2><div class="pr-activity">${activity}</div><p class="text-muted pr-note">You practised on ${activeDays} of the last 30 days.</p></section>
-    <div class="pr-two">
-      <section class="card pr-section"><h2>Subjects</h2>${subjects || `<p class="text-muted">No data.</p>`}</section>
-      <section class="card pr-section"><h2>Revise these first</h2>${chap(data.weak_chapters) || `<p class="text-muted">Answer at least 5 questions in a chapter to see it here.</p>`}</section>
-    </div>
-    <section class="card pr-section"><h2>Your strongest chapters</h2>${chap(data.strong_chapters) || `<p class="text-muted">Not enough data yet.</p>`}</section>`;
+  navigate("/analytics?tab=practice");
 }
 
 async function enterPracticeLibraryView() {
@@ -1869,39 +2041,14 @@ function renderHomeSpotlight(merged) {
 // the same math the Result page uses (total_score / sum of subject totals)
 // — computed via the same get_full_report RPC, capped to the most recent
 // 25 submitted attempts so this stays fast for very active students.
-async function renderHomeStats(merged, attempts) {
+async function renderHomeStats() {
   const el = document.getElementById("homeStats");
   if (!el) return;
-
-  // Re-attempts are personal practice: they never count towards totals.
-  // Closed tests the student never took are only practice material; they
-  // don't count towards "total tests".
-  const totalTests = merged.filter(
-    (t) => !t.is_practice && (t.windowState !== "past" || t.myAttempt),
-  ).length;
-  const mainAttempts = attempts.filter((a) => !a.is_practice);
-  const attemptedCount = new Set(mainAttempts.map((a) => a.test_id)).size;
-
-  const submittedAttempts = mainAttempts
-    .filter((a) => a.status !== "in_progress" && !a.disqualified_at)
-    .sort((a, b) => new Date(b.submitted_at) - new Date(a.submitted_at))
-    .slice(0, 25);
-
-  // Same source as the Analytics page (main attempts only, re-attempts and
-  // disqualified attempts excluded), so both screens always agree.
-  let avgScoreLabel = "—";
-  if (submittedAttempts.length) {
-    const { data: analytics } = await sb.rpc("get_student_analytics");
-    const completed = Number(analytics?.summary?.completed_tests || 0);
-    const avg = Number(analytics?.summary?.average_score);
-    if (completed > 0 && Number.isFinite(avg)) avgScoreLabel = `${avg.toFixed(1)}%`;
-  }
-
+  const { data } = await sb.rpc("get_combined_overview");
+  const t = data?.totals || {};
   el.innerHTML = `
-    <div class="home-stat-card"><div class="home-stat-val">${totalTests}</div><div class="home-stat-lbl">Total Tests</div></div>
-    <div class="home-stat-card"><div class="home-stat-val">${attemptedCount}</div><div class="home-stat-lbl">Attempted</div></div>
-    <div class="home-stat-card"><div class="home-stat-val">${avgScoreLabel}</div><div class="home-stat-lbl">Avg Score</div></div>
-  `;
+    <div class="home-stat-card"><div class="home-stat-val">${Number(t.questions_attempted || 0)}</div><div class="home-stat-lbl">Questions practised</div></div>
+    <div class="home-stat-card"><div class="home-stat-val">${Number(t.tests_attempted || 0)}</div><div class="home-stat-lbl">Tests attempted</div></div>`;
 }
 
 async function enterHomeView() {
@@ -1930,7 +2077,7 @@ async function enterHomeView() {
 
   renderHomeTests(merged);
   renderHomeSpotlight(merged);
-  await renderHomeStats(merged, attempts || []);
+  await renderHomeStats();
 }
 
 let adminTestsCache = [];
@@ -2179,6 +2326,7 @@ function updateQuestionPreview() {
 }
 
 function setupAdminTestListeners() {
+  fillChapterSelect(document.getElementById("practiceChapterInput"), "Not set");
   document.querySelectorAll('input[name="testMode"]').forEach((r) =>
     r.addEventListener("change", syncModeUI),
   );
@@ -2244,6 +2392,8 @@ function setupAdminTestListeners() {
           document.getElementById("instructionsInput").value.trim() || null,
         category: document.getElementById("categoryInput").value,
         practice_category: document.getElementById("practiceCategoryInput").value,
+        practice_subject: document.getElementById("practiceSubjectInput").value || null,
+        practice_chapter: document.getElementById("practiceChapterInput").value || null,
         test_mode: getTestMode(),
         practice_only: getTestMode() === "practice",
         duration_minutes: parseInt(
@@ -2530,6 +2680,9 @@ async function loadExistingTest(testId) {
   document.getElementById("instructionsInput").value = data.instructions || "";
   document.getElementById("categoryInput").value = data.category || "JEE Main";
   document.getElementById("practiceCategoryInput").value = data.practice_category || "all";
+  document.getElementById("practiceSubjectInput").value = data.practice_subject || "";
+  fillChapterSelect(document.getElementById("practiceChapterInput"), "Not set");
+  document.getElementById("practiceChapterInput").value = data.practice_chapter || "";
   setTestMode(data.test_mode || "live");
   document.getElementById("durationInput").value = data.duration_minutes;
   document.getElementById("fromInput").value = toLocalInputValue(
@@ -5751,18 +5904,11 @@ function renderReviewQuestionCard() {
       ? "—"
       : question.correct_integer_value;
   card.innerHTML = `<div class="review-question-heading"><div class="question-number-badge">${subjectDot(question.subject)}${escapeHtml(question.subject)} · Question ${reviewQuestions.indexOf(question) + 1}</div><span class="review-result-pill ${reviewState(question) === "correct" ? "review-result-correct" : reviewState(question) === "wrong" ? "review-result-wrong" : "review-result-skipped"}">${reviewState(question)} · ${question.marks_obtained || 0} marks</span></div>${questionImageHtml(question.image_url)}<div class="question-text">${escapeHtml(question.question_text)}</div>${question.question_type === "mcq" ? `<div class="option-list">${options}</div>` : `<div class="review-integer-answer"><span class="${question.is_correct ? "answer-good" : "answer-bad"}">Your answer: ${escapeHtml(String(integerAnswer))}</span><span class="answer-good">Correct answer: ${escapeHtml(String(correctInteger))}</span></div>`}${question.explanation ? `<div class="explanation-box mt-8">${escapeHtml(question.explanation)}</div>` : ""}<div class="review-error-action"><button type="button" class="btn btn-sm" id="addReviewErrorBtn">Add to Error Book</button><span id="reviewErrorStatus" class="text-muted"></span></div>`;
-  document.getElementById("addReviewErrorBtn").addEventListener("click", async () => {
-    const { data: { user } } = await sb.auth.getUser();
-    const { error } = await sb.from("error_book_entries").insert({
-      student_id: user?.id,
-      attempt_id: qs("attempt"),
-      question_id: question.id,
-      category: question.is_correct === false ? "Concept gap" : "Other",
-      question_text: question.question_text,
-      comment: null,
-    });
-    document.getElementById("reviewErrorStatus").textContent = error ? friendlyError(error) : "Saved privately.";
-  });
+  document.getElementById("addReviewErrorBtn").addEventListener("click", () =>
+    openErrorBookModal(question, qs("attempt"), () => {
+      document.getElementById("reviewErrorStatus").textContent = "Saved in your Error Book.";
+    }),
+  );
   document.getElementById("reviewProgressLabel").textContent =
     `${reviewQuestions.indexOf(question) + 1} of ${reviewQuestions.length}`;
   document.getElementById("reviewPreviousBtn").disabled = reviewIndex === 0;
@@ -5931,13 +6077,14 @@ async function enterResultView() {
       </p>
       ${
         isPractice
-          ? `<div class="practice-notice" style="margin-top:10px;">🔁 <strong>Practice re-attempt</strong> — for your own revision only. Not counted for rank, percentile, or the leaderboard.</div>`
+          ? `<div class="practice-notice" style="margin-top:10px;">♾️ <strong>Practice attempt</strong>. Only you can see this report.</div>`
           : ""
       }
       ${
         report.is_owner &&
         ["submitted", "auto_submitted"].includes(report.status)
           ? `<div class="report-actions-row">
+              ${isPractice ? `<a class="btn btn-sm btn-primary" href="#/exam?test=${encodeURIComponent(report.test_id)}&practice=1">♾️ Practice again</a><a class="btn btn-sm" href="#/practice-report?test=${encodeURIComponent(report.test_id)}">All my attempts</a>` : ""}
               ${
                 !isPractice &&
                 report.available_until &&
@@ -5978,11 +6125,11 @@ async function enterResultView() {
 
     <div class="stat-grid">
       <div class="stat-card"><div class="val">${report.total_score} / ${totalMax}</div><div class="lbl">Score</div></div>
-<div class="stat-card">
+${isPractice ? `<div class="stat-card"><div class="val">${practiceAccuracyLabel(subjectRows)}</div><div class="lbl">Accuracy</div></div>` : `<div class="stat-card">
   <div class="val">${isPractice ? "—" : isDisqualified ? "🚫" : declared ? `${medalFor(report.rank)}#${report.rank}` : "🔒"}</div>
   <div class="lbl">Rank${isDisqualified ? " · withheld" : ""}</div>
 </div>
-      <div class="stat-card"><div class="val">${isPractice ? "—" : isDisqualified ? "🚫" : declared ? report.percentile + "%" : "🔒"}</div><div class="lbl">Percentile${isDisqualified ? " · withheld" : ""}</div></div>
+      <div class="stat-card"><div class="val">${isPractice ? "—" : isDisqualified ? "🚫" : declared ? report.percentile + "%" : "🔒"}</div><div class="lbl">Percentile${isDisqualified ? " · withheld" : ""}</div></div>`}
       <div class="stat-card"><div class="val">${formatDurationPrecise(timeTakenSec)}</div><div class="lbl">Time taken</div></div>
     </div>
 
@@ -6024,7 +6171,7 @@ async function enterResultView() {
 
     ${report.is_owner || report.is_public_top3 ? `<div class="card report-review-cta"><div><span class="eyebrow-label">Detailed review</span><h2>Review every answer</h2><p class="text-muted">Open the exam-style review to see selected answers, correct answers, explanations, and question status.</p></div><a class="btn btn-primary" href="#/review?attempt=${encodeURIComponent(attemptIdParam)}">Review answers</a></div>` : ""}
 
-    <div class="card">
+    ${isPractice ? "" : `<div class="card">
       <h2 style="font-size:16px;">Top 10</h2>
       ${
         isPractice
@@ -6065,7 +6212,7 @@ async function enterResultView() {
       }
       `
       }
-    </div>
+    </div>`}
   `;
   renderMath(content);
   animateRadialProgress(content);
@@ -6573,17 +6720,128 @@ function renderAnalyticsCharts(data) {
     </div>`;
 }
 
+
+/* =========================================================================
+   ANALYTICS — one page for Live + Practice (tabs: Overall / Live / Practice)
+   ========================================================================= */
+function practiceStatsHtml(data) {
+  const t = data?.totals || {};
+  if (!t.attempts) {
+    return `<div class="card analytics-empty-card"><span class="analytics-empty-icon">♾️</span><h2>No practice yet</h2><p class="text-muted">Finish a practice test and your progress will show here.</p><a href="#/practice" class="btn btn-primary">Start practising</a></div>`;
+  }
+  const subjects = (data.subjects || []).map((x) => prBar(x.subject, x.accuracy, `${x.correct} right · ${x.wrong} wrong`)).join("");
+  const chap = (list) => (list || []).map((x) => prBar(x.chapter, x.accuracy, x.subject)).join("");
+  return `
+    <div class="pr-stat-row">
+      ${prStat(t.attempts, "Practice attempts")}
+      ${prStat(t.questions_attempted, "Questions solved")}
+      ${prStat(prPct(t.accuracy), "Accuracy")}
+      ${prStat(`🔥 ${data.streak_days || 0}`, "Day streak")}
+    </div>
+    <div class="pr-stat-row">
+      ${prStat(t.tests_practiced, "Tests practised")}
+      ${prStat(prPct(t.avg_pct), "Average score")}
+      ${prStat(prPct(t.best_pct), "Best score")}
+      ${prStat(`${t.sec_per_question || 0}s`, "Time per question")}
+    </div>
+    ${activityHtml(data.daily)}
+    <div class="pr-two">
+      <section class="card pr-section"><h2>Subjects</h2>${subjects || `<p class="text-muted">No data.</p>`}</section>
+      <section class="card pr-section"><h2>Revise these first</h2>${chap(data.weak_chapters) || `<p class="text-muted">Answer at least 5 questions in a chapter to see it here.</p>`}</section>
+    </div>
+    <section class="card pr-section"><h2>Your strongest chapters</h2>${chap(data.strong_chapters) || `<p class="text-muted">Not enough data yet.</p>`}</section>`;
+}
+
+function activityHtml(daily) {
+  const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" });
+  const byDay = new Map((daily || []).map((d) => [String(d.day).slice(0, 10), Number(d.questions || 0)]));
+  const days = [];
+  for (let i = 29; i >= 0; i--) {
+    const key = fmt.format(new Date(Date.now() - i * 86400000));
+    days.push({ key, n: byDay.get(key) || 0 });
+  }
+  const maxN = Math.max(1, ...days.map((d) => d.n));
+  const bars = days.map((d) => `<i title="${d.key}: ${d.n} questions" style="height:${d.n ? Math.max(8, (d.n / maxN) * 100) : 3}%" class="${d.n ? "on" : ""}"></i>`).join("");
+  const active = days.filter((d) => d.n).length;
+  return `<section class="card pr-section"><h2>Last 30 days</h2><div class="pr-activity">${bars}</div><p class="text-muted pr-note">You studied on ${active} of the last 30 days.</p></section>`;
+}
+
+function overallStatsHtml(o) {
+  const t = o?.totals || {};
+  if (!t.attempts) {
+    return `<div class="card analytics-empty-card"><span class="analytics-empty-icon">📊</span><h2>No analytics yet</h2><p class="text-muted">Attempt a live test or a practice test to see your analytics.</p><a href="#/practice" class="btn btn-primary">Start practising</a></div>`;
+  }
+  const hrs = Number(t.total_time_seconds || 0);
+  const timeLabel = hrs >= 3600 ? `${(hrs / 3600).toFixed(1)}h` : `${Math.round(hrs / 60)}m`;
+  const subjects = (o.subjects || []).map((x) => prBar(x.subject, x.accuracy, `${x.correct} right · ${x.wrong} wrong`)).join("");
+  const chap = (list) => (list || []).map((x) => prBar(x.chapter, x.accuracy, x.subject)).join("");
+  return `
+    <div class="pr-stat-row">
+      ${prStat(t.questions_attempted, "Questions attempted")}
+      ${prStat(t.tests_attempted, "Tests attempted")}
+      ${prStat(prPct(t.accuracy), "Accuracy")}
+      ${prStat(`🔥 ${o.streak_days || 0}`, "Day streak")}
+    </div>
+    <div class="pr-stat-row">
+      ${prStat(t.live_attempts, "Live attempts")}
+      ${prStat(t.practice_attempts, "Practice attempts")}
+      ${prStat(timeLabel, "Total study time")}
+      ${prStat(`${t.sec_per_question || 0}s`, "Time per question")}
+    </div>
+    <div class="pr-stat-row">
+      ${prStat(prPct(t.live_avg_pct), "Live avg score")}
+      ${prStat(prPct(t.practice_avg_pct), "Practice avg score")}
+      ${prStat(prPct(t.best_pct), "Best score")}
+      ${prStat(t.correct, "Correct answers")}
+    </div>
+    ${activityHtml(o.daily)}
+    <div class="pr-two">
+      <section class="card pr-section"><h2>Subjects (all tests)</h2>${subjects || `<p class="text-muted">No data.</p>`}</section>
+      <section class="card pr-section"><h2>Revise these first</h2>${chap(o.weak_chapters) || `<p class="text-muted">Answer at least 5 questions in a chapter to see it here.</p>`}</section>
+    </div>
+    <section class="card pr-section"><h2>Strongest chapters</h2>${chap(o.strong_chapters) || `<p class="text-muted">Not enough data yet.</p>`}</section>`;
+}
+
 async function enterAnalyticsView() {
   const content = document.getElementById("analyticsContent");
   const historyContainer = document.getElementById("analysisHistory");
   content.innerHTML = `<div class="empty-state">Loading analytics…</div>`;
   if (historyContainer) historyContainer.innerHTML = "";
-  const { data, error } = await sb.rpc("get_student_analytics");
-  if (error || !data) {
-    content.innerHTML = `<div class="error-box">${escapeHtml(friendlyError(error) || "Analytics could not be loaded.")}</div>`;
-    return;
-  }
-  await finishAnalyticsView(content, data);
+  const [live, overall, practice] = await Promise.all([
+    sb.rpc("get_student_analytics"),
+    sb.rpc("get_combined_overview"),
+    sb.rpc("get_practice_overall_report"),
+  ]);
+  const tab = ["overall", "live", "practice"].includes(qs("tab")) ? qs("tab") : "overall";
+  content.innerHTML = `
+    <div class="an-tabs" role="tablist">
+      <button type="button" class="an-tab" data-tab="overall">All</button>
+      <button type="button" class="an-tab" data-tab="live">🔴 Live tests</button>
+      <button type="button" class="an-tab" data-tab="practice">♾️ Practice</button>
+    </div>
+    <div id="anPane"></div>`;
+  const pane = document.getElementById("anPane");
+  const show = async (name) => {
+    content.querySelectorAll(".an-tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
+    if (historyContainer) historyContainer.style.display = name === "live" ? "" : "none";
+    if (name === "overall") {
+      pane.innerHTML = overall.error ? `<div class="error-box">${escapeHtml(prDeploymentHint(overall.error))}</div>` : overallStatsHtml(overall.data);
+    } else if (name === "practice") {
+      pane.innerHTML = practice.error ? `<div class="error-box">${escapeHtml(prDeploymentHint(practice.error))}</div>` : practiceStatsHtml(practice.data);
+    } else if (live.error || !live.data) {
+      pane.innerHTML = `<div class="error-box">${escapeHtml(friendlyError(live.error) || "Analytics could not be loaded.")}</div>`;
+    } else if (!Number(live.data.summary?.completed_tests || 0)) {
+      pane.innerHTML = `<div class="card analytics-empty-card"><span class="analytics-empty-icon">🔴</span><h2>No live tests yet</h2><p class="text-muted">Attempt a live test to see rank-based analytics here.</p><a href="#/tests" class="btn btn-primary">Browse live tests</a></div>`;
+    } else {
+      pane.innerHTML = renderAnalyticsCharts(live.data);
+      await renderAnalysisHistory();
+    }
+  };
+  content.querySelector(".an-tabs").addEventListener("click", (e) => {
+    const b = e.target.closest(".an-tab");
+    if (b) show(b.dataset.tab);
+  });
+  await show(tab);
 }
 
   function localDateTimeValue(date) {
@@ -7791,4 +8049,4 @@ function setupTheme() {
   applyTheme(savedTheme);
 
   setupThemeDrag();
-}
+}  
