@@ -27,24 +27,25 @@
       <a href="#/dashboard" class="app-sidebar-logo" title="JEE Hustlers"><span class="logo-mark">JH</span><span class="logo-text">JEE <span>HUSTLERS</span></span></a>
       <nav class="app-sidebar-nav">
         <a href="#/dashboard" class="app-nav-item" data-nav="dashboard" title="Home"><span class="app-nav-icon">🏠</span><span class="app-nav-label">Home</span></a>
-        <a href="#/tests" class="app-nav-item" data-nav="tests" title="Live Tests"><span class="app-nav-icon">🔴</span><span class="app-nav-label">Live Tests</span></a>
-        <a href="#/practice" class="app-nav-item" data-nav="practice" title="Infinite practice"><span class="app-nav-icon">♾️</span><span class="app-nav-label">Practice</span></a>
+        <a href="#/practice" class="app-nav-item nav-hl" data-nav="practice" title="Infinite Practice"><span class="app-nav-icon nav-inf" aria-hidden="true"><svg viewBox="0 0 48 24" width="28" height="15" focusable="false"><path class="inf-base" pathLength="100" d="M24 12C30 2 44 2 44 12C44 22 30 22 24 12C18 2 4 2 4 12C4 22 18 22 24 12Z"/><path class="inf-run" pathLength="100" d="M24 12C30 2 44 2 44 12C44 22 30 22 24 12C18 2 4 2 4 12C4 22 18 22 24 12Z"/></svg><i class="nav-star" aria-hidden="true">✦</i></span><span class="app-nav-label">Infinite Practice</span></a>
+        <a href="#/tests" class="app-nav-item" data-nav="tests" title="My Tests"><span class="app-nav-icon">📝</span><span class="app-nav-label">My Tests</span></a>
+        <a href="#/errors" class="app-nav-item nav-hl" data-nav="errors" title="Error Book"><span class="app-nav-icon nav-eb" aria-hidden="true">📖<i class="nav-star" aria-hidden="true">✦</i></span><span class="app-nav-label">Error Book</span></a>
+        <a href="#/analytics" class="app-nav-item" data-nav="analytics" title="Analytics"><span class="app-nav-icon">📊</span><span class="app-nav-label">Analytics</span></a>
         <a href="#/leaderboard" class="app-nav-item" data-nav="leaderboard" title="Leaderboard"><span class="app-nav-icon">🏆</span><span class="app-nav-label">Leaderboard</span></a>
-        <a href="#/analytics" class="app-nav-item" data-nav="analytics" title="Live test report"><span class="app-nav-icon">📊</span><span class="app-nav-label">Live Report</span></a>
-        <a href="#/errors" class="app-nav-item" data-nav="errors" title="Error book"><span class="app-nav-icon">📖</span><span class="app-nav-label">Error book</span></a>
         <a href="#/profile" class="app-nav-item" data-nav="profile" title="Profile"><span class="app-nav-icon">👤</span><span class="app-nav-label">Profile</span></a>
         <a href="#/admin-test" class="app-nav-item" data-nav="admin-test" title="Admin" id="appNavAdmin" style="display:none;"><span class="app-nav-icon">🛠️</span><span class="app-nav-label">Admin</span></a>
         <a href="#/bulk-import" class="app-nav-item" data-nav="bulk-import" title="Bulk import" id="appNavBulkImport" style="display:none;"><span class="app-nav-icon">📥</span><span class="app-nav-label">Bulk import</span></a>
+      <a href="#/admin-reports" class="app-nav-item" data-nav="admin-reports" title="Reported questions" id="appNavReports" style="display:none;"><span class="app-nav-icon">🚩</span><span class="app-nav-label">Reports</span></a>
       </nav>
     </div>
   </aside>
 
-  <nav class="app-bottom-nav" id="appBottomNav">
+  <nav class="app-bottom-nav" id="appBottomNav" aria-label="Main">
     <a href="#/dashboard" class="app-bottom-item" data-nav="dashboard"><span class="app-bottom-icon">🏠</span><span>Home</span></a>
-    <a href="#/tests" class="app-bottom-item" data-nav="tests"><span class="app-bottom-icon">🔴</span><span>Live</span></a>
-    <a href="#/practice" class="app-bottom-item" data-nav="practice"><span class="app-bottom-icon">♾️</span><span>Practice</span></a>
-    <a href="#/analytics" class="app-bottom-item" data-nav="analytics"><span class="app-bottom-icon">📊</span><span>Report</span></a>
-    <a href="#/errors" class="app-bottom-item" data-nav="errors"><span class="app-bottom-icon">📖</span><span>Error book</span></a>
+    <a href="#/tests" class="app-bottom-item" data-nav="tests"><span class="app-bottom-icon">📝</span><span>My Tests</span></a>
+    <a href="#/practice" class="app-bottom-item nav-hl" data-nav="practice"><span class="app-bottom-icon nav-inf" aria-hidden="true"><svg viewBox="0 0 48 24" width="28" height="15" focusable="false"><path class="inf-base" pathLength="100" d="M24 12C30 2 44 2 44 12C44 22 30 22 24 12C18 2 4 2 4 12C4 22 18 22 24 12Z"/><path class="inf-run" pathLength="100" d="M24 12C30 2 44 2 44 12C44 22 30 22 24 12C18 2 4 2 4 12C4 22 18 22 24 12Z"/></svg><i class="nav-star" aria-hidden="true">✦</i></span><span>Practice</span></a>
+    <a href="#/errors" class="app-bottom-item nav-hl" data-nav="errors"><span class="app-bottom-icon nav-eb" aria-hidden="true">📖<i class="nav-star" aria-hidden="true">✦</i></span><span>Errors</span></a>
+    <a href="#/analytics" class="app-bottom-item" data-nav="analytics"><span class="app-bottom-icon">📊</span><span>Stats</span></a>
   </nav>
 
 
@@ -58,6 +59,7 @@
       </div>
     </div>
     <div class="topbar-right">
+      <a href="#/leaderboard" class="topbar-icon-btn topbar-trophy" aria-label="Leaderboard" title="Leaderboard">🏆</a>
       <button type="button" class="topbar-pill" id="notifPill" hidden><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span class="topbar-pill-label"></span></button>
       <div class="topbar-user">
         <button type="button" class="topbar-user-btn" id="topbarUserBtn" aria-haspopup="menu" aria-expanded="false">
@@ -67,6 +69,7 @@
         </button>
         <div class="topbar-menu" id="topbarMenu" role="menu" hidden>
           <a href="#/profile" role="menuitem">👤 My profile</a>
+          <a href="#/leaderboard" role="menuitem">🏆 Leaderboard</a>
           <button type="button" class="js-logout" role="menuitem">⎋ Log out</button>
         </div>
       </div>
@@ -331,11 +334,13 @@
 
         <div id="homeStats" class="home-stats home-stats-2"></div>
 
-        <a href="#/practice" class="home-practice-hero">
-          <span class="home-practice-icon">♾️</span>
-          <span class="home-practice-text"><b>Infinite Practice</b><small>PYQs, chapter tests, JEE and NEET papers. Unlimited attempts, no rank.</small></span>
-          <span class="home-practice-go">Start →</span>
-        </a>
+        <section class="home-practice-hero" aria-label="Infinite Practice">
+          <a href="#/practice" class="hph-main">
+            <span class="hph-icon nav-inf" aria-hidden="true"><svg viewBox="0 0 48 24" width="44" height="22" focusable="false"><path class="inf-base" pathLength="100" d="M24 12C30 2 44 2 44 12C44 22 30 22 24 12C18 2 4 2 4 12C4 22 18 22 24 12Z"/><path class="inf-run" pathLength="100" d="M24 12C30 2 44 2 44 12C44 22 30 22 24 12C18 2 4 2 4 12C4 22 18 22 24 12Z"/></svg><i class="nav-star" aria-hidden="true">✦</i></span>
+            <span class="hph-text"><b>Infinite Practice</b><small>PYQs, chapter tests, JEE and NEET papers. Unlimited attempts, no rank.</small></span>
+            <span class="hph-go">Start practising →</span>
+          </a>
+        </section>
 
         <div id="homeSpotlight" class="home-spotlight">
           <div class="empty-state">Loading…</div>
@@ -408,21 +413,30 @@
       </div>
       <div id="practiceOverallStrip" class="pr-strip"></div>
 
+      <div id="practiceUpdates"></div>
       <h2 class="pr-h2">Choose what to practise</h2>
       <div id="practiceCategories" class="pr-cats"></div>
+      <p class="pr-foot">Can't find what you need? <a href="#/practice-library?category=custom">Request a custom practice test</a></p>
+    </div></div>
+  </section>
 
+  <section id="view-practice-category" class="view">
+    <div class="page-body"><div class="container practice-container pr-page">
+      <a class="practice-back-link" href="#/practice">← Practice</a>
+      <div class="pr-head"><div><span class="eyebrow-label">♾️ Infinite Practice</span><h1 id="pcTitle">Practice tests</h1><p class="text-muted" id="pcSub"></p></div></div>
+      <div id="pcExtra"></div>
       <div class="pr-filters">
-        <input type="search" id="practiceSearch" class="pr-search" placeholder="Search tests" aria-label="Search tests">
-        <select id="practiceExam" class="pr-select" aria-label="Exam">
+        <input type="search" id="pcSearch" class="pr-search" placeholder="Search tests" aria-label="Search tests">
+        <select id="pcExam" class="pr-select" aria-label="Exam">
           <option value="">All exams</option>
           <option>JEE Main</option><option>JEE Advanced</option><option>NEET</option><option>Class 11th</option><option>Class 12th</option>
         </select>
-        <select id="practiceSubject" class="pr-select" aria-label="Subject">
+        <select id="pcSubject" class="pr-select" aria-label="Subject">
           <option value="">All subjects</option>
           <option>Physics</option><option>Chemistry</option><option>Mathematics</option><option>Biology</option>
         </select>
-        <select id="practiceChapter" class="pr-select" aria-label="Chapter"><option value="">All chapters</option></select>
-        <select id="practiceSort" class="pr-select" aria-label="Sort">
+        <select id="pcChapter" class="pr-select" aria-label="Chapter"><option value="">All chapters</option></select>
+        <select id="pcSort" class="pr-select" aria-label="Sort">
           <option value="new">Newest first</option>
           <option value="fresh">Not attempted first</option>
           <option value="most">Most practised</option>
@@ -430,9 +444,8 @@
           <option value="az">A to Z</option>
         </select>
       </div>
-      <div class="pr-count" id="practiceCount"></div>
-      <div id="practiceCatalog" class="pr-grid"><div class="empty-state">Loading practice tests…</div></div>
-      <p class="pr-foot">Can't find what you need? <a href="#/practice-library?category=custom">Request a custom practice test</a></p>
+      <div class="pr-count" id="pcCount"></div>
+      <div id="pcList" class="pr-grid"><div class="empty-state">Loading…</div></div>
     </div></div>
   </section>
 
@@ -456,11 +469,15 @@
   <section id="view-errors" class="view">
     <div class="page-body"><div class="container practice-container">
       <div class="section-title"><div><span class="eyebrow-label">Private revision log</span><h1>Error Book</h1><p class="text-muted">Record what went wrong so your next revision is intentional.</p></div></div>
-      <form id="errorBookForm" class="card request-form" style="margin-bottom:16px">
+      <button type="button" class="eb-add-btn" id="ebAddManual">➕ Add a mistake manually</button>
+      <div hidden>
+      <form id="errorBookForm" class="card request-form" style="margin:10px 0 16px">
         <div class="section-title"><div><h2>Add a mistake</h2><span class="text-muted">Only you can view these notes and attachments.</span></div></div>
         <div class="form-grid form-grid-2">
           <label>Question or reminder<textarea id="errorQuestionText" rows="3" required placeholder="Paste the question or describe the mistake"></textarea></label>
           <label>Why did this happen?<select id="errorCategory"><option>Silly mistake</option><option>Concept gap</option><option>Formula forgotten</option><option>Calculation mistake</option><option>Misread question</option><option>Time pressure</option><option>Wrong approach</option><option>Guessing</option><option>Did not know the concept</option><option>Other</option></select></label>
+          <label>Subject<select id="errorSubject"><option value="">Not sure</option><option>Physics</option><option>Chemistry</option><option>Mathematics</option><option>Biology</option></select></label>
+          <label>Chapter<select id="errorChapter"><option value="">Not sure / not listed</option></select></label>
           <label>Your note<textarea id="errorComment" rows="3" placeholder="What will you do differently next time?"></textarea></label>
           <div class="form-field-stack">
             <label>Image (gallery, camera, or file)<input id="errorImage" type="file" accept="image/*" capture="environment"></label>
@@ -473,8 +490,16 @@
           </div>
         </div>
         <div class="form-actions"><button class="btn btn-primary" type="submit">Save to Error Book</button><span id="errorBookFormMessage" class="form-message"></span></div>
-      </form>
+      </form></div>
       <div id="errorBookSummary" class="home-stats"></div>
+      <div class="eb-toolbar">
+        <div class="eb-subject-tabs" id="ebSubjectTabs" role="tablist"></div>
+        <div class="eb-filters">
+          <input type="search" id="ebSearch" class="pr-search" placeholder="Search your mistakes" aria-label="Search mistakes">
+          <select id="ebStatus" class="pr-select" aria-label="Status"><option value="all">All</option><option value="open">Needs review</option><option value="done">Resolved</option></select>
+          <select id="ebCategoryFilter" class="pr-select" aria-label="Reason"><option value="">All reasons</option></select>
+        </div>
+      </div>
       <div id="errorBookList" class="error-book-list"><div class="empty-state">Loading error book…</div></div>
     </div></div>
   </section>
@@ -498,9 +523,10 @@
         <section id="studentSection" class="mt-16">
           <div class="section-title tests-page-head">
             <div>
-              <h2>Past &amp; practice tests</h2>
-              <p class="text-muted tests-page-sub">Every test you've attempted, in order — plus closed tests you can practise. Practice never has a rank or percentile.</p>
+              <h2>My tests</h2>
+              <p class="text-muted tests-page-sub">Live tests, Infinite Practice and live re-attempts. Each is kept separate.</p>
             </div>
+            <a class="btn btn-sm" href="#/leaderboard">🏆 Leaderboard</a>
           </div>
           <div class="tests-toolbar past-toolbar">
             <div class="tests-search">
@@ -509,8 +535,9 @@
             </div>
             <div class="segmented tests-status-tabs" id="testsStatusTabs">
               <button type="button" class="active" data-filter="all">All</button>
-              <button type="button" data-filter="main">Main test</button>
-              <button type="button" data-filter="practice">Practice</button>
+              <button type="button" data-filter="main">🔴 Live</button>
+              <button type="button" data-filter="infinite">♾️ Infinite</button>
+              <button type="button" data-filter="reattempt">🔁 Re-attempts</button>
               <button type="button" data-filter="new">Not attempted</button>
             </div>
             <label class="past-sort">
@@ -878,6 +905,18 @@
   <!-- =====================================================================
      BULK QUESTION IMPORT VIEW — admin-only, parse/validate before insert
      ===================================================================== -->
+  <section id="view-admin-reports" class="view">
+    <div class="page-body"><div class="container admin-page-container">
+      <div id="arNotAdmin" class="error-box" style="display:none;">Only admin accounts can see reported questions.</div>
+      <div id="arContent">
+        <div class="pr-head"><div><span class="eyebrow-label">Admin</span><h1>Reported questions</h1>
+          <p class="text-muted">Questions students flagged in any test, Live or Infinite Practice.</p></div></div>
+        <div class="an-tabs"><button type="button" class="an-tab active" data-ar="open">Open</button><button type="button" class="an-tab" data-ar="resolved">Resolved</button></div>
+        <div id="arList"><div class="empty-state">Loading…</div></div>
+      </div>
+    </div></div>
+  </section>
+
   <section id="view-bulk-import" class="view">
 
     <div class="page-body">
@@ -891,6 +930,26 @@
             </div>
             <span class="badge badge-brand">Admin tool</span>
           </div>
+
+          <details class="card bulk-guide" open>
+            <summary><strong>📋 Question format required before importing</strong></summary>
+            <div class="bulk-guide-body">
+              <p>Paste questions as numbered blocks. Each block starts with <code>[QUESTION 1]</code> on its own line, followed by labelled fields (a label ends with a colon; text can continue on the next lines).</p>
+              <table class="bulk-guide-table">
+                <thead><tr><th>Field</th><th>Required?</th><th>Rule</th></tr></thead>
+                <tbody>
+                  <tr><td><code>QUESTION:</code></td><td>Always</td><td>Cannot be empty. LaTeX works: <code>$x^2$</code> or <code>$$\frac{a}{b}$$</code></td></tr>
+                  <tr><td><code>SUBJECT:</code></td><td>Always</td><td>Cannot be empty. Use Physics, Chemistry, Mathematics or Biology so reports and the Error Book sort correctly</td></tr>
+                  <tr><td><code>TYPE:</code></td><td>Always</td><td><code>MCQ</code> or <code>Integer</code> (also accepts <code>Numerical</code>). Defaults to MCQ if left out</td></tr>
+                  <tr><td><code>OPTION_A:</code> to <code>OPTION_D:</code></td><td>MCQ only</td><td>All four options must be filled</td></tr>
+                  <tr><td><code>ANSWER:</code></td><td>Always</td><td>MCQ: exactly <code>A</code>, <code>B</code>, <code>C</code> or <code>D</code>. Integer: a number such as <code>5</code> or <code>-2.5</code></td></tr>
+                  <tr><td><code>CHAPTER:</code></td><td>Recommended</td><td>Use the chapter name from the syllabus list. It powers chapter-wise practice, weak-chapter reports and Error Book sorting</td></tr>
+                  <tr><td><code>EXPLANATION:</code></td><td>Optional</td><td>Shown to students in the answer review</td></tr>
+                </tbody>
+              </table>
+              <p class="helper-text">Questions with a problem are highlighted and skipped until you fix them. The destination can be a Live test or an Infinite Practice test; imported questions are used in every future attempt of that test.</p>
+            </div>
+          </details>
 
           <div class="card bulk-import-input-card">
             <div class="form-row">

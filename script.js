@@ -218,6 +218,8 @@ const VIEWS = [
   "tests",
   "practice",
   "practice-library",
+  "practice-category",
+  "admin-reports",
   "practice-report",
   "practice-stats",
   "test-details",
@@ -240,6 +242,8 @@ const APP_SHELL_VIEWS = new Set([
   "tests",
   "practice",
   "practice-library",
+  "practice-category",
+  "admin-reports",
   "practice-report",
   "practice-stats",
   "test-details",
@@ -344,6 +348,14 @@ async function router() {
     case "/practice":
       showView("practice");
       await enterPracticeView();
+      break;
+    case "/admin-reports":
+      showView("admin-reports");
+      await enterAdminReportsView();
+      break;
+    case "/practice-list":
+      showView("practice-category");
+      await enterPracticeCategoryView();
       break;
     case "/practice-report":
       showView("practice-report");
@@ -506,7 +518,9 @@ const NOTIFICATION_BLOCKED_HELP =
    ========================================================================= */
 const PAGE_TITLES = {
   dashboard: "Home",
-  tests: "Live Tests",
+  tests: "My Tests",
+  "practice-category": "Practice tests",
+  "admin-reports": "Reported questions",
   practice: "Practice",
   "practice-report": "Practice report",
   "practice-stats": "My practice progress",
@@ -596,7 +610,7 @@ async function syncAppShell(viewName, signedIn) {
   if (!show) return;
 
   document.querySelectorAll(".app-nav-item, .app-bottom-item").forEach((el) => {
-    el.classList.toggle("active", el.dataset.nav === (viewName === "practice-report" || viewName === "practice-stats" || viewName === "practice-library" ? "practice" : viewName));
+    el.classList.toggle("active", el.dataset.nav === (viewName === "practice-report" || viewName === "practice-stats" || viewName === "practice-category" || viewName === "practice-library" ? "practice" : viewName));
   });
   document.getElementById("topbarTitle").textContent =
     PAGE_TITLES[viewName] || "JEE Hustlers";
@@ -613,6 +627,8 @@ async function syncAppShell(viewName, signedIn) {
   document.getElementById("topbarEyebrow").textContent = role;
   document.getElementById("appNavAdmin").style.display = isAdmin ? "" : "none";
   document.getElementById("appNavBulkImport").style.display = isAdmin ? "" : "none";
+  const reportsNav = document.getElementById("appNavReports");
+  if (reportsNav) reportsNav.style.display = isAdmin ? "" : "none";
 }
 
 window.addEventListener("hashchange", router);
@@ -989,13 +1005,384 @@ function prStat(value, label) {
    ERROR BOOK POPUP — opens straight away from any report review.
    Note, photo and voice note, then save.
    ========================================================================= */
-async function openErrorBookModal(question, attemptId, onSaved) {
+/* =========================================================================
+   ERROR BOOK v2 — sorted by subject, LaTeX, filters, view + edit popup
+   ========================================================================= */
+const EB_SUBJECTS = ["Physics", "Chemistry", "Maths", "Biology", "Other"];
+const errorBookState = { rows: [], subject: "all", status: "all", q: "", cat: "", bound: false };
+
+function normalizeSubject(value) {
+  const v = String(value || "").toLowerCase();
+  if (/phy/.test(v)) return "Physics";
+  if (/chem/.test(v)) return "Chemistry";
+  if (/math/.test(v)) return "Maths";
+  if (/bio|botan|zoo/.test(v)) return "Biology";
+  return "Other";
+}
+
+function bindErrorBookToolbar() {
+  if (errorBookState.bound) return;
+  errorBookState.bound = true;
+  const cats = document.getElementById("errorCategory");
+  const catFilter = document.getElementById("ebCategoryFilter");
+  if (cats && catFilter) catFilter.innerHTML = `<option value="">All reasons</option>` + [...cats.options].map((o) => `<option>${escapeHtml(o.value)}</option>`).join("");
+  document.getElementById("ebAddManual").addEventListener("click", () =>
+    openErrorBookModal({ question_text: "" }, null, () => enterErrorBookView()),
+  );
+  document.getElementById("ebSearch").addEventListener("input", (e) => { errorBookState.q = e.target.value.trim().toLowerCase(); renderErrorBook(); });
+  document.getElementById("ebStatus").addEventListener("change", (e) => { errorBookState.status = e.target.value; renderErrorBook(); });
+  catFilter.addEventListener("change", (e) => { errorBookState.cat = e.target.value; renderErrorBook(); });
+  document.getElementById("ebSubjectTabs").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-subj]");
+    if (!b) return;
+    errorBookState.subject = b.dataset.subj;
+    renderErrorBook();
+  });
+  document.getElementById("errorBookList").addEventListener("click", async (e) => {
+    const btn = e.target.closest("[data-eb]");
+    if (!btn) return;
+    const entry = errorBookState.rows.find((r) => r.id === btn.dataset.id);
+    if (!entry) return;
+    const act = btn.dataset.eb;
+    if (act === "toggle") {
+      await toggleErrorItem(btn, entry);
+      return;
+    }
+    if (act === "open") {
+      openErrorBookModal({ id: entry.question_id, question_text: entry.question_text, subject: entry.subject, chapter: entry.chapter }, entry.attempt_id, () => enterErrorBookView(), entry);
+    } else if (act === "resolve") {
+      await sb.from("error_book_entries").update({ resolved: !entry.resolved, updated_at: new Date().toISOString() }).eq("id", entry.id);
+      await enterErrorBookView();
+    } else if (act === "delete") {
+      if (!confirm("Delete this Error Book entry?")) return;
+      const { error } = await sb.from("error_book_entries").delete().eq("id", entry.id);
+      if (error) toast(friendlyError(error), "error");
+      else await enterErrorBookView();
+    }
+  });
+}
+
+function renderErrorBook() {
+  const st = errorBookState;
+  const list = document.getElementById("errorBookList");
+  const summary = document.getElementById("errorBookSummary");
+  const tabs = document.getElementById("ebSubjectTabs");
+  const rows = st.rows.map((r) => ({ ...r, _subj: normalizeSubject(r.subject) }));
+  const open = rows.filter((r) => !r.resolved).length;
+  summary.innerHTML = `
+    <div class="home-stat-card"><div class="home-stat-val">${rows.length}</div><div class="home-stat-lbl">Saved mistakes</div></div>
+    <div class="home-stat-card"><div class="home-stat-val">${open}</div><div class="home-stat-lbl">Need review</div></div>
+    <div class="home-stat-card"><div class="home-stat-val">${rows.length - open}</div><div class="home-stat-lbl">Resolved</div></div>`;
+  const countBy = (k) => rows.filter((r) => r._subj === k).length;
+  tabs.innerHTML =
+    `<button type="button" class="eb-subj-tab ${st.subject === "all" ? "active" : ""}" data-subj="all">All <i>${rows.length}</i></button>` +
+    EB_SUBJECTS.filter((k) => k !== "Other" || countBy(k)).map((k) => `<button type="button" class="eb-subj-tab ${st.subject === k ? "active" : ""}" data-subj="${k}">${k} <i>${countBy(k)}</i></button>`).join("");
+
+  const shown = rows.filter((r) => {
+    if (st.subject !== "all" && r._subj !== st.subject) return false;
+    if (st.status === "open" && r.resolved) return false;
+    if (st.status === "done" && !r.resolved) return false;
+    if (st.cat && r.category !== st.cat) return false;
+    if (st.q && !`${r.question_text || ""} ${r.comment || ""} ${r.chapter || ""}`.toLowerCase().includes(st.q)) return false;
+    return true;
+  });
+  if (!rows.length) {
+    list.innerHTML = `<div class="empty-state">Your Error Book is empty.<br><small>Open any test report, choose a question and tap "Add to Error Book".</small></div>`;
+    return;
+  }
+  if (!shown.length) {
+    list.innerHTML = `<div class="empty-state">No mistakes match this view.</div>`;
+    return;
+  }
+  const card = (r) => `<article class="eb-item ${r.resolved ? "is-resolved" : ""}">
+      <button type="button" class="eb-item-head" data-eb="toggle" data-id="${r.id}" aria-expanded="false">
+        <span class="eb-dot subj-${r._subj.toLowerCase()}"></span>
+        <span class="eb-item-main"><span class="eb-item-title">${escapeHtml(r.chapter || "Topic not set")}</span>
+          <span class="eb-item-meta"><span class="eb-subj subj-${r._subj.toLowerCase()}">${r._subj}</span><em>${escapeHtml(r.category)}</em>${r.resolved ? "<i>✔ Resolved</i>" : ""}</span></span>
+        <span class="eb-chev" aria-hidden="true">▾</span>
+      </button>
+      <div class="eb-item-body" hidden></div>
+    </article>`;
+  list.innerHTML =
+    st.subject === "all"
+      ? EB_SUBJECTS.map((k) => {
+          const g = shown.filter((r) => r._subj === k);
+          return g.length ? `<h3 class="eb-group">${k} <small>${g.length}</small></h3>${g.map(card).join("")}` : "";
+        }).join("")
+      : shown.map(card).join("");
+  renderMath(list);
+}
+
+/* ---- subject + chapter pickers shared by the Error Book popup and manual form ---- */
+function canonicalSubject(value) {
+  const v = String(value || "").toLowerCase();
+  if (/phy/.test(v)) return "Physics";
+  if (/chem/.test(v)) return "Chemistry";
+  if (/math/.test(v)) return "Mathematics";
+  if (/bio|botan|zoo/.test(v)) return "Biology";
+  return "";
+}
+
+function initSubjectChapter(subjectEl, chapterEl, subject = "", chapter = "") {
+  if (typeof subjectEl === "string") subjectEl = document.getElementById(subjectEl);
+  if (typeof chapterEl === "string") chapterEl = document.getElementById(chapterEl);
+  if (!subjectEl || !chapterEl) return;
+  const refill = (keep) => {
+    fillChapterSelect(chapterEl, "Not sure / not listed", subjectEl.value || "");
+    if (keep) {
+      if (![...chapterEl.options].some((o) => o.value === keep)) chapterEl.insertAdjacentHTML("beforeend", `<option>${escapeHtml(keep)}</option>`);
+      chapterEl.value = keep;
+    }
+  };
+  subjectEl.value = subject || "";
+  refill(chapter);
+  if (!subjectEl.dataset.chapterBound) {
+    subjectEl.dataset.chapterBound = "1";
+    subjectEl.addEventListener("change", () => refill(""));
+  }
+}
+
+async function toggleErrorItem(head, entry) {
+  const body = head.parentElement.querySelector(".eb-item-body");
+  const open = head.getAttribute("aria-expanded") === "true";
+  head.setAttribute("aria-expanded", open ? "false" : "true");
+  head.parentElement.classList.toggle("is-open", !open);
+  body.hidden = open;
+  if (open || body.dataset.filled) return;
+  body.dataset.filled = "1";
+  const subj = normalizeSubject(entry.subject);
+  body.innerHTML = `
+    <div class="eb-detail-tags"><span class="eb-subj subj-${subj.toLowerCase()}">${subj}</span>${entry.chapter ? `<span class="eb-chap">${escapeHtml(entry.chapter)}</span>` : ""}<span class="eb-cat">${escapeHtml(entry.category)}</span></div>
+    <div class="eb-full-q">${escapeHtml(entry.question_text || "")}</div>
+    ${entry.comment ? `<div class="eb-card-note">📝 ${escapeHtml(entry.comment)}</div>` : ""}
+    <div class="eb-media"></div>
+    <div class="eb-card-actions">
+      <button type="button" class="btn btn-sm btn-primary" data-eb="open" data-id="${entry.id}">Edit</button>
+      <button type="button" class="btn btn-sm" data-eb="resolve" data-id="${entry.id}">${entry.resolved ? "Reopen" : "Mark resolved ✔"}</button>
+      <button type="button" class="btn btn-sm" data-eb="delete" data-id="${entry.id}" aria-label="Delete">🗑</button>
+    </div>`;
+  renderMath(body);
+  const media = body.querySelector(".eb-media");
+  if (entry.image_path) {
+    const { data: u } = await sb.storage.from("error-book").createSignedUrl(entry.image_path, 3600);
+    if (u?.signedUrl) media.insertAdjacentHTML("beforeend", `<img class="eb-preview" src="${u.signedUrl}" alt="Attached photo">`);
+  }
+  if (entry.voice_note_path) {
+    const { data: u } = await sb.storage.from("error-book").createSignedUrl(entry.voice_note_path, 3600);
+    if (u?.signedUrl) media.insertAdjacentHTML("beforeend", `<audio controls src="${u.signedUrl}"></audio>`);
+  }
+}
+
+/* ---- voice recording helpers: pick a format this browser supports (Chrome/Android = webm, Safari/iPhone = mp4) ---- */
+function recorderOptions() {
+  if (!window.MediaRecorder || !MediaRecorder.isTypeSupported) return undefined;
+  const type = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"].find((t) => MediaRecorder.isTypeSupported(t));
+  return type ? { mimeType: type } : undefined;
+}
+function cleanMime(type) {
+  return String(type || "").split(";")[0] || undefined;
+}
+function audioExt(type) {
+  const t = String(type || "");
+  return /mp4|aac/.test(t) ? ".m4a" : /ogg/.test(t) ? ".ogg" : ".webm";
+}
+
+/* ---- tap any Error Book photo to view it full screen ---- */
+function openImageLightbox(src) {
+  document.getElementById("imgLightbox")?.remove();
+  const box = document.createElement("div");
+  box.id = "imgLightbox";
+  box.className = "img-lightbox";
+  box.innerHTML = `<button type="button" class="img-lightbox-x" aria-label="Close">✕</button><img src="${src}" alt="Full size photo">`;
+  const close = () => {
+    box.remove();
+    document.removeEventListener("keydown", onKey);
+  };
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  box.addEventListener("click", close);
+  document.addEventListener("keydown", onKey);
+  document.body.appendChild(box);
+}
+document.addEventListener("click", (e) => {
+  const img = e.target.closest("img.eb-preview");
+  if (img && img.getAttribute("src")) openImageLightbox(img.getAttribute("src"));
+});
+
+/* =========================================================================
+   PHOTO EDITOR — rotate and crop before a photo is uploaded
+   Resolves with the edited File, the original File if nothing was changed,
+   or null if the student cancels.
+   ========================================================================= */
+function openImageEditor(file) {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      toast("This photo can't be edited here, so it will be used as it is.", "error");
+      resolve(file);
+    };
+    img.onload = () => {
+      const MAX = 2400;
+      const k = Math.min(1, MAX / Math.max(img.naturalWidth, img.naturalHeight));
+      const baseW = Math.round(img.naturalWidth * k);
+      const baseH = Math.round(img.naturalHeight * k);
+      const MIN = 0.08;
+      let rot = 0;
+      let l = 0, t = 0, r = 1, b = 1;
+
+      const ov = document.createElement("div");
+      ov.className = "ie-overlay";
+      ov.innerHTML = `
+        <div class="ie-sheet" role="dialog" aria-modal="true" aria-label="Rotate and crop photo">
+          <div class="ie-head"><b>Rotate and crop</b><small>Drag the corners to crop</small></div>
+          <div class="ie-stage"><div class="ie-wrap"><div class="ie-box">
+            <i class="ie-h" data-h="nw"></i><i class="ie-h" data-h="ne"></i><i class="ie-h" data-h="sw"></i><i class="ie-h" data-h="se"></i>
+          </div></div></div>
+          <div class="ie-tools">
+            <button type="button" class="btn btn-sm" data-ie="left">⟲ Left</button>
+            <button type="button" class="btn btn-sm" data-ie="right">⟳ Right</button>
+            <button type="button" class="btn btn-sm" data-ie="reset">Reset crop</button>
+          </div>
+          <div class="ie-foot"><button type="button" class="btn" data-ie="cancel">Cancel</button><button type="button" class="btn btn-primary" data-ie="done">Use photo</button></div>
+        </div>`;
+      document.body.appendChild(ov);
+      document.body.classList.add("eb-open");
+      const wrap = ov.querySelector(".ie-wrap");
+      const box = ov.querySelector(".ie-box");
+      const canvas = document.createElement("canvas");
+      canvas.className = "ie-canvas";
+      wrap.insertBefore(canvas, box);
+
+      const paintBox = () => {
+        box.style.left = l * 100 + "%";
+        box.style.top = t * 100 + "%";
+        box.style.width = (r - l) * 100 + "%";
+        box.style.height = (b - t) * 100 + "%";
+      };
+      const paintImage = () => {
+        const swap = rot % 180 !== 0;
+        canvas.width = swap ? baseH : baseW;
+        canvas.height = swap ? baseW : baseH;
+        const c = canvas.getContext("2d");
+        c.save();
+        c.translate(canvas.width / 2, canvas.height / 2);
+        c.rotate((rot * Math.PI) / 180);
+        c.drawImage(img, -baseW / 2, -baseH / 2, baseW, baseH);
+        c.restore();
+      };
+      paintImage();
+      paintBox();
+
+      // drag the box to move it, drag a corner to resize it
+      let drag = null;
+      box.addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        box.setPointerCapture(e.pointerId);
+        drag = { mode: e.target.dataset.h || "move", x: e.clientX, y: e.clientY, l, t, r, b, rect: wrap.getBoundingClientRect() };
+      });
+      box.addEventListener("pointermove", (e) => {
+        if (!drag) return;
+        const dx = (e.clientX - drag.x) / drag.rect.width;
+        const dy = (e.clientY - drag.y) / drag.rect.height;
+        const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+        if (drag.mode === "move") {
+          const w = drag.r - drag.l, h = drag.b - drag.t;
+          l = clamp(drag.l + dx, 0, 1 - w); r = l + w;
+          t = clamp(drag.t + dy, 0, 1 - h); b = t + h;
+        } else {
+          if (drag.mode.includes("w")) l = clamp(drag.l + dx, 0, drag.r - MIN);
+          if (drag.mode.includes("e")) r = clamp(drag.r + dx, drag.l + MIN, 1);
+          if (drag.mode.includes("n")) t = clamp(drag.t + dy, 0, drag.b - MIN);
+          if (drag.mode.includes("s")) b = clamp(drag.b + dy, drag.t + MIN, 1);
+        }
+        paintBox();
+      });
+      const endDrag = () => { drag = null; };
+      box.addEventListener("pointerup", endDrag);
+      box.addEventListener("pointercancel", endDrag);
+
+      const finish = (value) => {
+        document.removeEventListener("keydown", onKey);
+        URL.revokeObjectURL(url);
+        ov.remove();
+        if (!document.getElementById("ebModal")) document.body.classList.remove("eb-open");
+        resolve(value);
+      };
+      const onKey = (e) => { if (e.key === "Escape") finish(null); };
+      document.addEventListener("keydown", onKey);
+
+      ov.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-ie]");
+        if (!btn) return;
+        const act = btn.dataset.ie;
+        if (act === "left" || act === "right") {
+          rot = (rot + (act === "right" ? 90 : 270)) % 360;
+          l = 0; t = 0; r = 1; b = 1;
+          paintImage();
+          paintBox();
+        } else if (act === "reset") {
+          l = 0; t = 0; r = 1; b = 1;
+          paintBox();
+        } else if (act === "cancel") {
+          finish(null);
+        } else if (act === "done") {
+          if (rot === 0 && l === 0 && t === 0 && r === 1 && b === 1) return finish(file);
+          const sx = Math.round(l * canvas.width), sy = Math.round(t * canvas.height);
+          const sw = Math.max(1, Math.round((r - l) * canvas.width)), sh = Math.max(1, Math.round((b - t) * canvas.height));
+          const out = document.createElement("canvas");
+          out.width = sw;
+          out.height = sh;
+          out.getContext("2d").drawImage(canvas, sx, sy, sw, sh, 0, 0, sw, sh);
+          out.toBlob(
+            (blob) => finish(blob ? new File([blob], (file.name || "photo").replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" }) : file),
+            "image/jpeg",
+            0.9,
+          );
+        }
+      });
+    };
+    img.src = url;
+  });
+}
+
+// Opens the editor whenever a photo is picked in a plain file input.
+function bindImageEditor(inputId) {
+  const input = document.getElementById(inputId);
+  if (!input || input.dataset.editorBound) return;
+  input.dataset.editorBound = "1";
+  input.addEventListener("change", async () => {
+    const picked = input.files?.[0];
+    if (!picked) return;
+    const edited = await openImageEditor(picked);
+    if (!edited) {
+      input.value = "";
+      return;
+    }
+    if (edited !== picked) {
+      try {
+        const dt = new DataTransfer();
+        dt.items.add(edited);
+        input.files = dt.files;
+      } catch (_) {
+        /* older browser: the original photo is used */
+      }
+    }
+  });
+}
+
+async function openErrorBookModal(question, attemptId, onSaved, entry = null) {
   const { data: { user } } = await sb.auth.getUser();
   if (!user) return;
-  const { data: existing } = await sb
-    .from("error_book_entries")
-    .select("id, category, comment, image_path, voice_note_path")
-    .eq("student_id", user.id).eq("attempt_id", attemptId).eq("question_id", question.id).maybeSingle();
+  let existing = entry;
+  if (!existing && attemptId && question.id) {
+    const { data: found } = await sb
+      .from("error_book_entries")
+      .select("id, category, comment, image_path, voice_note_path, subject, chapter, question_text")
+      .eq("student_id", user.id).eq("attempt_id", attemptId).eq("question_id", question.id).maybeSingle();
+    existing = found;
+  }
+  const isManual = !question.id;
   const categories = document.getElementById("errorCategory")?.innerHTML || "<option>Other</option>";
 
   document.getElementById("ebModal")?.remove();
@@ -1004,13 +1391,17 @@ async function openErrorBookModal(question, attemptId, onSaved) {
   wrap.className = "eb-overlay";
   wrap.innerHTML = `
     <div class="eb-sheet" role="dialog" aria-modal="true" aria-labelledby="ebTitle">
-      <div class="eb-head"><h2 id="ebTitle">📒 Add to Error Book</h2><button type="button" class="eb-x" id="ebClose" aria-label="Close">✕</button></div>
+      <div class="eb-head"><h2 id="ebTitle">${existing ? "📒 Error Book entry" : isManual ? "📒 Add a mistake" : "📒 Add to Error Book"}</h2><button type="button" class="eb-x" id="ebClose" aria-label="Close">✕</button></div>
       <div class="eb-body">
-        <p class="eb-q">${escapeHtml(String(question.question_text || "").slice(0, 160))}${String(question.question_text || "").length > 160 ? "…" : ""}</p>
+        ${isManual ? `<label class="eb-field">Question or reminder<textarea id="ebQuestion" rows="3">${escapeHtml(question.question_text || "")}</textarea></label>` : `<div class="eb-q" id="ebQText">${escapeHtml(question.question_text || "")}</div>`}
         <label class="eb-field">Why did this go wrong?<select id="ebCategory">${categories}</select></label>
+        <div class="eb-two">
+          <label class="eb-field">Subject<select id="ebSubject"><option value="">Not sure</option><option>Physics</option><option>Chemistry</option><option>Mathematics</option><option>Biology</option></select></label>
+          <label class="eb-field">Chapter<select id="ebChapter"><option value="">Not sure / not listed</option></select></label>
+        </div>
         <label class="eb-field">My note<textarea id="ebNote" rows="3" placeholder="What will you do differently next time?"></textarea></label>
         <div class="eb-field">Photo
-          <div class="eb-row"><label class="btn btn-sm eb-file">📷 Add photo<input type="file" id="ebImage" accept="image/*" hidden></label><span id="ebImageName" class="text-muted"></span></div>
+          <div class="eb-row"><label class="btn btn-sm eb-file">📷 Add photo<input type="file" id="ebImage" accept="image/*" hidden></label><button type="button" class="btn btn-sm" id="ebImageEdit" hidden>✂️ Rotate / crop</button><span id="ebImageName" class="text-muted"></span></div>
           <img id="ebImagePreview" class="eb-preview" hidden alt="Selected photo">
         </div>
         <div class="eb-field">Voice note
@@ -1025,6 +1416,18 @@ async function openErrorBookModal(question, attemptId, onSaved) {
   document.body.appendChild(wrap);
   document.body.classList.add("eb-open");
   const $ = (id) => wrap.querySelector("#" + id);
+  renderMath($("ebQText"));
+  initSubjectChapter($("ebSubject"), $("ebChapter"), canonicalSubject(question.subject || existing?.subject), question.chapter || existing?.chapter || "");
+  if (existing?.image_path) {
+    sb.storage.from("error-book").createSignedUrl(existing.image_path, 3600).then(({ data: u }) => {
+      if (u?.signedUrl) { $("ebImagePreview").src = u.signedUrl; $("ebImagePreview").hidden = false; }
+    });
+  }
+  if (existing?.voice_note_path) {
+    sb.storage.from("error-book").createSignedUrl(existing.voice_note_path, 3600).then(({ data: u }) => {
+      if (u?.signedUrl) { $("ebAudio").src = u.signedUrl; $("ebAudio").hidden = false; }
+    });
+  }
   if (existing) {
     $("ebCategory").value = existing.category;
     $("ebNote").value = existing.comment || "";
@@ -1033,8 +1436,9 @@ async function openErrorBookModal(question, attemptId, onSaved) {
     $("ebCategory").value = question.is_correct === false ? "Concept gap" : "Other";
   }
 
-  let recorder = null, chunks = [], voiceBlob = null, imageFile = null;
+  let recorder = null, chunks = [], voiceBlob = null, imageFile = null, recTimer = null;
   const close = () => {
+    clearInterval(recTimer);
     if (recorder?.state === "recording") recorder.stop();
     if ($("ebAudio").src) URL.revokeObjectURL($("ebAudio").src);
     wrap.remove();
@@ -1044,11 +1448,32 @@ async function openErrorBookModal(question, attemptId, onSaved) {
   $("ebCancel").onclick = close;
   wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
 
-  $("ebImage").addEventListener("change", (e) => {
-    imageFile = e.target.files?.[0] || null;
-    $("ebImageName").textContent = imageFile ? imageFile.name : "";
+  const showPicked = () => {
+    $("ebImageName").textContent = imageFile ? "" : "";
+    $("ebImageEdit").hidden = !imageFile;
     const img = $("ebImagePreview");
-    if (imageFile) { img.src = URL.createObjectURL(imageFile); img.hidden = false; } else img.hidden = true;
+    if (imageFile) {
+      if (img.dataset.blob) URL.revokeObjectURL(img.dataset.blob);
+      img.dataset.blob = URL.createObjectURL(imageFile);
+      img.src = img.dataset.blob;
+      img.hidden = false;
+    } else img.hidden = true;
+  };
+  $("ebImage").addEventListener("change", async (e) => {
+    const picked = e.target.files?.[0] || null;
+    if (!picked) return;
+    const edited = await openImageEditor(picked);
+    imageFile = edited || null;
+    if (!edited) e.target.value = "";
+    showPicked();
+  });
+  $("ebImageEdit").addEventListener("click", async () => {
+    if (!imageFile) return;
+    const edited = await openImageEditor(imageFile);
+    if (edited) {
+      imageFile = edited;
+      showPicked();
+    }
   });
 
   $("ebRec").addEventListener("click", async () => {
@@ -1059,11 +1484,18 @@ async function openErrorBookModal(question, attemptId, onSaved) {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       chunks = [];
-      recorder = new MediaRecorder(stream);
+      recorder = new MediaRecorder(stream, recorderOptions());
       recorder.addEventListener("dataavailable", (ev) => { if (ev.data.size) chunks.push(ev.data); });
       recorder.addEventListener("stop", () => {
+        clearInterval(recTimer);
         stream.getTracks().forEach((t) => t.stop());
-        voiceBlob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
+        voiceBlob = new Blob(chunks, { type: cleanMime(recorder.mimeType) || "audio/webm" });
+        if (!voiceBlob.size) {
+          voiceBlob = null;
+          $("ebVoiceStatus").textContent = "Nothing was recorded. Check your microphone and try again.";
+          $("ebRec").disabled = false; $("ebStop").disabled = true; $("ebDel").disabled = true;
+          return;
+        }
         $("ebAudio").src = URL.createObjectURL(voiceBlob);
         $("ebAudio").hidden = false;
         $("ebVoiceStatus").textContent = "Recorded. Press play to listen.";
@@ -1071,7 +1503,9 @@ async function openErrorBookModal(question, attemptId, onSaved) {
       });
       recorder.start();
       $("ebRec").disabled = true; $("ebStop").disabled = false;
-      $("ebVoiceStatus").textContent = "Recording… speak, then press Stop.";
+      const t0 = Date.now();
+      $("ebVoiceStatus").textContent = "Recording… 0s. Press Stop when done.";
+      recTimer = setInterval(() => { $("ebVoiceStatus").textContent = `Recording… ${Math.round((Date.now() - t0) / 1000)}s. Press Stop when done.`; }, 500);
     } catch (err) {
       $("ebVoiceStatus").textContent = err?.name === "NotAllowedError" ? "Microphone is blocked. Allow it in browser settings." : "Could not start recording.";
     }
@@ -1085,17 +1519,22 @@ async function openErrorBookModal(question, attemptId, onSaved) {
   $("ebSave").addEventListener("click", async () => {
     const msg = $("ebMsg");
     const btn = $("ebSave");
+    if (isManual && !$("ebQuestion").value.trim()) {
+      msg.textContent = "Please write the question or a short reminder.";
+      return;
+    }
     btn.disabled = true; btn.textContent = "Saving…"; msg.textContent = "";
     const payload = {
       student_id: user.id, attempt_id: attemptId, question_id: question.id,
-      question_text: question.question_text, category: $("ebCategory").value,
+      question_text: isManual ? $("ebQuestion").value.trim() : question.question_text, category: $("ebCategory").value,
+      subject: $("ebSubject").value || null, chapter: $("ebChapter").value || null,
       comment: $("ebNote").value.trim() || null, updated_at: new Date().toISOString(),
     };
-    for (const [file, column, prefix, ext] of [[imageFile, "image_path", "images", ""], [voiceBlob, "voice_note_path", "voice-notes", ".webm"]]) {
+    for (const [file, column, prefix, ext] of [[imageFile, "image_path", "images", ""], [voiceBlob, "voice_note_path", "voice-notes", audioExt(voiceBlob?.type)]]) {
       if (!file) continue;
       const name = file.name ? file.name.replace(/[^a-zA-Z0-9._-]/g, "_") : `voice-${Date.now()}${ext}`;
       const path = `${user.id}/${prefix}/${Date.now()}-${name}`;
-      const { error: upErr } = await sb.storage.from("error-book").upload(path, file, { upsert: false, contentType: file.type || undefined });
+      const { error: upErr } = await sb.storage.from("error-book").upload(path, file, { upsert: false, contentType: cleanMime(file.type) });
       if (upErr) {
         msg.textContent = /bucket/i.test(upErr.message || "") ? "Attachment storage is not set up yet. Ask the admin to run migration.sql." : `Upload failed: ${friendlyError(upErr)}`;
         btn.disabled = false; btn.textContent = "Save to Error Book";
@@ -1103,7 +1542,11 @@ async function openErrorBookModal(question, attemptId, onSaved) {
       }
       payload[column] = path;
     }
-    const { error } = await sb.from("error_book_entries").upsert(payload, { onConflict: "student_id,attempt_id,question_id" });
+    const { error } = existing?.id
+      ? await sb.from("error_book_entries").update(payload).eq("id", existing.id)
+      : isManual
+        ? await sb.from("error_book_entries").insert(payload)
+        : await sb.from("error_book_entries").upsert(payload, { onConflict: "student_id,attempt_id,question_id" });
     if (error) {
       msg.textContent = friendlyError(error);
       btn.disabled = false; btn.textContent = "Save to Error Book";
@@ -1111,6 +1554,7 @@ async function openErrorBookModal(question, attemptId, onSaved) {
     }
     close();
     toast("Saved to your Error Book", "success");
+    if (document.getElementById("view-errors")?.classList.contains("active")) enterErrorBookView();
     if (onSaved) onSaved();
   });
 }
@@ -1185,7 +1629,7 @@ function renderPracticeCategories() {
   if (!box) return;
   const count = (key) => practiceHub.rows.filter((r) => r.practice_category === key).length;
   const card = (key, icon, title, sub, n) =>
-    `<button type="button" class="pr-cat ${practiceHub.cat === key ? "active" : ""}" data-cat="${key}"><span class="pr-cat-icon">${icon}</span><span class="pr-cat-text"><b>${escapeHtml(title)}</b><small>${escapeHtml(sub)}</small></span><span class="pr-cat-n">${n}</span></button>`;
+    `<a class="pr-cat" href="#/practice-list?cat=${key}"><span class="pr-cat-icon">${icon}</span><span class="pr-cat-text"><b>${escapeHtml(title)}</b><small>${escapeHtml(sub)}</small></span><span class="pr-cat-n">${n}</span></a>`;
   box.innerHTML =
     card("all", "♾️", "All Practice", "Every test in one list", practiceHub.rows.length) +
     PR_CATS.map((c) => card(c.key, c.icon, c.title, c.sub, count(c.key))).join("");
@@ -1194,39 +1638,31 @@ function renderPracticeCategories() {
 function bindPracticeHub() {
   if (practiceHub.bound) return;
   practiceHub.bound = true;
-  fillChapterSelect(document.getElementById("practiceChapter"), "All chapters");
+  fillChapterSelect(document.getElementById("pcChapter"), "All chapters");
   const on = (id, key, evt = "change") =>
     document.getElementById(id).addEventListener(evt, (e) => {
-      practiceHub[key] = e.target.value.trim();
-      if (key === "q") practiceHub.q = practiceHub.q.toLowerCase();
+      practiceHub[key] = key === "q" ? e.target.value.trim().toLowerCase() : e.target.value;
       if (key === "subject") {
         practiceHub.chapter = "";
-        fillChapterSelect(document.getElementById("practiceChapter"), "All chapters", practiceHub.subject);
-        document.getElementById("practiceChapter").value = "";
+        fillChapterSelect(document.getElementById("pcChapter"), "All chapters", practiceHub.subject);
+        document.getElementById("pcChapter").value = "";
       }
       renderPracticeHubList();
     });
-  on("practiceSearch", "q", "input");
-  on("practiceExam", "exam");
-  on("practiceSubject", "subject");
-  on("practiceChapter", "chapter");
-  on("practiceSort", "sort");
-  document.getElementById("practiceCategories").addEventListener("click", (e) => {
-    const btn = e.target.closest(".pr-cat");
-    if (!btn) return;
-    practiceHub.cat = btn.dataset.cat;
-    renderPracticeCategories();
-    renderPracticeHubList();
-    document.getElementById("practiceCatalog").scrollIntoView({ behavior: "smooth", block: "start" });
-  });
+  on("pcSearch", "q", "input");
+  on("pcExam", "exam");
+  on("pcSubject", "subject");
+  on("pcChapter", "chapter");
+  on("pcSort", "sort");
 }
 
 function renderPracticeHubList() {
-  const target = document.getElementById("practiceCatalog");
+  const target = document.getElementById("pcList");
+  if (!target) return;
   const h = practiceHub;
   const has = (arr, v) => (arr || []).some((x) => String(x).toLowerCase() === v.toLowerCase());
-  let rows = h.rows.filter((r) => {
-    if (h.cat !== "all" && r.practice_category !== h.cat) return false;
+  const inCategory = h.rows.filter((r) => h.cat === "all" || r.practice_category === h.cat);
+  let rows = inCategory.filter((r) => {
     if (h.q && !String(r.title || "").toLowerCase().includes(h.q)) return false;
     if (h.exam && r.exam !== h.exam) return false;
     if (h.subject && r.practice_subject !== h.subject && !has(r.subjects, h.subject)) return false;
@@ -1241,55 +1677,116 @@ function renderPracticeHubList() {
     az: (a, b) => String(a.title).localeCompare(String(b.title)),
   };
   rows = rows.sort(sorters[h.sort] || sorters.new);
-  const countEl = document.getElementById("practiceCount");
-  if (countEl) countEl.textContent = h.rows.length ? `${rows.length} test${rows.length === 1 ? "" : "s"}${h.cat !== "all" ? " in " + (PR_CAT_LABEL[h.cat] || "") : ""}` : "";
-  if (!h.rows.length) {
-    target.innerHTML = `<div class="empty-state">No practice tests are published yet. Check back soon.</div>`;
+  const countEl = document.getElementById("pcCount");
+  if (countEl) countEl.textContent = inCategory.length ? `${rows.length} of ${inCategory.length} test${inCategory.length === 1 ? "" : "s"}` : "";
+  if (!inCategory.length) {
+    target.innerHTML = `<div class="empty-state pr-empty">No test is available in this category yet.<br><small>New tests are added regularly. Check back soon.</small></div>`;
     return;
   }
   if (!rows.length) {
-    target.innerHTML = `<div class="empty-state">No tests match these filters.</div>`;
+    target.innerHTML = `<div class="empty-state pr-empty">No tests match these filters.</div>`;
     return;
   }
   target.innerHTML = rows
     .map((r) => {
       const href = `#/exam?test=${encodeURIComponent(r.test_id)}&practice=1`;
-      const cta = r.in_progress_attempt_id ? "Continue" : r.attempts ? "Practice again" : "Start";
+      const cta = r.in_progress_attempt_id ? "Continue" : r.attempts ? "Again" : "Start";
       const where = [r.practice_subject, r.practice_chapter].filter(Boolean).join(" · ");
       const progress = r.attempts
-        ? `<div class="pr-mini"><span><b>${r.attempts}</b> attempt${r.attempts === 1 ? "" : "s"}</span><span>Best <b class="${prTone(r.best_pct)}">${prPct(r.best_pct)}</b></span><span>Avg <b class="${prTone(r.avg_pct)}">${prPct(r.avg_pct)}</b></span></div>`
-        : `<div class="pr-mini pr-new">Not attempted yet</div>`;
+        ? `<div class="pr-mini"><span><b>${r.attempts}</b>×</span><span>Best <b class="${prTone(r.best_pct)}">${prPct(r.best_pct)}</b></span><span>Avg <b class="${prTone(r.avg_pct)}">${prPct(r.avg_pct)}</b></span></div>`
+        : `<div class="pr-mini pr-new">Not attempted</div>`;
       return `<article class="pr-card">
-        <div class="pr-card-tags"><span class="pr-tag">${escapeHtml(PR_CAT_LABEL[r.practice_category] || "Practice")}</span>${r.exam ? `<span class="pr-tag pr-tag-soft">${escapeHtml(r.exam)}</span>` : ""}${r.test_mode === "live" ? `<span class="pr-tag pr-tag-live">Past live test</span>` : ""}</div>
+        <div class="pr-card-tags"><span class="pr-tag">${escapeHtml(PR_CAT_LABEL[r.practice_category] || "Practice")}</span>${r.exam ? `<span class="pr-tag pr-tag-soft">${escapeHtml(r.exam)}</span>` : ""}${r.test_mode === "live" ? `<span class="pr-tag pr-tag-live">Past live</span>` : ""}</div>
         <h3>${escapeHtml(r.title)}</h3>
         ${where ? `<div class="pr-where">${escapeHtml(where)}</div>` : ""}
-        <div class="pr-meta">${r.question_count} questions · ${r.duration_minutes} min · ${Number(r.total_marks)} marks</div>
+        <div class="pr-meta">${r.question_count} Q · ${r.duration_minutes} min · ${Number(r.total_marks)} marks</div>
         ${progress}
         <div class="pr-actions">
           <a class="btn btn-primary btn-sm" href="${href}">${cta}</a>
-          ${r.attempts ? `<a class="btn btn-sm" href="#/practice-report?test=${encodeURIComponent(r.test_id)}">My report</a>` : ""}
+          ${r.attempts ? `<a class="btn btn-sm" href="#/practice-report?test=${encodeURIComponent(r.test_id)}">Report</a>` : ""}
         </div></article>`;
     })
     .join("");
 }
 
-async function enterPracticeView() {
-  const target = document.getElementById("practiceCatalog");
+async function requestStatusChip(status) {
+  const tone = { Pending: "locked", "Under Review": "review", Approved: "is-on", "Test Created": "is-on", Scheduled: "is-on", Done: "is-on", Rejected: "closed", Cancelled: "closed" }[status] || "locked";
+  return `<span class="status-tag ${tone}">${escapeHtml(status)}</span>`;
+}
+
+async function renderCustomRequestsPanel(target) {
   if (!target) return;
-  bindPracticeHub();
-  Object.assign(practiceHub, { cat: "all", q: "", subject: "", chapter: "", exam: "", sort: "new" });
-  ["practiceSearch", "practiceExam", "practiceSubject", "practiceChapter"].forEach((id) => (document.getElementById(id).value = ""));
-  fillChapterSelect(document.getElementById("practiceChapter"), "All chapters");
-  document.getElementById("practiceSort").value = "new";
-  target.innerHTML = `<div class="empty-state">Loading practice tests…</div>`;
+  target.innerHTML = `<div class="card pr-section"><div class="empty-state">Loading your requests…</div></div>`;
+  const { data, error } = await sb
+    .from("test_requests")
+    .select("id, exam, subjects, question_count, status, admin_note, created_at, updated_at")
+    .order("created_at", { ascending: false });
+  const list = error
+    ? `<div class="error-box">${escapeHtml(friendlyError(error))}</div>`
+    : !data?.length
+      ? `<p class="text-muted">You have not requested a custom test yet.</p>`
+      : data
+          .map(
+            (r) => `<div class="pr-req"><div><b>${escapeHtml(r.exam)}</b> · ${escapeHtml((r.subjects || []).join(", ") || "All subjects")} · ${Number(r.question_count)} Q<small>Requested ${formatDateTime(r.created_at)}</small>${r.admin_note ? `<div class="req-admin-reply">💬 ${escapeHtml(r.admin_note)}</div>` : ""}</div>${requestStatusChip(r.status)}</div>`,
+          )
+          .join("");
+  target.innerHTML = `<section class="card pr-section"><div class="pr-req-head"><h2>Your custom test requests</h2><a class="btn btn-primary btn-sm" href="#/practice-library?category=custom">＋ Request a test</a></div>${list}</section>`;
+}
+
+async function renderPracticeUpdates() {
+  const box = document.getElementById("practiceUpdates");
+  if (!box) return;
+  box.innerHTML = "";
+  const since = new Date(Date.now() - 14 * 86400000).toISOString();
+  const { data } = await sb
+    .from("test_requests")
+    .select("id, exam, status, admin_note, updated_at")
+    .neq("status", "Pending")
+    .gte("updated_at", since)
+    .order("updated_at", { ascending: false })
+    .limit(3);
+  if (!data?.length) return;
+  box.innerHTML = data
+    .map((r) => `<a class="pr-update" href="#/practice-list?cat=custom">📬 <span>Your <b>${escapeHtml(r.exam)}</b> custom test request is now</span> ${requestStatusChip(r.status)}</a>`)
+    .join("");
+}
+
+async function enterPracticeView() {
+  const box = document.getElementById("practiceCategories");
+  if (!box) return;
+  box.innerHTML = `<div class="empty-state">Loading…</div>`;
   const [hub, overall] = await Promise.all([sb.rpc("get_practice_hub"), sb.rpc("get_practice_overall_report")]);
   if (hub.error) {
-    target.innerHTML = `<div class="error-box">${escapeHtml(prDeploymentHint(hub.error))}</div>`;
+    box.innerHTML = `<div class="error-box">${escapeHtml(prDeploymentHint(hub.error))}</div>`;
     return;
   }
   practiceHub.rows = hub.data || [];
   renderPracticeOverallStrip(document.getElementById("practiceOverallStrip"), overall.data, overall.error);
   renderPracticeCategories();
+  renderPracticeUpdates();
+}
+
+async function enterPracticeCategoryView() {
+  const cat = qs("cat") || "all";
+  bindPracticeHub();
+  Object.assign(practiceHub, { cat, q: "", subject: "", chapter: "", exam: "", sort: "new" });
+  ["pcSearch", "pcExam", "pcSubject", "pcChapter"].forEach((id) => (document.getElementById(id).value = ""));
+  fillChapterSelect(document.getElementById("pcChapter"), "All chapters");
+  document.getElementById("pcSort").value = "new";
+  const meta = PR_CATS.find((c) => c.key === cat);
+  document.getElementById("pcTitle").textContent = meta ? `${meta.icon} ${meta.title}` : "♾️ All Practice";
+  document.getElementById("pcSub").textContent = meta ? meta.sub : "Every practice test in one list";
+  const extra = document.getElementById("pcExtra");
+  extra.innerHTML = "";
+  if (cat === "custom") renderCustomRequestsPanel(extra);
+  const list = document.getElementById("pcList");
+  list.innerHTML = `<div class="empty-state">Loading…</div>`;
+  const { data, error } = await sb.rpc("get_practice_hub");
+  if (error) {
+    list.innerHTML = `<div class="error-box">${escapeHtml(prDeploymentHint(error))}</div>`;
+    return;
+  }
+  practiceHub.rows = data || [];
   renderPracticeHubList();
 }
 
@@ -1359,7 +1856,7 @@ async function enterPracticeReportView() {
   body.innerHTML = `
     <a class="practice-back-link" href="#/practice">← Practice</a>
     <div class="pr-head"><div><span class="eyebrow-label">Practice report</span><h1>${escapeHtml(data.title)}</h1>${deltaHtml}</div>
-      <a class="btn btn-primary" href="${startHref}">Practice again</a></div>
+      <div class="pr-head-btns"><a class="btn" href="#/result?attempt=${last.attempt_id}">Full report</a><a class="btn btn-primary" href="${startHref}">Practice again</a></div></div>
     <div class="pr-stat-row">
       ${prStat(attempts.length, "Attempts")}
       ${prStat(prPct(last.percentage), "Latest score")}
@@ -1770,92 +2267,74 @@ function sortPastRows(rows, sort) {
   return rows.slice().sort(sorters[sort] || byDate);
 }
 
-function pastRowActions(row) {
-  const a = row.attempt;
-  const test = encodeURIComponent(row.entry.id);
+
+function pastRowHtml(row) {
+  const tid = encodeURIComponent(row.entry.id);
+  const tags = { main: "🔴 Live", new: "🔴 Live", infinite: "♾️ Infinite", reattempt: "🔁 Re-attempt" };
+  let status = "";
   const btns = [];
-  if (row.kind === "new") {
-    btns.push(`<a class="btn btn-primary btn-sm" href="#/exam?test=${test}&practice=1">▶ Start practice</a>`);
+  if (row.kind === "infinite") {
+    const h = row.hub;
+    status = h.in_progress_attempt_id ? "In progress" : h.attempts ? `Best ${Math.round(Number(h.best_pct) || 0)}%` : "Not attempted";
+    btns.push(`<a class="btn btn-primary btn-sm" href="#/exam?test=${tid}&practice=1">${h.in_progress_attempt_id ? "Resume" : h.attempts ? "Practice" : "Start"}</a>`);
+    if (h.attempts) btns.push(`<a class="btn btn-sm" href="#/practice-report?test=${tid}">Report</a>`);
+  } else if (row.kind === "new") {
+    status = "Closed";
+    btns.push(`<a class="btn btn-primary btn-sm" href="#/exam?test=${tid}&practice=1">Practice</a>`);
   } else if (!row.done) {
-    btns.push(
-      row.kind === "practice"
-        ? `<a class="btn btn-primary btn-sm" href="#/exam?test=${test}&practice=1">▶ Resume practice</a>`
-        : `<a class="btn btn-primary btn-sm" href="#/exam?test=${test}">▶ Resume test</a>`,
-    );
+    status = "In progress";
+    btns.push(`<a class="btn btn-primary btn-sm" href="#/exam?test=${tid}${row.kind === "reattempt" ? "&practice=1" : ""}">Resume</a>`);
   } else {
-    btns.push(`<a class="btn btn-sm" href="#/result?attempt=${a.id}">View report</a>`);
-    if (row.canPractice && (row.kind === "practice" || !row.hasPractice)) {
-      btns.push(
-        `<a class="btn btn-sm btn-practice" href="#/exam?test=${test}&practice=1">🔁 ${row.kind === "practice" ? "Practice again" : "Practice"}</a>`,
-      );
-    }
-    btns.push(
-      `<button type="button" class="btn btn-sm btn-print" data-print-attempt="${a.id}" title="Preview the question paper with answer key and download it as a PDF">📄 Questions PDF</button>`,
-    );
+    const pct = pastPct(row);
+    status = `${pct === null ? "—" : Math.round(pct) + "%"}${row.attempt?.disqualified_at ? " · not ranked" : ""}`;
+    btns.push(`<a class="btn btn-primary btn-sm" href="#/result?attempt=${row.attempt.id}">Report</a>`);
+    if ((row.kind === "main" && row.canPractice) || row.kind === "reattempt")
+      btns.push(`<a class="mt-icon" href="#/exam?test=${tid}&practice=1" title="Re-attempt this test" aria-label="Re-attempt"><span>🔁</span><em>Re-attempt</em></a>`);
+    btns.push(`<button type="button" class="mt-icon btn-print" data-print-attempt="${row.attempt.id}" title="Print question paper as PDF" aria-label="Question paper PDF"><span>📄</span><em>PDF</em></button>`);
   }
-  return btns.join(" ");
+  return `<article class="mt-card mt-${row.kind}">
+    <div class="mt-main"><h3 class="mt-title">${escapeHtml(row.title)}</h3>
+      <div class="mt-sub"><span class="mt-tag">${tags[row.kind]}</span><span>${status}</span></div></div>
+    <div class="mt-actions">${btns.join("")}</div></article>`;
 }
 
-function pastRowHtml(row, serial) {
-  const tag =
-    row.kind === "main"
-      ? `<span class="past-type main">Live test</span>`
-      : row.kind === "practice"
-        ? `<span class="past-type practice">🔁 Practice</span>`
-        : `<span class="past-type new">Not attempted</span>`;
-  const notRanked =
-    row.kind === "main" && row.attempt?.disqualified_at
-      ? `<span class="status-tag dq-tag">Not ranked</span>`
-      : "";
-  const pct = pastPct(row);
-  const when =
-    row.kind === "new"
-      ? `Closed ${formatDateTime(row.entry.available_until)}`
-      : !row.done
-        ? "In progress"
-        : `${row.kind === "practice" ? "Practised" : "Submitted"} ${formatDateTime(row.attempt.submitted_at)}`;
-  const score = row.done
-    ? `<strong>${row.score}</strong><span>/ ${row.total || "—"}</span>${pct === null ? "" : `<em>${pct.toFixed(1)}%</em>`}`
-    : `<span class="past-score-none">—</span>`;
-  const note =
-    row.kind === "practice"
-      ? "No rank or percentile"
-      : row.kind === "new"
-        ? "Practice only — no rank or percentile"
-        : "";
-  return `
-    <article class="past-row kind-${row.kind}">
-      <div class="past-serial" aria-label="Number ${serial}">${serial}</div>
-      <div class="past-main">
-        <h3 class="past-title">${escapeHtml(row.title)}</h3>
-        <div class="past-tags">${tag}${categoryBadge(row.category)}${notRanked}</div>
-        <div class="past-meta">${when} · ${row.entry.duration_minutes} min${note ? ` · ${note}` : ""}</div>
-      </div>
-      <div class="past-score">${score}</div>
-      <div class="past-actions">${pastRowActions(row)}</div>
-    </article>`;
-}
+let testsPracticeHub = [];
+
+// Practice tests the student has not tried yet (the catalog only lists attempted ones).
 
 function renderPastTests() {
   const grid = document.getElementById("testsCardGrid");
   if (!grid) return;
   const q = testsView.q.trim().toLowerCase();
-  const all = buildPastRows(testsCatalogCache);
-  let rows = all.filter(
-    (r) =>
-      (testsView.kind === "all" || r.kind === testsView.kind) &&
-      (!q || r.title.toLowerCase().includes(q)),
-  );
+  // Infinite Practice tests and re-attempts of live tests are different things.
+  const infiniteIds = new Set(testsPracticeHub.map((h) => String(h.test_id)));
+  const live = buildPastRows(testsCatalogCache)
+    .filter((r) => !(r.kind === "practice" && infiniteIds.has(String(r.entry.id))))
+    .map((r) => (r.kind === "practice" ? { ...r, kind: "reattempt" } : r));
+  const infinite = testsPracticeHub.map((h) => ({
+    kind: "infinite",
+    hub: h,
+    title: h.title,
+    entry: { id: h.test_id },
+    attempt: null,
+    category: h.exam,
+    total: 100,
+    score: Number(h.best_pct) || 0,
+    done: !!h.attempts,
+    date: new Date(h.last_attempt_at || h.created_at).getTime(),
+  }));
+  const all = live.concat(infinite);
+  const kindOk = (r) =>
+    testsView.kind === "all" ||
+    r.kind === testsView.kind ||
+    (testsView.kind === "new" && r.kind === "infinite" && !r.done);
+  let rows = all.filter((r) => kindOk(r) && (!q || r.title.toLowerCase().includes(q)));
   rows = sortPastRows(rows, testsView.sort);
   if (!rows.length) {
-    grid.innerHTML = `<div class="empty-state">${
-      all.length
-        ? "Nothing matches this view."
-        : "No past tests yet. Tests you attempt appear here once they close, and closed tests can be practised."
-    }</div>`;
+    grid.innerHTML = `<div class="empty-state">${all.length ? "Nothing matches this view." : "No tests yet. Start with Infinite Practice."}</div>`;
     return;
   }
-  grid.innerHTML = rows.map((r, i) => pastRowHtml(r, i + 1)).join("");
+  grid.innerHTML = rows.map((r) => pastRowHtml(r)).join("");
 }
 
 async function loadTestsCatalog() {
@@ -1868,6 +2347,8 @@ async function loadTestsCatalog() {
     grid.innerHTML = `<div class="error-box">${escapeHtml(friendlyError(error))}</div>`;
     return;
   }
+  const hub = await sb.rpc("get_practice_hub");
+  testsPracticeHub = hub.data || [];
   renderPastTests();
 }
 
@@ -2619,6 +3100,7 @@ async function enterAdminTestView() {
   const testId = qs("test");
   if (testId) {
     await loadExistingTest(testId);
+    if (qs("edit")) setTimeout(() => openTestPreview(qs("edit")), 350);
   } else {
     const now = new Date();
     const later = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000);
@@ -2630,7 +3112,7 @@ async function enterAdminTestView() {
     const target = document.getElementById("studentRequestsAdminList");
     if (!target) return;
     const { data, error } = await sb.from("test_requests")
-      .select("id, student_id, exam, subjects, chapters, topics, difficulty, question_source, question_count, duration_minutes, preferred_at, student_note, status, created_at, profiles(full_name, email)")
+      .select("id, student_id, exam, subjects, chapters, topics, difficulty, question_source, question_count, duration_minutes, preferred_at, student_note, admin_note, status, created_at, profiles(full_name, email)")
       .order("created_at", { ascending: false });
     if (error) {
       target.innerHTML = `<div class="error-box">${escapeHtml(friendlyError(error))}</div>`;
@@ -2640,12 +3122,16 @@ async function enterAdminTestView() {
       target.innerHTML = `<div class="empty-state">No student requests yet.</div>`;
       return;
     }
-    const statuses = ["Pending", "Under Review", "Approved", "Test Created", "Scheduled", "Rejected", "Cancelled"];
+    const statuses = ["Pending", "Under Review", "Approved", "Test Created", "Scheduled", "Done", "Rejected", "Cancelled"];
     target.innerHTML = data.map((request) => `
       <article class="request-row admin-request-row">
         <div><strong>${escapeHtml(request.profiles?.full_name || request.profiles?.email || request.student_id)}</strong><div class="text-muted">${escapeHtml(request.exam)} · ${escapeHtml((request.subjects || []).join(", "))}</div><small>${escapeHtml((request.chapters || []).join(", ") || "Whole syllabus")}</small></div>
         <div><strong>${escapeHtml(formatDateTime(request.preferred_at))}</strong><div class="text-muted">${request.question_count} questions · ${request.duration_minutes} min</div></div>
         <label class="field"><span class="sr-only">Request status</span><select data-request-status="${request.id}">${statuses.map((status) => `<option ${status === request.status ? "selected" : ""}>${status}</option>`).join("")}</select></label>
+        <div class="req-admin-extra">
+          <textarea data-request-note="${request.id}" rows="2" placeholder="Message for the student (optional)">${escapeHtml(request.admin_note || "")}</textarea>
+          <div class="req-admin-btns"><button type="button" class="btn btn-sm btn-success" data-request-done="${request.id}">✔ Mark done</button><button type="button" class="btn btn-sm btn-danger" data-request-delete="${request.id}">🗑 Delete</button></div>
+        </div>
       </article>`).join("");
     target.querySelectorAll("[data-request-status]").forEach((select) => select.addEventListener("change", async () => {
       select.disabled = true;
@@ -2657,6 +3143,23 @@ async function enterAdminTestView() {
         return;
       }
       toast("Request status updated.", "success");
+    }));
+    target.querySelectorAll("[data-request-note]").forEach((box) => box.addEventListener("change", async () => {
+      const { error: noteError } = await sb.from("test_requests").update({ admin_note: box.value.trim() || null, updated_at: new Date().toISOString() }).eq("id", box.dataset.requestNote);
+      toast(noteError ? friendlyError(noteError) : "Message saved. The student can see it.", noteError ? "error" : "success");
+    }));
+    target.querySelectorAll("[data-request-done]").forEach((btn) => btn.addEventListener("click", async () => {
+      const id = btn.dataset.requestDone;
+      const note = target.querySelector(`[data-request-note="${id}"]`)?.value.trim() || null;
+      const { error: doneError } = await sb.from("test_requests").update({ status: "Done", admin_note: note, updated_at: new Date().toISOString() }).eq("id", id);
+      if (doneError) toast(friendlyError(doneError), "error");
+      else { toast("Marked as done. The student will see it.", "success"); await loadAdminTestRequests(); }
+    }));
+    target.querySelectorAll("[data-request-delete]").forEach((btn) => btn.addEventListener("click", async () => {
+      if (!confirm("Delete this request permanently? The student will no longer see it.")) return;
+      const { error: delError } = await sb.from("test_requests").delete().eq("id", btn.dataset.requestDelete);
+      if (delError) toast(friendlyError(delError), "error");
+      else { toast("Request deleted.", "success"); await loadAdminTestRequests(); }
     }));
   }
 }
@@ -4362,7 +4865,7 @@ async function resolveQuestionReports(questionId) {
     toast(friendlyError(error), "error");
     return false;
   }
-  toast(`Marked as fixed — ${data?.resolved ?? 0} report(s) cleared`, "success");
+  toast(`Marked as resolved (${data?.resolved ?? 0} report${data?.resolved === 1 ? "" : "s"})`, "success");
   await loadReports();
   return true;
 }
@@ -4386,7 +4889,7 @@ function reportCardHtml(group) {
       <ul class="report-reasons">${reasons}</ul>
       <div class="report-actions">
         <button type="button" class="btn btn-sm btn-primary js-report-preview" data-question="${group.questionId}" ${exists ? "" : "disabled"}>👁 Preview &amp; edit</button>
-        <button type="button" class="btn btn-sm btn-success js-report-fixed" data-question="${group.questionId}">✓ Done / Fixed</button>
+        <button type="button" class="btn btn-sm btn-success js-report-fixed" data-question="${group.questionId}">✓ Mark resolved</button>
       </div>
     </article>`;
 }
@@ -4397,9 +4900,10 @@ async function loadReports() {
   const { data, error } = await sb
     .from("question_reports")
     .select(
-      "id, question_id, reason, details, created_at, questions(question_text, subject, question_type), profiles(full_name)",
+      "id, question_id, reason, details, created_at, resolved_at, questions(question_text, subject, question_type), profiles(full_name)",
     )
     .eq("test_id", currentTest.id)
+    .is("resolved_at", null)
     .order("created_at", { ascending: false });
   if (error) {
     list.innerHTML = `<div class="error-box">${escapeHtml(friendlyError(error))}</div>`;
@@ -5905,7 +6409,7 @@ function renderReviewQuestionCard() {
       : question.correct_integer_value;
   card.innerHTML = `<div class="review-question-heading"><div class="question-number-badge">${subjectDot(question.subject)}${escapeHtml(question.subject)} · Question ${reviewQuestions.indexOf(question) + 1}</div><span class="review-result-pill ${reviewState(question) === "correct" ? "review-result-correct" : reviewState(question) === "wrong" ? "review-result-wrong" : "review-result-skipped"}">${reviewState(question)} · ${question.marks_obtained || 0} marks</span></div>${questionImageHtml(question.image_url)}<div class="question-text">${escapeHtml(question.question_text)}</div>${question.question_type === "mcq" ? `<div class="option-list">${options}</div>` : `<div class="review-integer-answer"><span class="${question.is_correct ? "answer-good" : "answer-bad"}">Your answer: ${escapeHtml(String(integerAnswer))}</span><span class="answer-good">Correct answer: ${escapeHtml(String(correctInteger))}</span></div>`}${question.explanation ? `<div class="explanation-box mt-8">${escapeHtml(question.explanation)}</div>` : ""}<div class="review-error-action"><button type="button" class="btn btn-sm" id="addReviewErrorBtn">Add to Error Book</button><span id="reviewErrorStatus" class="text-muted"></span></div>`;
   document.getElementById("addReviewErrorBtn").addEventListener("click", () =>
-    openErrorBookModal(question, qs("attempt"), () => {
+    openErrorBookModal({ ...question, chapter: question.chapter || null }, qs("attempt"), () => {
       document.getElementById("reviewErrorStatus").textContent = "Saved in your Error Book.";
     }),
   );
@@ -6043,6 +6547,11 @@ async function enterResultView() {
   // results — get_full_report simply returns null/empty for those until
   // then, rather than erroring, so `declared` is derived from that.
   const isPractice = !!report.is_practice;
+  let isInfinite = false;
+  if (isPractice) {
+    const { data: tm } = await sb.from("tests").select("test_mode").eq("id", report.test_id).maybeSingle();
+    isInfinite = tm?.test_mode === "practice";
+  }
   // An attempt the admin disqualified is never ranked: no rank, no percentile,
   // no leaderboard. Everything else on the report stays visible.
   const isDisqualified = !!report.disqualified && !isPractice;
@@ -6077,14 +6586,14 @@ async function enterResultView() {
       </p>
       ${
         isPractice
-          ? `<div class="practice-notice" style="margin-top:10px;">♾️ <strong>Practice attempt</strong>. Only you can see this report.</div>`
+          ? `<div class="practice-notice" style="margin-top:10px;">${isInfinite ? "♾️ <strong>Infinite Practice attempt</strong>. No rank, percentile or leaderboard. Only you can see this." : "🔁 <strong>Live test re-attempt</strong> for revision. Your real attempt's rank and percentile are on that report."}</div>`
           : ""
       }
       ${
         report.is_owner &&
         ["submitted", "auto_submitted"].includes(report.status)
           ? `<div class="report-actions-row">
-              ${isPractice ? `<a class="btn btn-sm btn-primary" href="#/exam?test=${encodeURIComponent(report.test_id)}&practice=1">♾️ Practice again</a><a class="btn btn-sm" href="#/practice-report?test=${encodeURIComponent(report.test_id)}">All my attempts</a>` : ""}
+              ${isPractice ? `<a class="btn btn-sm btn-primary" href="#/exam?test=${encodeURIComponent(report.test_id)}&practice=1">${isInfinite ? "♾️" : "🔁"} Practice again</a>${isInfinite ? `<a class="btn btn-sm" href="#/practice-report?test=${encodeURIComponent(report.test_id)}">All my attempts</a>` : ""}` : ""}
               ${
                 !isPractice &&
                 report.available_until &&
@@ -6520,6 +7029,95 @@ async function importBulkQuestions() {
   document.getElementById("bulkImportPreviewCard").style.display = "none";
 }
 
+/* =========================================================================
+   ADMIN — reported questions inbox (all tests, Live and Infinite Practice)
+   ========================================================================= */
+let arTab = "open";
+let arBound = false;
+
+async function enterAdminReportsView() {
+  myProfile = myProfile || (await getMyProfile());
+  const ok = myProfile?.role === "admin";
+  document.getElementById("arNotAdmin").style.display = ok ? "none" : "block";
+  document.getElementById("arContent").style.display = ok ? "block" : "none";
+  if (!ok) return;
+  if (!arBound) {
+    arBound = true;
+    document.querySelector("#arContent .an-tabs").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-ar]");
+      if (!b) return;
+      arTab = b.dataset.ar;
+      document.querySelectorAll("#arContent .an-tab").forEach((x) => x.classList.toggle("active", x === b));
+      loadAdminReportsInbox();
+    });
+    document.getElementById("arList").addEventListener("click", async (e) => {
+      const btn = e.target.closest("[data-ar-act]");
+      if (!btn) return;
+      btn.disabled = true;
+      const fn = btn.dataset.arAct === "resolve" ? "admin_resolve_question_reports" : "admin_reopen_question_reports";
+      const { error } = await sb.rpc(fn, { p_question_id: btn.dataset.q });
+      if (error) {
+        toast(friendlyError(error), "error");
+        btn.disabled = false;
+        return;
+      }
+      toast(btn.dataset.arAct === "resolve" ? "Marked as resolved" : "Reopened", "success");
+      await loadAdminReportsInbox();
+    });
+  }
+  arTab = "open";
+  document.querySelectorAll("#arContent .an-tab").forEach((x) => x.classList.toggle("active", x.dataset.ar === "open"));
+  await loadAdminReportsInbox();
+}
+
+async function loadAdminReportsInbox() {
+  const list = document.getElementById("arList");
+  list.innerHTML = `<div class="empty-state">Loading…</div>`;
+  const { data, error } = await sb
+    .from("question_reports")
+    .select("id, test_id, question_id, reason, details, created_at, resolved_at, questions(question_text, subject, question_type), profiles(full_name)")
+    .order("created_at", { ascending: false });
+  if (error) {
+    list.innerHTML = `<div class="error-box">${escapeHtml(/resolved_at/.test(error.message || "") ? "Run the latest migration.sql to enable resolved reports." : friendlyError(error))}</div>`;
+    return;
+  }
+  const wantResolved = arTab === "resolved";
+  const rows = (data || []).filter((r) => (wantResolved ? !!r.resolved_at : !r.resolved_at));
+  const groups = new Map();
+  rows.forEach((r) => {
+    if (!groups.has(r.question_id)) groups.set(r.question_id, { q: r.question_id, test: r.test_id, question: r.questions, items: [] });
+    groups.get(r.question_id).items.push(r);
+  });
+  const testIds = [...new Set(rows.map((r) => r.test_id))];
+  const titles = new Map();
+  if (testIds.length) {
+    const { data: tests } = await sb.from("tests").select("id, title, test_mode").in("id", testIds);
+    (tests || []).forEach((t) => titles.set(t.id, t));
+  }
+  if (!groups.size) {
+    list.innerHTML = `<div class="empty-state">${wantResolved ? "Nothing resolved yet." : "No open reports. Nice and clean ✓"}</div>`;
+    return;
+  }
+  list.innerHTML = [...groups.values()]
+    .map((g) => {
+      const t = titles.get(g.test);
+      const reasons = g.items
+        .map((r) => `<li><b>${escapeHtml(r.reason)}</b>${r.details ? ` · ${escapeHtml(r.details)}` : ""} <small>${escapeHtml(r.profiles?.full_name || "Student")} · ${formatDateTime(r.created_at)}</small></li>`)
+        .join("");
+      return `<article class="report-card">
+        <div class="report-card-head"><strong>${escapeHtml(t?.title || "Test")}</strong><span class="status-tag ${t?.test_mode === "practice" ? "is-on" : "locked"}">${t?.test_mode === "practice" ? "♾️ Infinite" : "🔴 Live"}</span><span class="status-tag dq-tag">${g.items.length} report${g.items.length === 1 ? "" : "s"}</span></div>
+        <div class="text-muted">${escapeHtml(g.question?.subject || "")}</div>
+        <div class="question-text report-question-text">${escapeHtml(g.question?.question_text || "This question has been removed.")}</div>
+        <ul class="report-reasons">${reasons}</ul>
+        <div class="report-actions">
+          ${g.question ? `<a class="btn btn-sm btn-primary" href="#/admin-test?test=${encodeURIComponent(g.test)}&edit=${encodeURIComponent(g.q)}">✏️ Edit question</a>` : ""}
+          ${wantResolved ? `<button type="button" class="btn btn-sm" data-ar-act="reopen" data-q="${g.q}">↩ Reopen</button>` : `<button type="button" class="btn btn-sm btn-success" data-ar-act="resolve" data-q="${g.q}">✓ Mark resolved</button>`}
+        </div></article>`;
+    })
+    .join("");
+  renderMath(list);
+}
+
 async function enterBulkImportView() {
   myProfile = myProfile || (await getMyProfile());
   const allowed = myProfile?.role === "admin";
@@ -6867,6 +7465,7 @@ async function enterAnalyticsView() {
       Approved: "is-on",
       "Test Created": "is-on",
       Scheduled: "is-on",
+      Done: "is-on",
       Rejected: "closed",
       Cancelled: "closed",
     }[status] || "locked";
@@ -6877,7 +7476,7 @@ async function enterAnalyticsView() {
     const target = document.getElementById("testRequestsList");
     if (!target) return;
     const { data, error } = await sb.from("test_requests")
-      .select("id, exam, subjects, chapters, topics, difficulty, question_source, question_count, duration_minutes, preferred_at, student_note, status, created_at")
+      .select("id, exam, subjects, chapters, topics, difficulty, question_source, question_count, duration_minutes, preferred_at, student_note, admin_note, status, created_at")
       .order("created_at", { ascending: false });
     if (error) {
       target.innerHTML = `<div class="error-box">${escapeHtml(friendlyError(error))}</div>`;
@@ -6891,7 +7490,7 @@ async function enterAnalyticsView() {
       <article class="request-row">
         <div><strong>${escapeHtml(request.exam)}</strong><div class="text-muted">${escapeHtml((request.subjects || []).join(", ") || "No subjects selected")} · ${Number(request.question_count)} questions · ${Number(request.duration_minutes)} min</div></div>
         <div><strong>${formatDateTime(request.preferred_at)}</strong><div>${formatRequestStatus(request.status)}</div></div>
-        <div class="text-muted">${escapeHtml(request.student_note || "No note added")}</div>
+        <div class="text-muted">${escapeHtml(request.student_note || "No note added")}${request.admin_note ? `<div class="req-admin-reply">💬 Admin: ${escapeHtml(request.admin_note)}</div>` : ""}</div>
       </article>`).join("");
   }
 
@@ -6901,6 +7500,8 @@ async function enterAnalyticsView() {
     const form = document.getElementById("errorBookForm");
     if (form && !form.dataset.bound) {
       form.dataset.bound = "1";
+      initSubjectChapter("errorSubject", "errorChapter");
+      bindImageEditor("errorImage");
       let voiceRecorder = null;
       let voiceChunks = [];
       let recordedVoice = null;
@@ -6927,13 +7528,13 @@ async function enterAnalyticsView() {
           clearRecording("Starting a new recording…");
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
           voiceChunks = [];
-          voiceRecorder = new MediaRecorder(stream);
+          voiceRecorder = new MediaRecorder(stream, recorderOptions());
           voiceRecorder.addEventListener("dataavailable", (event) => {
             if (event.data.size) voiceChunks.push(event.data);
           });
           voiceRecorder.addEventListener("stop", () => {
             stream.getTracks().forEach((track) => track.stop());
-            recordedVoice = new Blob(voiceChunks, { type: voiceRecorder.mimeType || "audio/webm" });
+            recordedVoice = new Blob(voiceChunks, { type: cleanMime(voiceRecorder.mimeType) || "audio/webm" });
             voicePreview.src = URL.createObjectURL(recordedVoice);
             voicePreview.hidden = false;
             voiceStatus.textContent = "Voice note recorded. You can listen before saving.";
@@ -6965,13 +7566,15 @@ async function enterAnalyticsView() {
           question_text: document.getElementById("errorQuestionText").value.trim(),
           category: document.getElementById("errorCategory").value,
           comment: document.getElementById("errorComment").value.trim() || null,
+          subject: document.getElementById("errorSubject").value || null,
+          chapter: document.getElementById("errorChapter").value || null,
         };
         for (const [inputId, column, prefix, blob] of [["errorImage", "image_path", "images", null], ["errorVoice", "voice_note_path", "voice-notes", recordedVoice]]) {
           const file = blob || document.getElementById(inputId)?.files?.[0];
           if (!file) continue;
-          const uploadFile = file instanceof Blob && !file.name ? new File([file], `voice-${Date.now()}.webm`, { type: file.type || "audio/webm" }) : file;
+          const uploadFile = file instanceof Blob && !file.name ? new File([file], `voice-${Date.now()}${audioExt(file.type)}`, { type: cleanMime(file.type) || "audio/webm" }) : file;
           const path = `${user.id}/${prefix}/${Date.now()}-${(uploadFile.name || "attachment").replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-          const { error: uploadError } = await sb.storage.from("error-book").upload(path, uploadFile, { upsert: false });
+          const { error: uploadError } = await sb.storage.from("error-book").upload(path, uploadFile, { upsert: false, contentType: cleanMime(uploadFile.type) });
           if (uploadError) {
             message.textContent = uploadError.message?.toLowerCase().includes("bucket not found")
               ? "Attachment storage is not configured yet. Ask the administrator to apply schema_migration.sql in Supabase."
@@ -6989,77 +7592,14 @@ async function enterAnalyticsView() {
         }
       });
     }
-    const { data, error } = await sb.from("error_book_entries").select("id, attempt_id, question_id, question_text, category, comment, image_path, voice_note_path, resolved, created_at").order("created_at", { ascending: false });
+    const { data, error } = await sb.from("error_book_entries").select("id, attempt_id, question_id, question_text, category, comment, image_path, voice_note_path, resolved, created_at, subject, chapter").order("created_at", { ascending: false });
     if (error) {
       list.innerHTML = `<div class="error-box">${escapeHtml(friendlyError(error))}</div>`;
       return;
     }
-    const counts = (data || []).reduce((map, item) => ({ ...map, [item.category]: (map[item.category] || 0) + 1 }), {});
-    summary.innerHTML = Object.entries(counts).map(([category, count]) => `<div class="home-stat-card"><div class="home-stat-val">${count}</div><div class="home-stat-lbl">${escapeHtml(category)}</div></div>`).join("") || `<div class="empty-state">No saved mistakes yet.</div>`;
-    const attachmentUrls = await Promise.all((data || []).map(async (item) => {
-      const urls = { image: null, voice: null };
-      if (item.image_path) {
-        const { data: signed } = await sb.storage.from("error-book").createSignedUrl(item.image_path, 3600);
-        urls.image = signed?.signedUrl || null;
-      }
-      if (item.voice_note_path) {
-        const { data: signed } = await sb.storage.from("error-book").createSignedUrl(item.voice_note_path, 3600);
-        urls.voice = signed?.signedUrl || null;
-      }
-      return [item.id, urls];
-    }));
-    const attachmentUrlById = new Map(attachmentUrls);
-    list.innerHTML = data?.length ? data.map((item) => {
-      const attachments = attachmentUrlById.get(item.id) || {};
-      return `<article class="error-book-entry ${item.resolved ? "is-resolved" : ""}">
-        <div class="error-book-entry-summary">
-          <strong>${escapeHtml(item.category)}</strong>
-          <span class="text-muted">${item.resolved ? "Resolved" : "Needs review"}</span>
-          <p>${escapeHtml((item.question_text || item.comment || "Saved mistake").slice(0, 110))}${(item.question_text || item.comment || "").length > 110 ? "…" : ""}</p>
-        </div>
-        <div class="error-book-entry-actions">
-          <button class="btn btn-sm" type="button" data-error-view="${item.id}" aria-expanded="false">View details</button>
-          <button class="btn btn-sm" type="button" data-error-edit="${item.id}">Edit</button>
-          <button class="btn btn-sm" type="button" data-error-resolve="${item.id}">${item.resolved ? "Reopen" : "Mark resolved"}</button>
-          <button class="btn btn-sm" type="button" data-error-delete="${item.id}">Delete</button>
-        </div>
-        <div class="error-book-entry-details" data-error-details="${item.id}" hidden>
-          <p class="error-book-question">${escapeHtml(item.question_text || "No question text added.")}</p>
-          <p>${escapeHtml(item.comment || "No personal note added.")}</p>
-          ${attachments.image ? `<img class="error-book-image" src="${escapeHtml(attachments.image)}" alt="Saved Error Book attachment">` : ""}
-          ${attachments.voice ? `<audio class="error-book-audio" controls preload="none" src="${escapeHtml(attachments.voice)}"></audio>` : ""}
-          <small>${item.question_id ? `Question ${escapeHtml(item.question_id)} · Attempt ${escapeHtml(item.attempt_id || "")}` : "Manual entry"}</small>
-        </div>
-      </article>`;
-    }).join("") : `<div class="empty-state">Save a mistake from a report to build your private error book.</div>`;
-    list.querySelectorAll("[data-error-view]").forEach((button) => button.addEventListener("click", () => {
-      const details = list.querySelector(`[data-error-details="${button.dataset.errorView}"]`);
-      const isHidden = details.hidden;
-      details.hidden = !isHidden;
-      button.setAttribute("aria-expanded", String(isHidden));
-      button.textContent = isHidden ? "Hide details" : "View details";
-    }));
-    list.querySelectorAll("[data-error-resolve]").forEach((button) => button.addEventListener("click", async () => {
-      const entry = data.find((item) => item.id === button.dataset.errorResolve);
-      await sb.from("error_book_entries").update({ resolved: !entry.resolved, updated_at: new Date().toISOString() }).eq("id", entry.id);
-      await enterErrorBookView();
-    }));
-    list.querySelectorAll("[data-error-delete]").forEach((button) => button.addEventListener("click", async () => {
-      if (!confirm("Delete this Error Book entry?")) return;
-      const { error: deleteError } = await sb.from("error_book_entries").delete().eq("id", button.dataset.errorDelete);
-      if (deleteError) toast(friendlyError(deleteError), "error");
-      else await enterErrorBookView();
-    }));
-    list.querySelectorAll("[data-error-edit]").forEach((button) => button.addEventListener("click", async () => {
-      const entry = data.find((item) => item.id === button.dataset.errorEdit);
-      const category = prompt("Error category", entry.category);
-      if (category === null) return;
-      const comment = prompt("Personal note", entry.comment || "");
-      if (comment === null) return;
-      const { error: editError } = await sb.from("error_book_entries").update({ category, comment }).eq("id", entry.id);
-      if (editError) toast(friendlyError(editError), "error");
-      else await enterErrorBookView();
-    }));
+    errorBookState.rows = data || [];
+    bindErrorBookToolbar();
+    renderErrorBook();
   }
 
 async function finishAnalyticsView(content, data) {
@@ -8049,4 +8589,4 @@ function setupTheme() {
   applyTheme(savedTheme);
 
   setupThemeDrag();
-}  
+} 
