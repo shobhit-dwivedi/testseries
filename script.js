@@ -6785,149 +6785,350 @@ function parseBulkQuestions(source) {
       optionD: values.OPTION_D || "",
       answer: values.ANSWER || "",
       explanation: values.EXPLANATION || "",
-      type: values.TYPE || "MCQ",
-      subject: values.SUBJECT || "",
-      chapter: values.CHAPTER || "",
+      type: values.TYPE || "",
+      subject: canonicalSubject(values.SUBJECT) || values.SUBJECT || "",
+      chapter: snapBulkChapter(values.CHAPTER || ""),
       errors: [],
       removed: false,
     };
   });
 }
 
+
+
+
+
+
+/* ---------------------------------------------------------------------------
+   Bulk import helpers
+   --------------------------------------------------------------------------- */
+const BULK_SUBJECTS = ["Physics", "Chemistry", "Mathematics", "Biology"];
+const bulkNormType = (t) => {
+  const v = String(t || "").trim().toLowerCase().replace(/[\s/_-]+/g, "");
+  return v === "mcq" ? "mcq" : v === "integer" || v === "numerical" ? "integer" : "";
+};
+
+function snapBulkChapter(value) {
+  const v = String(value || "").trim();
+  if (!v) return "";
+  const all = CHAPTER_GROUPS.flatMap((g) => g.chapters);
+  return all.find((c) => c.toLowerCase() === v.toLowerCase()) || v;
+}
+
+function buildBulkPrompt() {
+  return `You are helping me prepare exam questions for an online JEE / NEET test platform.
+Convert the questions I give you into the EXACT plain-text format below.
+Output ONLY the formatted questions. No introduction, no commentary, no markdown, no code fences.
+
+FORMAT (repeat for every question, numbered from 1):
+[QUESTION 1]
+SUBJECT: <Physics | Chemistry | Mathematics | Biology>
+CHAPTER: <accurate chapter name for the question>
+TYPE: <MCQ | Integer>
+QUESTION:
+<full question text>
+OPTION_A:
+<option text>
+OPTION_B:
+<option text>
+OPTION_C:
+<option text>
+OPTION_D:
+<option text>
+ANSWER:
+<MCQ: exactly one letter A, B, C or D | Integer: a number such as 5 or -2.5>
+EXPLANATION:
+<clear step-by-step solution>
+
+RULES
+1. Every field is REQUIRED for every question: SUBJECT, CHAPTER, TYPE, QUESTION, ANSWER and EXPLANATION always, plus OPTION_A to OPTION_D for MCQ. Never leave a field empty or skip it.
+2. For TYPE: Integer questions, leave out the four OPTION lines (options do not apply). Every other field is still required.
+3. Each question starts with [QUESTION n] alone on its own line, with a blank line between questions.
+4. SUBJECT must be exactly one of: Physics, Chemistry, Mathematics, Biology.
+5. CHAPTER must be a concise, accurate chapter name for the subject.
+6. Write all maths and chemistry in LaTeX: $...$ for inline and $$...$$ for display (for example $x^2$, $\\frac{a}{b}$, $\\mathrm{H_2O}$).
+7. If the correct answer or the solution is not given to me, work it out yourself and double-check it.
+8. Do not use bold, tables, bullet symbols or any other markdown.
+
+MY QUESTIONS:
+[Either in PDF attached or Below]`;
+}
+
+function buildBulkExample() {
+  return `[QUESTION 1]
+SUBJECT: Physics
+CHAPTER: Kinematics
+TYPE: MCQ
+QUESTION:
+A particle moves with velocity $v = 3t^2$ m/s. Its acceleration at $t = 2$ s is
+OPTION_A:
+6 m/s²
+OPTION_B:
+12 m/s²
+OPTION_C:
+18 m/s²
+OPTION_D:
+24 m/s²
+ANSWER:
+B
+EXPLANATION:
+$a = \\frac{dv}{dt} = 6t$, so at $t = 2$ s, $a = 12$ m/s².
+
+[QUESTION 2]
+SUBJECT: Mathematics
+CHAPTER: Quadratic Equations
+TYPE: Integer
+QUESTION:
+If $\\alpha$ and $\\beta$ are the roots of $x^2 - 7x + 12 = 0$, find $\\alpha + \\beta$.
+ANSWER:
+7
+EXPLANATION:
+The sum of the roots is $-\\frac{b}{a} = 7$.`;
+}
+
+async function copyBulkText(text, button) {
+  const original = button.textContent;
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (_) {
+    const tmp = document.createElement("textarea");
+    tmp.value = text;
+    document.body.appendChild(tmp);
+    tmp.select();
+    document.execCommand("copy");
+    tmp.remove();
+  }
+  button.textContent = "✓ Copied!";
+  setTimeout(() => (button.textContent = original), 1600);
+}
+
+function fillBulkPrompt() {
+  const promptBox = document.getElementById("bulkPromptText");
+  const exampleBox = document.getElementById("bulkTemplateText");
+  if (!promptBox) return;
+  promptBox.value = buildBulkPrompt();
+  exampleBox.value = buildBulkExample();
+  const bind = (id, getText) => {
+    const btn = document.getElementById(id);
+    if (btn && !btn.dataset.bound) {
+      btn.dataset.bound = "1";
+      btn.addEventListener("click", () => copyBulkText(getText(), btn));
+    }
+  };
+  bind("copyBulkPromptBtn", () => promptBox.value);
+  bind("copyBulkTemplateBtn", () => exampleBox.value);
+  [promptBox, exampleBox].forEach((box) => {
+    if (!box.dataset.focusBound) {
+      box.dataset.focusBound = "1";
+      box.addEventListener("focus", () => box.select());
+    }
+  });
+}
+
 function validateBulkQuestion(question) {
   const errors = [];
-  const type = String(question.type)
-    .trim()
-    .toLowerCase()
-    .replace(/[\s/_-]+/g, "");
-  if (!question.question.trim()) errors.push("Question text is missing.");
-  if (!question.subject.trim()) errors.push("Subject is missing.");
-  if (!["mcq", "integer", "numerical"].includes(type)) {
-    errors.push("TYPE must be MCQ or Integer/Numerical.");
-  }
+  const bad = new Set();
+  const type = bulkNormType(question.type);
+  const fail = (field, message) => {
+    errors.push(message);
+    bad.add(field);
+  };
+  if (!question.question.trim()) fail("question", "Question text is missing.");
+  if (!canonicalSubject(question.subject)) fail("subject", "Subject must be Physics, Chemistry, Mathematics or Biology.");
+  if (!question.chapter.trim()) fail("chapter", "Chapter is missing.");
+  if (!type) fail("type", "TYPE must be MCQ or Integer.");
+  if (!question.explanation.trim()) fail("explanation", "Explanation is missing.");
   if (type === "mcq") {
-    const answer = question.answer.trim().toUpperCase();
     ["A", "B", "C", "D"].forEach((letter) => {
-      if (!question[`option${letter}`].trim())
-        errors.push(`OPTION_${letter} is missing.`);
+      if (!question[`option${letter}`].trim()) fail(`option${letter}`, `OPTION_${letter} is missing.`);
     });
-    if (!["A", "B", "C", "D"].includes(answer))
-      errors.push("ANSWER must be A, B, C, or D for MCQ.");
-  } else if (type === "integer" || type === "numerical") {
-    if (
-      !question.answer.trim() ||
-      !Number.isFinite(Number(question.answer.trim()))
-    ) {
-      errors.push("ANSWER must be a number for Integer/Numerical questions.");
-    }
+    if (!["A", "B", "C", "D"].includes(question.answer.trim().toUpperCase())) fail("answer", "Mark the correct option (A, B, C or D).");
+  } else if (type === "integer") {
+    if (!question.answer.trim() || !Number.isFinite(Number(question.answer.trim()))) fail("answer", "ANSWER must be a number for Integer questions.");
   }
   question.errors = errors;
+  question.badFields = bad;
   return errors;
 }
 
-function bulkQuestionField(question, field, label, multiline = true) {
-  const value = question[field] || "";
-  const invalid = question.errors.some((error) =>
-    error.toLowerCase().includes(label.toLowerCase().replace("_", " ")),
+function bulkChapterOptions(subject, current) {
+  const subj = canonicalSubject(subject);
+  const groups = CHAPTER_GROUPS.filter((g) => !subj || g.subject === subj);
+  const inList = groups.some((g) => g.chapters.includes(current));
+  return (
+    `<option value="">Select chapter</option>` +
+    (current && !inList ? `<option value="${escapeHtml(current)}" selected>${escapeHtml(current)} (custom)</option>` : "") +
+    groups
+      .map((g) => `<optgroup label="${escapeHtml(g.group)}">${g.chapters.map((c) => `<option value="${escapeHtml(c)}" ${c === current ? "selected" : ""}>${escapeHtml(c)}</option>`).join("")}</optgroup>`)
+      .join("")
   );
-  const tag = multiline ? "textarea" : "input";
-  const extra = multiline ? " rows=3" : "";
-  const valueAttribute = multiline ? "" : ` value="${escapeHtml(value)}"`;
-  const inputHtml = multiline
-    ? `<textarea data-bulk-index="${bulkQuestions.indexOf(question)}" data-bulk-field="${field}"${extra}>${escapeHtml(value)}</textarea>`
-    : `<input data-bulk-index="${bulkQuestions.indexOf(question)}" data-bulk-field="${field}"${valueAttribute}>`;
-  return `<label class="bulk-field ${invalid ? "bulk-field-invalid" : ""}">${label}${invalid ? `<span class="bulk-field-error">Check this field</span>` : ""}${inputHtml}</label>`;
 }
 
-function renderBulkQuestionPreview(question, index) {
-  validateBulkQuestion(question);
-  const type = question.type
-    .trim()
-    .toLowerCase()
-    .replace(/[\s/_-]+/g, "");
-  const renderedOptions =
+function bulkRenderedHtml(question) {
+  const type = bulkNormType(question.type);
+  const ans = question.answer.trim().toUpperCase();
+  const body =
     type === "mcq"
       ? ["A", "B", "C", "D"]
-          .map(
-            (letter) =>
-              `<div class="bulk-render-option"><strong>${letter}</strong><span>${escapeHtml(question[`option${letter}`])}</span></div>`,
-          )
+          .map((l) => `<div class="bulk-render-option ${ans === l ? "is-correct" : ""}"><strong>${l}</strong><span>${escapeHtml(question[`option${l}`])}</span></div>`)
           .join("")
       : `<div class="bulk-render-answer">Correct numerical answer: <strong>${escapeHtml(question.answer)}</strong></div>`;
-  return `
-    <article class="bulk-question-card ${question.errors.length ? "has-errors" : "is-valid"}" data-bulk-card="${index}">
-      <div class="bulk-question-heading">
-        <div><span class="badge ${question.errors.length ? "badge-live" : "badge-brand"}">${question.errors.length ? `${question.errors.length} error${question.errors.length === 1 ? "" : "s"}` : "Valid"}</span><strong>Question ${escapeHtml(question.sourceNumber || String(index + 1))}</strong></div>
-        <button type="button" class="btn btn-sm btn-danger js-remove-bulk-question" data-bulk-remove="${index}">Remove</button>
+  return `<div class="bq-render-meta"><strong>${escapeHtml(question.subject || "Subject not selected")}</strong><span>${escapeHtml(question.chapter || "Chapter not selected")}</span><span>${escapeHtml(question.type || "Type not selected")}</span></div><div class="question-text">${escapeHtml(question.question) || "Question text is empty."}</div>${body}${question.explanation.trim() ? `<div class="bq-expl"><b>Explanation</b><div>${escapeHtml(question.explanation)}</div></div>` : `<div class="bq-expl"><b>Explanation</b><div>Explanation is empty.</div></div>`}`;
+}
+
+function bulkCardHtml(question, index) {
+  validateBulkQuestion(question);
+  const type = bulkNormType(question.type);
+  const ans = question.answer.trim().toUpperCase();
+  const subj = canonicalSubject(question.subject);
+  const e = escapeHtml;
+  const options =
+    type === "mcq"
+      ? `<div class="bq-options">${["A", "B", "C", "D"]
+          .map(
+            (l) => `<div class="bq-opt ${ans === l ? "is-correct" : ""}" data-bq-wrap="option${l}">
+              <span class="bq-letter">${l}</span>
+              <textarea rows="2" data-bulk-field="option${l}" placeholder="Option ${l}">${e(question[`option${l}`])}</textarea>
+              <button type="button" class="bq-mark" data-bq-answer="${l}" aria-label="Mark option ${l} as correct" title="Mark as the correct answer">${ans === l ? "✔" : ""}</button>
+            </div>`,
+          )
+          .join("")}</div><div class="bq-hint">Tap the circle next to the correct option.</div>`
+      : type === "integer"
+        ? `<label class="bq-f" data-bq-wrap="answer">Correct numerical answer<input type="text" inputmode="decimal" data-bulk-field="answer" value="${e(question.answer)}" placeholder="e.g. 7 or -2.5"></label>`
+        : `<div class="bq-hint">Choose the question type above to continue.</div>`;
+  return `<article class="bq-card ${question.errors.length ? "has-errors" : "is-valid"}" data-bulk-card="${index}">
+    <header class="bq-head">
+      <span class="bq-num">Q${e(question.sourceNumber)}</span>
+      <span class="bq-status" data-bq-status>${question.errors.length ? `${question.errors.length} to fix` : "✓ Ready"}</span>
+      <button type="button" class="btn btn-sm bq-edit" data-bq-edit="${index}">Edit question</button>
+      <button type="button" class="bq-remove" data-bulk-remove="${index}" aria-label="Remove question">🗑</button>
+    </header>
+    <div class="bq-errors" data-bq-errors ${question.errors.length ? "" : "hidden"}>${question.errors.map((m) => `<div>${e(m)}</div>`).join("")}</div>
+    <div class="bq-student-preview" data-bq-rendered>${bulkRenderedHtml(question)}</div>
+    <div class="bq-editor" data-bq-editor hidden>
+      <div class="bq-seg" role="group" aria-label="Question type">
+        <button type="button" data-bq-type="MCQ" class="${type === "mcq" ? "active" : ""}">MCQ</button>
+        <button type="button" data-bq-type="Integer" class="${type === "integer" ? "active" : ""}">Integer</button>
       </div>
-      ${
-        question.errors.length
-          ? `<div class="bulk-question-error-list">${question.errors
-              .map(escapeHtml)
-              .map((error) => `<div>${error}</div>`)
-              .join("")}</div>`
-          : ""
-      }
-      <div class="bulk-question-fields">
-        ${bulkQuestionField(question, "question", "Question")}
-        ${bulkQuestionField(question, "optionA", "Option A")}
-        ${bulkQuestionField(question, "optionB", "Option B")}
-        ${bulkQuestionField(question, "optionC", "Option C")}
-        ${bulkQuestionField(question, "optionD", "Option D")}
-        ${bulkQuestionField(question, "answer", "Answer", false)}
-        ${bulkQuestionField(question, "explanation", "Explanation")}
-        ${bulkQuestionField(question, "subject", "Subject", false)}
-        ${bulkQuestionField(question, "chapter", "Chapter", false)}
-        <label class="bulk-field">Type<select data-bulk-index="${index}" data-bulk-field="type"><option value="MCQ" ${type === "mcq" ? "selected" : ""}>MCQ</option><option value="INTEGER" ${["integer", "numerical"].includes(type) ? "selected" : ""}>Integer / Numerical</option></select></label>
+      <div class="bq-meta">
+        <label class="bq-f" data-bq-wrap="subject">Subject
+          <select class="ui-select" data-bulk-field="subject"><option value="">Select subject</option>${BULK_SUBJECTS.map((s2) => `<option ${s2 === subj ? "selected" : ""}>${s2}</option>`).join("")}</select></label>
+        <label class="bq-f" data-bq-wrap="chapter">Chapter
+          <select class="ui-select" data-bulk-field="chapter">${bulkChapterOptions(question.subject, question.chapter.trim())}</select></label>
       </div>
-      <div class="bulk-rendered-preview"><div class="preview-field-label">Rendered preview</div><div class="question-text">${escapeHtml(question.question)}</div>${renderedOptions}${question.explanation ? `<div class="explanation-box">${escapeHtml(question.explanation)}</div>` : ""}</div>
-    </article>`;
+      <label class="bq-f" data-bq-wrap="question">Question<textarea rows="4" data-bulk-field="question">${e(question.question)}</textarea></label>
+      ${options}
+      <label class="bq-f" data-bq-wrap="explanation">Explanation<textarea rows="3" data-bulk-field="explanation">${e(question.explanation)}</textarea></label>
+    </div>
+  </article>`;
+}
+
+function refreshBulkSummary() {
+  const active = bulkQuestions.filter((q) => !q.removed);
+  active.forEach(validateBulkQuestion);
+  const validCount = active.filter((q) => !q.errors.length).length;
+  document.getElementById("bulkImportSummary").textContent = `${validCount} valid / ${active.length} questions`;
+  document.getElementById("importAllValidQuestionsBtn").disabled = validCount === 0;
+  const banner = document.getElementById("bulkImportErrors");
+  const anyBad = active.some((q) => q.errors.length);
+  banner.style.display = anyBad ? "block" : "none";
+  banner.textContent = anyBad ? "Fix the highlighted questions before importing. Questions with problems are skipped." : "";
+}
+
+function refreshBulkCard(index) {
+  const question = bulkQuestions[index];
+  const card = document.querySelector(`[data-bulk-card="${index}"]`);
+  if (!question || !card) return;
+  validateBulkQuestion(question);
+  card.classList.toggle("has-errors", question.errors.length > 0);
+  card.classList.toggle("is-valid", question.errors.length === 0);
+  card.querySelector("[data-bq-status]").textContent = question.errors.length ? `${question.errors.length} to fix` : "✓ Ready";
+  const box = card.querySelector("[data-bq-errors]");
+  box.hidden = !question.errors.length;
+  box.innerHTML = question.errors.map((m) => `<div>${escapeHtml(m)}</div>`).join("");
+  card.querySelectorAll("[data-bq-wrap]").forEach((wrap) => wrap.classList.toggle("is-invalid", question.badFields.has(wrap.dataset.bqWrap)));
+  const rendered = card.querySelector("[data-bq-rendered]");
+  rendered.innerHTML = bulkRenderedHtml(question);
+  renderMath(rendered);
+  refreshBulkSummary();
 }
 
 function renderBulkImportPreview() {
   const preview = document.getElementById("bulkImportPreview");
-  const active = bulkQuestions.filter((question) => !question.removed);
-  active.forEach(validateBulkQuestion);
-  const validCount = active.filter(
-    (question) => !question.errors.length,
-  ).length;
-  document.getElementById("bulkImportSummary").textContent =
-    `${validCount} valid / ${active.length} questions`;
-  document.getElementById("importAllValidQuestionsBtn").disabled =
-    validCount === 0;
+  const active = bulkQuestions.filter((q) => !q.removed);
   preview.innerHTML = active.length
-    ? active
-        .map((question) =>
-          renderBulkQuestionPreview(question, bulkQuestions.indexOf(question)),
-        )
-        .join("")
+    ? active.map((q) => bulkCardHtml(q, bulkQuestions.indexOf(q))).join("")
     : `<div class="empty-state">All parsed questions were removed.</div>`;
-  const errors = document.getElementById("bulkImportErrors");
-  errors.style.display = active.some((question) => question.errors.length)
-    ? "block"
-    : "none";
-  errors.textContent = active.some((question) => question.errors.length)
-    ? "Fix the highlighted questions before importing. Invalid questions will be skipped."
-    : "";
-  preview.querySelectorAll("[data-bulk-field]").forEach((field) => {
-    field.addEventListener("input", updateBulkQuestionFromField);
-    field.addEventListener("change", updateBulkQuestionFromField);
+  preview.querySelectorAll("[data-bulk-card]").forEach((card) => {
+    const question = bulkQuestions[Number(card.dataset.bulkCard)];
+    card.querySelectorAll("[data-bq-wrap]").forEach((wrap) => wrap.classList.toggle("is-invalid", question.badFields.has(wrap.dataset.bqWrap)));
   });
-  preview.querySelectorAll("[data-bulk-remove]").forEach((button) => {
-    button.addEventListener("click", () => {
-      bulkQuestions[Number(button.dataset.bulkRemove)].removed = true;
-      renderBulkImportPreview();
-    });
-  });
+  refreshBulkSummary();
   renderMath(preview);
 }
 
-function updateBulkQuestionFromField(event) {
-  const field = event.currentTarget;
-  const question = bulkQuestions[Number(field.dataset.bulkIndex)];
-  if (!question) return;
-  question[field.dataset.bulkField] = field.value;
-  renderBulkImportPreview();
+let bulkPreviewBound = false;
+const bulkTimers = new Map();
+function bindBulkPreviewEvents() {
+  if (bulkPreviewBound) return;
+  bulkPreviewBound = true;
+  const preview = document.getElementById("bulkImportPreview");
+  const indexOf = (el) => Number(el.closest("[data-bulk-card]")?.dataset.bulkCard);
+  preview.addEventListener("input", (event) => {
+    const field = event.target.closest("[data-bulk-field]");
+    if (!field || field.tagName === "SELECT") return;
+    const index = indexOf(field);
+    const question = bulkQuestions[index];
+    if (!question) return;
+    question[field.dataset.bulkField] = field.value;
+    clearTimeout(bulkTimers.get(index));
+    bulkTimers.set(index, setTimeout(() => refreshBulkCard(index), 250));
+  });
+  preview.addEventListener("change", (event) => {
+    const field = event.target.closest("select[data-bulk-field]");
+    if (!field) return;
+    const index = indexOf(field);
+    const question = bulkQuestions[index];
+    if (!question) return;
+    question[field.dataset.bulkField] = field.value;
+    if (field.dataset.bulkField === "subject") {
+      const allowed = CHAPTER_GROUPS.filter((g) => g.subject === field.value).flatMap((g) => g.chapters);
+      if (question.chapter && !allowed.includes(question.chapter)) question.chapter = "";
+      renderBulkImportPreview();
+    } else refreshBulkCard(index);
+  });
+  preview.addEventListener("click", (event) => {
+    const edit = event.target.closest("[data-bq-edit]");
+    if (edit) {
+      const card = edit.closest("[data-bulk-card]");
+      const editor = card.querySelector("[data-bq-editor]");
+      const isHidden = editor.hasAttribute("hidden");
+      editor.toggleAttribute("hidden", !isHidden);
+      edit.textContent = isHidden ? "Hide editor" : "Edit question";
+      return;
+    }
+    const remove = event.target.closest("[data-bulk-remove]");
+    if (remove) {
+      bulkQuestions[Number(remove.dataset.bulkRemove)].removed = true;
+      renderBulkImportPreview();
+      return;
+    }
+    const type = event.target.closest("[data-bq-type]");
+    if (type) {
+      const question = bulkQuestions[indexOf(type)];
+      question.type = type.dataset.bqType;
+      const ans = question.answer.trim();
+      if (type.dataset.bqType === "Integer" && !Number.isFinite(Number(ans))) question.answer = "";
+      if (type.dataset.bqType === "MCQ" && !["A", "B", "C", "D"].includes(ans.toUpperCase())) question.answer = "";
+      renderBulkImportPreview();
+      return;
+    }
+    const mark = event.target.closest("[data-bq-answer]");
+    if (mark) {
+      bulkQuestions[indexOf(mark)].answer = mark.dataset.bqAnswer;
+      renderBulkImportPreview();
+    }
+  });
 }
 
 async function loadBulkImportTests() {
@@ -6993,7 +7194,7 @@ async function importBulkQuestions() {
     const row = {
       test_id: testId,
       question_order: nextOrder + index,
-      subject: question.subject.trim(),
+      subject: canonicalSubject(question.subject) || question.subject.trim(),
       question_type: isMcq ? "mcq" : "integer",
       question_text: question.question.trim(),
       options: isMcq
@@ -7004,7 +7205,7 @@ async function importBulkQuestions() {
         : null,
       correct_option: isMcq ? question.answer.trim().toUpperCase() : null,
       correct_integer_value: isMcq ? null : Number(question.answer.trim()),
-      explanation: question.explanation.trim() || null,
+      explanation: question.explanation.trim(),
       positive_marks: 4,
       negative_marks: 1,
       chapter: question.chapter.trim() || null,
@@ -7127,10 +7328,14 @@ async function enterBulkImportView() {
   document.getElementById("bulkImportContent").style.display = allowed
     ? "block"
     : "none";
-  if (allowed) await loadBulkImportTests();
+  if (allowed) {
+    fillBulkPrompt();
+    await loadBulkImportTests();
+  }
 }
 
 function setupBulkImportListeners() {
+  bindBulkPreviewEvents();
   document
     .getElementById("parseBulkQuestionsBtn")
     .addEventListener("click", () => {

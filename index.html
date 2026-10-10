@@ -931,25 +931,32 @@
             <span class="badge badge-brand">Admin tool</span>
           </div>
 
-          <details class="card bulk-guide" open>
-            <summary><strong>📋 Question format required before importing</strong></summary>
-            <div class="bulk-guide-body">
-              <p>Paste questions as numbered blocks. Each block starts with <code>[QUESTION 1]</code> on its own line, followed by labelled fields (a label ends with a colon; text can continue on the next lines).</p>
-              <table class="bulk-guide-table">
-                <thead><tr><th>Field</th><th>Required?</th><th>Rule</th></tr></thead>
-                <tbody>
-                  <tr><td><code>QUESTION:</code></td><td>Always</td><td>Cannot be empty. LaTeX works: <code>$x^2$</code> or <code>$$\frac{a}{b}$$</code></td></tr>
-                  <tr><td><code>SUBJECT:</code></td><td>Always</td><td>Cannot be empty. Use Physics, Chemistry, Mathematics or Biology so reports and the Error Book sort correctly</td></tr>
-                  <tr><td><code>TYPE:</code></td><td>Always</td><td><code>MCQ</code> or <code>Integer</code> (also accepts <code>Numerical</code>). Defaults to MCQ if left out</td></tr>
-                  <tr><td><code>OPTION_A:</code> to <code>OPTION_D:</code></td><td>MCQ only</td><td>All four options must be filled</td></tr>
-                  <tr><td><code>ANSWER:</code></td><td>Always</td><td>MCQ: exactly <code>A</code>, <code>B</code>, <code>C</code> or <code>D</code>. Integer: a number such as <code>5</code> or <code>-2.5</code></td></tr>
-                  <tr><td><code>CHAPTER:</code></td><td>Recommended</td><td>Use the chapter name from the syllabus list. It powers chapter-wise practice, weak-chapter reports and Error Book sorting</td></tr>
-                  <tr><td><code>EXPLANATION:</code></td><td>Optional</td><td>Shown to students in the answer review</td></tr>
-                </tbody>
-              </table>
-              <p class="helper-text">Questions with a problem are highlighted and skipped until you fix them. The destination can be a Live test or an Infinite Practice test; imported questions are used in every future attempt of that test.</p>
+          <div class="bulk-steps">
+            <div class="bulk-step"><b>1</b><span>Copy the AI prompt</span></div>
+            <div class="bulk-step"><b>2</b><span>Paste it in any AI with your questions</span></div>
+            <div class="bulk-step"><b>3</b><span>Paste the AI's answer below</span></div>
+            <div class="bulk-step"><b>4</b><span>Check, fix and import</span></div>
+          </div>
+
+          <section class="card bulk-prompt-card">
+            <div class="bulk-prompt-head">
+              <div><h2>AI prompt</h2><p class="helper-text">Copy this, paste it into ChatGPT, Claude or Gemini, then add your questions at the end.</p></div>
+              <button type="button" class="btn btn-primary" id="copyBulkPromptBtn">📋 Copy prompt</button>
             </div>
-          </details>
+            <textarea id="bulkPromptText" class="bulk-code" readonly rows="10" spellcheck="false"></textarea>
+            <div class="bulk-rules">
+              <span>All 7 fields are required in every question</span>
+              <span>Integer questions have no options</span>
+              <span>Subject: Physics, Chemistry, Mathematics or Biology</span>
+              <span>Chapter: use a clear chapter name</span>
+              <span>LaTeX: $x^2$ or $$\frac{a}{b}$$</span>
+            </div>
+            <details class="bulk-example">
+              <summary>Show a ready example (2 questions)</summary>
+              <div class="bulk-prompt-head"><span class="helper-text">This is exactly what the AI should give you back.</span><button type="button" class="btn btn-sm" id="copyBulkTemplateBtn">📋 Copy example</button></div>
+              <textarea id="bulkTemplateText" class="bulk-code" readonly rows="16" spellcheck="false"></textarea>
+            </details>
+          </section>
 
           <div class="card bulk-import-input-card">
             <div class="form-row">
@@ -977,7 +984,7 @@
             <div class="section-title">
               <div>
                 <h2 style="font-size:17px;">Preview and validate</h2>
-                <p class="helper-text">Every field remains editable. Questions with errors are excluded until corrected.</p>
+                <p class="helper-text">Review each question as students will see it. Select Edit question to change any field.</p>
               </div>
               <div id="bulkImportSummary" class="bulk-import-summary"></div>
             </div>
