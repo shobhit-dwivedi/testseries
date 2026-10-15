@@ -31,7 +31,7 @@ async function getMyProfile() {
 
 async function logout() {
   await sb.auth.signOut();
-  navigate("/login");
+  navigate("/");
 }
 
 function toast(message, type = "") {
@@ -220,6 +220,7 @@ const VIEWS = [
   "practice-library",
   "practice-category",
   "admin-reports",
+  "admin-labels",
   "practice-report",
   "practice-stats",
   "test-details",
@@ -244,6 +245,7 @@ const APP_SHELL_VIEWS = new Set([
   "practice-library",
   "practice-category",
   "admin-reports",
+  "admin-labels",
   "practice-report",
   "practice-stats",
   "test-details",
@@ -288,7 +290,46 @@ function showView(name) {
   );
 }
 
+
+/* =========================================================================
+   LOADING — the cheetah appears only while something is really loading.
+   Start-up shows the full splash; later pages show it only if they take
+   more than a quarter of a second. Nothing is delayed to show it.
+   ========================================================================= */
+const SPLASH_RUN = `<div class="splash-run"><i class="sp-streak s1"></i><i class="sp-streak s2"></i><i class="sp-streak s3"></i><img src="assets/examle-head.png" alt="" class="sp-head"></div>`;
+
+function showBusy() {
+  if (document.getElementById("routeBusy")) return;
+  const el = document.createElement("div");
+  el.id = "routeBusy";
+  el.className = "splash splash-lite";
+  el.setAttribute("role", "status");
+  el.setAttribute("aria-label", "Loading");
+  el.innerHTML = `<div class="splash-inner">${SPLASH_RUN}</div>`;
+  document.body.appendChild(el);
+}
+
+function hideBusy() {
+  document.getElementById("routeBusy")?.remove();
+  const splash = document.getElementById("appSplash");
+  if (splash) {
+    splash.classList.add("is-done");
+    setTimeout(() => splash.remove(), 300);
+  }
+}
+setTimeout(hideBusy, 15000); // safety net: never leave the splash up if something fails
+
 async function router() {
+  const timer = setTimeout(showBusy, 250);
+  try {
+    await routerCore();
+  } finally {
+    clearTimeout(timer);
+    hideBusy();
+  }
+}
+
+async function routerCore() {
   const parsed = parseHash();
 
   // Supabase silently re-fires auth-state changes on things like the tab
@@ -318,10 +359,16 @@ async function router() {
     // Public, signed-out visitors land on the marketing page first; only an
     // explicit "/login" request (e.g. the Participate buttons) — or a deep
     // link to a page that requires a session — opens the existing auth view.
-    if (parsed.path === "/" || parsed.path === "/landing") {
+    if (parsed.path === "/" || parsed.path === "/landing" || parsed.path.startsWith("/lp-")) {
       showView("landing");
+      if (parsed.path.startsWith("/lp-")) {
+        setTimeout(() => document.getElementById(parsed.path.slice(1))?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+      }
     } else {
       showView("auth");
+      // "Start now" opens Register, "Log in" opens Log in
+      if (parsed.path === "/register") document.getElementById("tabSignupBtn")?.click();
+      else if (parsed.path === "/login") document.getElementById("tabLoginBtn")?.click();
     }
     syncAppShell(null, false);
     return;
@@ -329,6 +376,8 @@ async function router() {
 
   if (
     parsed.path === "/login" ||
+    parsed.path === "/register" ||
+    parsed.path.startsWith("/lp-") ||
     parsed.path === "/" ||
     parsed.path === "/landing"
   ) {
@@ -348,6 +397,10 @@ async function router() {
     case "/practice":
       showView("practice");
       await enterPracticeView();
+      break;
+    case "/admin-labels":
+      showView("admin-labels");
+      await enterAdminLabelsView();
       break;
     case "/admin-reports":
       showView("admin-reports");
@@ -431,6 +484,9 @@ async function router() {
 const pushNotifications = (() => {
   const listeners = new Set();
   let sdkPromise = null;
+  let listenersBound = false;
+  let requestPromise = null;
+  let promptRequested = false;
 
   const notify = async () => {
     const current = await state();
@@ -444,11 +500,14 @@ const pushNotifications = (() => {
         window.OneSignalDeferred = window.OneSignalDeferred || [];
         window.OneSignalDeferred.push((OneSignal) => {
           clearTimeout(timer);
-          try {
-            OneSignal.Notifications.addEventListener("permissionChange", notify);
-            OneSignal.User.PushSubscription.addEventListener("change", notify);
-          } catch (err) {
-            console.warn("OneSignal listeners unavailable:", err);
+          if (!listenersBound) {
+            listenersBound = true;
+            try {
+              OneSignal.Notifications.addEventListener("permissionChange", notify);
+              OneSignal.User.PushSubscription.addEventListener("change", notify);
+            } catch (err) {
+              console.warn("OneSignal listeners unavailable:", err);
+            }
           }
           resolve(OneSignal);
         });
@@ -486,6 +545,14 @@ const pushNotifications = (() => {
   // Shows OneSignal's own pop-up. A browser that has blocked notifications
   // cannot be asked again, so that case is reported back instead.
   async function request() {
+    if (requestPromise) return requestPromise;
+    if (promptRequested) return state();
+    promptRequested = true;
+    requestPromise = requestOnce();
+    return requestPromise;
+  }
+
+  async function requestOnce() {
     const os = await sdk();
     const current = await state();
     if (!os || current !== "default") return current;
@@ -521,6 +588,7 @@ const PAGE_TITLES = {
   tests: "My Tests",
   "practice-category": "Practice tests",
   "admin-reports": "Reported questions",
+  "admin-labels": "Practice labels",
   practice: "Practice",
   "practice-report": "Practice report",
   "practice-stats": "My practice progress",
@@ -613,7 +681,7 @@ async function syncAppShell(viewName, signedIn) {
     el.classList.toggle("active", el.dataset.nav === (viewName === "practice-report" || viewName === "practice-stats" || viewName === "practice-category" || viewName === "practice-library" ? "practice" : viewName));
   });
   document.getElementById("topbarTitle").textContent =
-    PAGE_TITLES[viewName] || "JEE Hustlers";
+    PAGE_TITLES[viewName] || "Examle";
   closeUserMenu();
 
   myProfile = myProfile || (await getMyProfile());
@@ -629,6 +697,8 @@ async function syncAppShell(viewName, signedIn) {
   document.getElementById("appNavBulkImport").style.display = isAdmin ? "" : "none";
   const reportsNav = document.getElementById("appNavReports");
   if (reportsNav) reportsNav.style.display = isAdmin ? "" : "none";
+  const labelsNav = document.getElementById("appNavLabels");
+  if (labelsNav) labelsNav.style.display = isAdmin ? "" : "none";
 }
 
 window.addEventListener("hashchange", router);
@@ -687,7 +757,7 @@ function setupAuthListeners() {
     button.disabled = busy;
     button.innerHTML = busy
       ? "Connecting to Google…"
-      : '<img class="google-mark" src="Google_logo.webp" alt="" aria-hidden="true"> ' +
+      : '<img class="google-mark" src="assets/Google_logo.webp" alt="" aria-hidden="true"> ' +
         (button === loginGoogleBtn
           ? "Continue with Google"
           : "Register with Google");
@@ -743,7 +813,7 @@ function setupAuthListeners() {
         escapeHtml(
           error.message?.includes("already linked") ||
             error.message?.includes("already exists")
-            ? "That Google account is already linked to a different Test Series account. Log in to that account instead; accounts are never merged automatically."
+            ? "That Google account is already linked to a different Examle account. Log in to that account instead; accounts are never merged automatically."
             : friendlyError(error),
         ),
         "error",
@@ -1087,7 +1157,7 @@ function renderErrorBook() {
     return true;
   });
   if (!rows.length) {
-    list.innerHTML = `<div class="empty-state">Your Error Book is empty.<br><small>Open any test report, choose a question and tap "Add to Error Book".</small></div>`;
+    list.innerHTML = `<div class="empty-state">No mistakes saved yet.</div>`;
     return;
   }
   if (!shown.length) {
@@ -1554,6 +1624,7 @@ async function openErrorBookModal(question, attemptId, onSaved, entry = null) {
     }
     close();
     toast("Saved to your Error Book", "success");
+    if (imageFile || voiceBlob || existing?.image_path || existing?.voice_note_path) void pushNotifications.request();
     if (document.getElementById("view-errors")?.classList.contains("active")) enterErrorBookView();
     if (onSaved) onSaved();
   });
@@ -1573,7 +1644,7 @@ function renderPracticeOverallStrip(strip, data, error) {
   }
   const t = data?.totals || {};
   if (!t.attempts) {
-    strip.innerHTML = `<div class="pr-welcome"><b>Start your first practice test</b><span>Pick any test below. Your progress, weak chapters and streak will appear here.</span></div>`;
+    strip.innerHTML = `<div class="pr-welcome"><b>Pick a category to start</b></div>`;
     return;
   }
   strip.innerHTML = `<div class="pr-stat-row">
@@ -1629,7 +1700,7 @@ function renderPracticeCategories() {
   if (!box) return;
   const count = (key) => practiceHub.rows.filter((r) => r.practice_category === key).length;
   const card = (key, icon, title, sub, n) =>
-    `<a class="pr-cat" href="#/practice-list?cat=${key}"><span class="pr-cat-icon">${icon}</span><span class="pr-cat-text"><b>${escapeHtml(title)}</b><small>${escapeHtml(sub)}</small></span><span class="pr-cat-n">${n}</span></a>`;
+    `<a class="pr-cat" href="#/practice-list?cat=${key}"><span class="pr-cat-icon">${icon}</span><span class="pr-cat-text"><b>${escapeHtml(title)}</b></span><span class="pr-cat-n">${n}</span></a>`;
   box.innerHTML =
     card("all", "♾️", "All Practice", "Every test in one list", practiceHub.rows.length) +
     PR_CATS.map((c) => card(c.key, c.icon, c.title, c.sub, count(c.key))).join("");
@@ -1662,7 +1733,18 @@ function renderPracticeHubList() {
   const h = practiceHub;
   const has = (arr, v) => (arr || []).some((x) => String(x).toLowerCase() === v.toLowerCase());
   const inCategory = h.rows.filter((r) => h.cat === "all" || r.practice_category === h.cat);
-  let rows = inCategory.filter((r) => {
+  const filtering = !!(h.q || h.exam || h.subject || h.chapter);
+
+  // labels only appear when this category really has labelled tests
+  const labels = h.cat === "all" ? [] : (h.labels || []).filter((l) => inCategory.some((r) => r.label_id === l.id));
+  const grouped = labels.length > 0 && !filtering;
+  const current = grouped && h.label ? labels.find((l) => l.id === h.label) : null;
+  let pool = inCategory;
+  if (grouped) pool = current ? inCategory.filter((r) => r.label_id === current.id) : inCategory.filter((r) => !labels.some((l) => l.id === r.label_id));
+
+  renderPracticeLabelArea(grouped, labels, current, inCategory, pool);
+
+  let rows = pool.filter((r) => {
     if (h.q && !String(r.title || "").toLowerCase().includes(h.q)) return false;
     if (h.exam && r.exam !== h.exam) return false;
     if (h.subject && r.practice_subject !== h.subject && !has(r.subjects, h.subject)) return false;
@@ -1678,9 +1760,13 @@ function renderPracticeHubList() {
   };
   rows = rows.sort(sorters[h.sort] || sorters.new);
   const countEl = document.getElementById("pcCount");
-  if (countEl) countEl.textContent = inCategory.length ? `${rows.length} of ${inCategory.length} test${inCategory.length === 1 ? "" : "s"}` : "";
+  if (countEl) countEl.textContent = pool.length ? `${rows.length} of ${pool.length} test${pool.length === 1 ? "" : "s"}` : "";
   if (!inCategory.length) {
-    target.innerHTML = `<div class="empty-state pr-empty">No test is available in this category yet.<br><small>New tests are added regularly. Check back soon.</small></div>`;
+    target.innerHTML = `<div class="empty-state pr-empty">No tests here yet.</div>`;
+    return;
+  }
+  if (!pool.length) {
+    target.innerHTML = "";
     return;
   }
   if (!rows.length) {
@@ -1707,6 +1793,28 @@ function renderPracticeHubList() {
         </div></article>`;
     })
     .join("");
+}
+
+function renderPracticeLabelArea(grouped, labels, current, inCategory, pool) {
+  const box = document.getElementById("pcLabels");
+  if (!box) return;
+  if (!grouped) {
+    box.innerHTML = "";
+    return;
+  }
+  const cat = practiceHub.cat;
+  const catTitle = PR_CATS.find((c) => c.key === cat)?.title || "Practice";
+  if (current) {
+    box.innerHTML = `<a class="practice-back-link" href="#/practice-list?cat=${cat}">← ${escapeHtml(catTitle)}</a><h2 class="pr-label-title">📁 ${escapeHtml(current.name)}</h2>`;
+    return;
+  }
+  const folders = labels
+    .map((l) => {
+      const n = inCategory.filter((r) => r.label_id === l.id).length;
+      return `<a class="pr-folder" href="#/practice-list?cat=${cat}&label=${l.id}"><span class="pr-folder-ic">📁</span><span class="pr-folder-t"><b>${escapeHtml(l.name)}</b><small>${n} test${n === 1 ? "" : "s"}</small></span><span class="pr-folder-go">›</span></a>`;
+    })
+    .join("");
+  box.innerHTML = `<div class="pr-folders">${folders}</div>${pool.length ? `<h3 class="pr-sub">Other tests</h3>` : ""}`;
 }
 
 async function requestStatusChip(status) {
@@ -1769,24 +1877,31 @@ async function enterPracticeView() {
 async function enterPracticeCategoryView() {
   const cat = qs("cat") || "all";
   bindPracticeHub();
-  Object.assign(practiceHub, { cat, q: "", subject: "", chapter: "", exam: "", sort: "new" });
+  Object.assign(practiceHub, { cat, label: qs("label") || "", q: "", subject: "", chapter: "", exam: "", sort: "new", labels: [] });
   ["pcSearch", "pcExam", "pcSubject", "pcChapter"].forEach((id) => (document.getElementById(id).value = ""));
   fillChapterSelect(document.getElementById("pcChapter"), "All chapters");
   document.getElementById("pcSort").value = "new";
   const meta = PR_CATS.find((c) => c.key === cat);
   document.getElementById("pcTitle").textContent = meta ? `${meta.icon} ${meta.title}` : "♾️ All Practice";
-  document.getElementById("pcSub").textContent = meta ? meta.sub : "Every practice test in one list";
+  document.getElementById("pcSub").textContent = "";
+  document.getElementById("pcLabels").innerHTML = "";
   const extra = document.getElementById("pcExtra");
   extra.innerHTML = "";
   if (cat === "custom") renderCustomRequestsPanel(extra);
   const list = document.getElementById("pcList");
   list.innerHTML = `<div class="empty-state">Loading…</div>`;
-  const { data, error } = await sb.rpc("get_practice_hub");
-  if (error) {
-    list.innerHTML = `<div class="error-box">${escapeHtml(prDeploymentHint(error))}</div>`;
+  const [hub, labels] = await Promise.all([
+    sb.rpc("get_practice_hub"),
+    cat === "all"
+      ? Promise.resolve({ data: [] })
+      : sb.from("practice_labels").select("id, category, name, sort_order").eq("category", cat).order("sort_order").order("name"),
+  ]);
+  if (hub.error) {
+    list.innerHTML = `<div class="error-box">${escapeHtml(prDeploymentHint(hub.error))}</div>`;
     return;
   }
-  practiceHub.rows = data || [];
+  practiceHub.rows = hub.data || [];
+  practiceHub.labels = labels.error ? [] : labels.data || [];
   renderPracticeHubList();
 }
 
@@ -2456,7 +2571,7 @@ async function enterTestDetailsView() {
         : `<button class="btn btn-primary" disabled>${state === "closed" ? "Test closed" : `Starts ${formatDateTime(data.available_from)}`}</button>`;
   content.innerHTML = `
     <div class="details-hero">
-      <div><span class="eyebrow-label">${escapeHtml(data.category || "Test series")}</span><h1>${escapeHtml(data.title)}</h1><p>${escapeHtml(data.description || "Review the syllabus and marking scheme before you begin.")}</p></div>
+      <div><span class="eyebrow-label">${escapeHtml(data.category || "Test")}</span><h1>${escapeHtml(data.title)}</h1><p>${escapeHtml(data.description || "Review the syllabus and marking scheme before you begin.")}</p></div>
       <span class="details-state details-state-${state}">${stateLabel}</span>
     </div>
     <div class="details-metric-grid">
@@ -2807,6 +2922,8 @@ function updateQuestionPreview() {
 }
 
 function setupAdminTestListeners() {
+  document.getElementById("practiceCategoryInput").addEventListener("change", () => refreshLabelSelect(""));
+  document.getElementById("newLabelBtn").addEventListener("click", createLabelFromForm);
   fillChapterSelect(document.getElementById("practiceChapterInput"), "Not set");
   document.querySelectorAll('input[name="testMode"]').forEach((r) =>
     r.addEventListener("change", syncModeUI),
@@ -2875,6 +2992,7 @@ function setupAdminTestListeners() {
         practice_category: document.getElementById("practiceCategoryInput").value,
         practice_subject: document.getElementById("practiceSubjectInput").value || null,
         practice_chapter: document.getElementById("practiceChapterInput").value || null,
+        practice_label_id: getTestMode() === "practice" ? document.getElementById("practiceLabelInput").value || null : null,
         test_mode: getTestMode(),
         practice_only: getTestMode() === "practice",
         duration_minutes: parseInt(
@@ -3087,6 +3205,7 @@ async function enterAdminTestView() {
   document.getElementById("integerFields").style.display = "none";
   document.getElementById("typeInput").value = "mcq";
   syncModeUI();
+  refreshLabelSelect("");
 
   if (!myProfile || myProfile.role !== "admin") {
     document.getElementById("notAdminNotice").style.display = "block";
@@ -3186,6 +3305,7 @@ async function loadExistingTest(testId) {
   document.getElementById("practiceSubjectInput").value = data.practice_subject || "";
   fillChapterSelect(document.getElementById("practiceChapterInput"), "Not set");
   document.getElementById("practiceChapterInput").value = data.practice_chapter || "";
+  await refreshLabelSelect(data.practice_label_id || "");
   setTestMode(data.test_mode || "live");
   document.getElementById("durationInput").value = data.duration_minutes;
   document.getElementById("fromInput").value = toLocalInputValue(
@@ -3792,7 +3912,7 @@ function buildPrintPaperHtml(questions, meta) {
   const blocks = [
     {
       html: `
-    <div class="print-promo">JEE Hustlers — practice smart, score high.</div>
+    <div class="print-promo">Examle — practice smart, score high.</div>
     <h1 class="print-title">${escapeHtml(meta.title || "Test")}</h1>
     <div class="print-meta-row">
       <span><b>Duration:</b> ${escapeHtml(String(meta.durationMinutes ?? "—"))} minutes</span>
@@ -4096,7 +4216,7 @@ function buildPdfFile(pages, title) {
   startObj(2);
   push(`<< /Type /Pages /Kids [${pages.map((_, i) => `${pageId(i)} 0 R`).join(" ")}] /Count ${pages.length} >>\nendobj\n`);
   startObj(3);
-  push(`<< /Title (${safeTitle}) /Producer (JEE Hustlers) /Creator (JEE Hustlers) >>\nendobj\n`);
+  push(`<< /Title (${safeTitle}) /Producer (Examle) /Creator (Examle) >>\nendobj\n`);
 
   pages.forEach((pg, i) => {
     startObj(pageId(i));
@@ -5106,9 +5226,11 @@ function setupExamStaticListeners() {
 
 function closeModal(id) {
   document.getElementById(id).classList.remove("open");
+  if (id === "beginModal") document.body.classList.remove("ins-open");
 }
 function openModal(id) {
   document.getElementById(id).classList.add("open");
+  if (id === "beginModal") document.body.classList.add("ins-open");
 }
 
 function showTerminal(title, text, href, label) {
@@ -5128,78 +5250,147 @@ function showTerminal(title, text, href, label) {
 // general rules, navigation, the palette legend, marking scheme, and the
 // full-screen / fair-use policy — ending in a declaration checkbox that
 // must be ticked before Begin Test can be clicked.
-function renderBeginInstructions() {
-  const beginText =
-    warningCount > 0
-      ? "You already have a warning on this attempt from a previous session. One more violation will submit your test automatically."
-      : "Please read every section below carefully before you begin.";
+async function loadTestStartInfo(testId) {
+  let res = await sb.rpc("get_test_start_info", { p_test_id: testId });
+  if (res.error) res = await sb.rpc("get_student_test_details", { p_test_id: testId });
+  return res.error ? null : res.data;
+}
 
-  document.getElementById("beginInstructions").innerHTML = `
-    <div class="instruction-text"><strong>${escapeHtml(testTitle)}</strong> &nbsp;·&nbsp; ${escapeHtml(testCategory)} &nbsp;·&nbsp; Duration: ${durationMinutes} minutes</div>
-    ${
-      pendingIsPractice
-        ? `<div class="practice-notice">🔁 <strong>Practice re-attempt</strong> — this run is for your own revision only. It will not affect your rank, percentile, or appear on any leaderboard.</div>`
-        : ""
-    }
-
-    <div class="instruction-section">
-      <strong>1. General Instructions</strong>
-      <ul>
-        <li>The countdown timer in the top bar shows the time remaining to complete the test. When it reaches zero, the test is submitted automatically.</li>
-        <li>The timer starts only once you click <strong>Begin Test</strong> below — it does not run while you are reading these instructions.</li>
-        <li>The test must be attempted in one continuous sitting. Do not close or refresh this page once you begin.</li>
-      </ul>
-    </div>
-
-    <div class="instruction-section">
-      <strong>2. Navigating a Question</strong>
-      <ul>
-        <li>Select an option (MCQ) or enter a value (numerical), then click <strong>Save &amp; next</strong> to save your response and move on.</li>
-        <li><strong>Mark for review &amp; next</strong> flags a question to revisit, without discarding any answer already saved.</li>
-        <li><strong>Clear response</strong> removes your saved answer for the current question.</li>
-        <li>Use the question palette on the side to jump to any question, in any order, at any time before submitting.</li>
-      </ul>
-    </div>
-
-    <div class="instruction-section">
-      <strong>3. Question Palette — Legend</strong>
-      <div class="palette-legend">
-        <div class="legend-item"><span class="legend-swatch sw-notvisited"></span>Not visited</div>
-        <div class="legend-item"><span class="legend-swatch sw-notanswered"></span>Not answered</div>
-        <div class="legend-item"><span class="legend-swatch sw-answered"></span>Answered</div>
-        <div class="legend-item"><span class="legend-swatch sw-marked"></span>Marked for review</div>
-      </div>
-    </div>
-
-    <div class="instruction-section">
-      <strong>4. Marking Scheme</strong>
-      <ul>
-        <li>Each question carries its own positive and negative marks, shown alongside it — marks are awarded only for the correct option or value.</li>
-        <li>Unattempted questions receive zero marks and no negative marking.</li>
-      </ul>
-    </div>
-
-    <div class="instruction-warning">
-      <strong>5. Full-Screen &amp; Fair-Use Policy</strong>
-      <p>This test runs in full-screen mode. Exiting full-screen, switching tabs or apps, or minimising the browser after you begin is recorded as a violation. A second violation submits your test automatically. If you're warned, use <strong>Return to test</strong> to re-enter full-screen and continue.</p>
-      <p>${escapeHtml(beginText)}</p>
-    </div>
-
-    <label class="declaration-row">
-      <input type="checkbox" id="declarationCheckbox">
-      <span>I have read and understood the instructions above, and I agree to abide by them.</span>
-    </label>
-  `;
-
+async function renderBeginInstructions() {
+  const body = document.getElementById("beginInstructions");
   const beginBtn = document.getElementById("beginBtn");
-  const declarationCheckbox = document.getElementById("declarationCheckbox");
+  const box = document.getElementById("declarationCheckbox");
+  box.checked = false;
   beginBtn.disabled = true;
-  beginBtn.textContent = previousAttemptInProgress
-    ? "Resume Test"
-    : "Begin Test";
-  declarationCheckbox.addEventListener("change", () => {
-    beginBtn.disabled = !declarationCheckbox.checked;
-  });
+  beginBtn.textContent = previousAttemptInProgress ? "Resume Test" : "Begin Test";
+  box.onchange = () => { beginBtn.disabled = !box.checked; };
+  body.scrollTop = 0;
+  body.innerHTML = `<div class="empty-state">Loading instructions…</div>`;
+
+  const [info, modeRow] = await Promise.all([
+    loadTestStartInfo(pendingTestId),
+    sb.from("tests").select("test_mode").eq("id", pendingTestId).maybeSingle(),
+  ]);
+  const kind = pendingIsPractice ? (modeRow.data?.test_mode === "practice" ? "infinite" : "reattempt") : "live";
+  const kindLabel = { live: "🔴 Live test", infinite: "♾️ Infinite Practice", reattempt: "🔁 Re-attempt" }[kind];
+  const qCount = info?.question_count ?? "—";
+  const totalMarks = info?.total_marks ?? "—";
+  const e = escapeHtml;
+
+  // ---- syllabus, taken from the questions in this test
+  const subjects = info?.subjects || [];
+  const syllabus = subjects.length
+    ? subjects
+        .map(
+          (sub) => `<div class="ins-subject">
+            <div class="ins-subject-top"><strong>${subjectDot(sub.subject)}${e(sub.subject)}</strong><span>${sub.question_count} Q · ${sub.total_marks} marks</span></div>
+            <div class="ins-chips">${(sub.chapters || []).length ? sub.chapters.map((c) => `<span>${e(c)}</span>`).join("") : `<em>Chapters not listed</em>`}</div>
+          </div>`,
+        )
+        .join("")
+    : `<p class="ins-muted">The syllabus is not listed for this test.</p>`;
+
+  // ---- marking scheme, taken from the questions in this test
+  const typeName = (t) => (String(t).toLowerCase() === "integer" ? "Numerical / integer" : "Multiple choice (one correct)");
+  const rows = info?.scheme?.length
+    ? info.scheme.map((r) => ({ label: typeName(r.question_type), pos: r.positive_marks, neg: r.negative_marks, n: r.count }))
+    : (info?.marking_scheme || []).map((r) => ({ label: "Questions", pos: r.positive_marks, neg: r.negative_marks, n: null }));
+  const marking = rows.length
+    ? `<table class="ins-table"><thead><tr><th>Type</th><th>Correct</th><th>Wrong</th>${rows.some((r) => r.n != null) ? "<th>Qs</th>" : ""}</tr></thead><tbody>${rows
+        .map((r) => `<tr><td>${e(r.label)}</td><td class="ins-pos">+${r.pos}</td><td class="ins-neg">${Number(r.neg) ? "−" + r.neg : "0"}</td>${r.n != null ? `<td>${r.n}</td>` : ""}</tr>`)
+        .join("")}</tbody></table>`
+    : `<p class="ins-muted">Marks are shown beside each question.</p>`;
+
+  // ---- rules that depend on how this test is being taken
+  const attemptRules = {
+    live: [
+      "<strong>You get one attempt only.</strong> Once you submit, or time runs out, the test cannot be restarted.",
+      "Your score counts towards rank, percentile and the leaderboard once results are released.",
+      "After the test closes you can re-attempt it for practice. A re-attempt is never ranked.",
+    ],
+    reattempt: [
+      "This is a <strong>revision attempt</strong>. It is not ranked and does not change your original result or leaderboard position.",
+      "You can re-attempt this test as many times as you like.",
+    ],
+    infinite: [
+      "<strong>Unlimited attempts.</strong> Practise this test as many times as you like.",
+      "No rank, percentile or leaderboard. Only you can see your reports.",
+      "Every attempt gets its own full report, and you can save mistakes to your Error Book.",
+    ],
+  }[kind];
+
+  const resumeNote = previousAttemptInProgress
+    ? `<div class="ins-notice is-info">You have an attempt in progress. Your timer kept running, so open it now to continue.</div>`
+    : "";
+  const warnNote =
+    warningCount > 0
+      ? `<div class="ins-notice is-warn">⚠ You already have <strong>${warningCount}</strong> warning on this attempt. One more violation submits your test automatically.</div>`
+      : "";
+  const teacher = info?.instructions
+    ? `<section class="ins-card ins-teacher"><h4>📌 From your teacher</h4><p>${e(info.instructions)}</p></section>`
+    : "";
+
+  body.innerHTML = `
+    <div class="ins-layout">
+      <aside class="ins-aside">
+        <div class="ins-title"><span class="ins-mode">${kindLabel}</span><span class="ins-cat">${e(testCategory || "")}</span><h2>${e(testTitle)}</h2></div>
+        <div class="ins-summary">
+          <div><strong>${durationMinutes}m</strong><span>Duration</span></div>
+          <div><strong>${qCount}</strong><span>Questions</span></div>
+          <div><strong>${totalMarks}</strong><span>Total marks</span></div>
+          <div><strong>${kind === "live" ? "1" : "∞"}</strong><span>${kind === "live" ? "Attempt" : "Attempts"}</span></div>
+        </div>
+        ${resumeNote}${warnNote}${teacher}
+        <section class="ins-card">
+          <h4>🧭 Question palette</h4>
+          <div class="ins-legend">
+            <div><span class="legend-swatch sw-notvisited"></span>Not visited</div>
+            <div><span class="legend-swatch sw-notanswered"></span>Not answered</div>
+            <div><span class="legend-swatch sw-answered"></span>Answered</div>
+            <div><span class="legend-swatch sw-marked"></span>Marked for review</div>
+            <div><span class="legend-swatch sw-marked has-tick"></span>Answered and marked</div>
+          </div>
+          <p class="ins-muted">Tap any number to jump to that question, in any order.</p>
+        </section>
+      </aside>
+
+      <div class="ins-main">
+        <section class="ins-card"><h4>📚 Syllabus</h4>${syllabus}</section>
+        <section class="ins-card"><h4>🎯 Marking scheme</h4>${marking}<p class="ins-muted">Unattempted questions score 0 and are never penalised.</p></section>
+
+        <section class="ins-card"><h4>⏱ Timing and attempts</h4><ul>
+          <li>The timer starts only when you tap <strong>${previousAttemptInProgress ? "Resume" : "Begin"} Test</strong>. It does not run while you read this page.</li>
+          <li>When the timer reaches zero, your test is submitted automatically.</li>
+          ${attemptRules.map((r) => `<li>${r}</li>`).join("")}
+        </ul></section>
+        <section class="ins-card"><h4>🖱 Answering</h4><ul>
+          <li><strong>Save &amp; next</strong> saves your answer and moves on.</li>
+          <li><strong>Mark for review &amp; next</strong> flags a question to revisit. Any saved answer is kept.</li>
+          <li><strong>Clear response</strong> removes your saved answer.</li>
+          <li>Numerical questions: type the value, for example <code>5</code> or <code>-2.5</code>.</li>
+        </ul></section>
+
+        <section class="ins-card ins-warn span-2">
+          <h4>🚨 Warning system</h4>
+          <ul>
+            <li>The test runs in <strong>full screen</strong>. Keep it that way until you submit.</li>
+            <li>Leaving full screen, switching tab or app, or minimising the browser is a <strong>violation</strong>.</li>
+            <li><strong>First violation:</strong> you get a warning and can return to the test.</li>
+            <li><strong>Second violation:</strong> your test is submitted automatically and cannot be restarted.</li>
+            <li>Keep browser notifications enabled and do not refresh or close this page during the test.</li>
+          </ul>
+        </section>
+
+        <section class="ins-card span-2">
+          <h4>✅ After you submit</h4>
+          <ul>
+            <li>Your answers are locked. You cannot change them.</li>
+            <li>Your report shows score, accuracy, time per question, subject and chapter analysis, and question-wise review.</li>
+            ${kind === "live" ? "<li>Live test results appear once they are released, followed by your rank and the leaderboard.</li>" : ""}
+          </ul>
+        </section>
+      </div>
+    </div>`;
 }
 
 let previousAttemptInProgress = false;
@@ -5760,6 +5951,7 @@ async function onBegin() {
 
   const beginBtn = document.getElementById("beginBtn");
   const originalBtnText = beginBtn.textContent;
+  void pushNotifications.request();
   const notificationState = await pushNotifications.state();
   if (notificationState !== "granted") {
     toast("Notifications are optional. You can enable them from your profile for test reminders.", "info");
@@ -6815,6 +7007,10 @@ function snapBulkChapter(value) {
   return all.find((c) => c.toLowerCase() === v.toLowerCase()) || v;
 }
 
+function bulkChapterListText() {
+  return BULK_SUBJECTS.map((sub) => `${sub}: ${CHAPTER_GROUPS.filter((g) => g.subject === sub).flatMap((g) => g.chapters).join("; ")}`).join("\n");
+}
+
 function buildBulkPrompt() {
   return `You are helping me prepare exam questions for an online JEE / NEET test platform.
 Convert the questions I give you into the EXACT plain-text format below.
@@ -6823,7 +7019,7 @@ Output ONLY the formatted questions. No introduction, no commentary, no markdown
 FORMAT (repeat for every question, numbered from 1):
 [QUESTION 1]
 SUBJECT: <Physics | Chemistry | Mathematics | Biology>
-CHAPTER: <accurate chapter name for the question>
+CHAPTER: <one chapter name copied exactly from the CHAPTER LIST below>
 TYPE: <MCQ | Integer>
 QUESTION:
 <full question text>
@@ -6845,13 +7041,16 @@ RULES
 2. For TYPE: Integer questions, leave out the four OPTION lines (options do not apply). Every other field is still required.
 3. Each question starts with [QUESTION n] alone on its own line, with a blank line between questions.
 4. SUBJECT must be exactly one of: Physics, Chemistry, Mathematics, Biology.
-5. CHAPTER must be a concise, accurate chapter name for the subject.
+5. CHAPTER must be copied exactly from the CHAPTER LIST for that subject. Pick the closest match.
 6. Write all maths and chemistry in LaTeX: $...$ for inline and $$...$$ for display (for example $x^2$, $\\frac{a}{b}$, $\\mathrm{H_2O}$).
 7. If the correct answer or the solution is not given to me, work it out yourself and double-check it.
 8. Do not use bold, tables, bullet symbols or any other markdown.
 
+CHAPTER LIST
+${bulkChapterListText()}
+
 MY QUESTIONS:
-[Either in PDF attached or Below]`;
+[paste your questions here]`;
 }
 
 function buildBulkExample() {
@@ -6973,7 +7172,7 @@ function bulkRenderedHtml(question) {
           .map((l) => `<div class="bulk-render-option ${ans === l ? "is-correct" : ""}"><strong>${l}</strong><span>${escapeHtml(question[`option${l}`])}</span></div>`)
           .join("")
       : `<div class="bulk-render-answer">Correct numerical answer: <strong>${escapeHtml(question.answer)}</strong></div>`;
-  return `<div class="bq-render-meta"><strong>${escapeHtml(question.subject || "Subject not selected")}</strong><span>${escapeHtml(question.chapter || "Chapter not selected")}</span><span>${escapeHtml(question.type || "Type not selected")}</span></div><div class="question-text">${escapeHtml(question.question) || "Question text is empty."}</div>${body}${question.explanation.trim() ? `<div class="bq-expl"><b>Explanation</b><div>${escapeHtml(question.explanation)}</div></div>` : `<div class="bq-expl"><b>Explanation</b><div>Explanation is empty.</div></div>`}`;
+  return `<div class="question-text">${escapeHtml(question.question)}</div>${body}${question.explanation.trim() ? `<div class="bq-expl"><b>Explanation</b><div>${escapeHtml(question.explanation)}</div></div>` : ""}`;
 }
 
 function bulkCardHtml(question, index) {
@@ -7000,26 +7199,23 @@ function bulkCardHtml(question, index) {
     <header class="bq-head">
       <span class="bq-num">Q${e(question.sourceNumber)}</span>
       <span class="bq-status" data-bq-status>${question.errors.length ? `${question.errors.length} to fix` : "✓ Ready"}</span>
-      <button type="button" class="btn btn-sm bq-edit" data-bq-edit="${index}">Edit question</button>
-      <button type="button" class="bq-remove" data-bulk-remove="${index}" aria-label="Remove question">🗑</button>
-    </header>
-    <div class="bq-errors" data-bq-errors ${question.errors.length ? "" : "hidden"}>${question.errors.map((m) => `<div>${e(m)}</div>`).join("")}</div>
-    <div class="bq-student-preview" data-bq-rendered>${bulkRenderedHtml(question)}</div>
-    <div class="bq-editor" data-bq-editor hidden>
       <div class="bq-seg" role="group" aria-label="Question type">
         <button type="button" data-bq-type="MCQ" class="${type === "mcq" ? "active" : ""}">MCQ</button>
         <button type="button" data-bq-type="Integer" class="${type === "integer" ? "active" : ""}">Integer</button>
       </div>
-      <div class="bq-meta">
-        <label class="bq-f" data-bq-wrap="subject">Subject
-          <select class="ui-select" data-bulk-field="subject"><option value="">Select subject</option>${BULK_SUBJECTS.map((s2) => `<option ${s2 === subj ? "selected" : ""}>${s2}</option>`).join("")}</select></label>
-        <label class="bq-f" data-bq-wrap="chapter">Chapter
-          <select class="ui-select" data-bulk-field="chapter">${bulkChapterOptions(question.subject, question.chapter.trim())}</select></label>
-      </div>
-      <label class="bq-f" data-bq-wrap="question">Question<textarea rows="4" data-bulk-field="question">${e(question.question)}</textarea></label>
-      ${options}
-      <label class="bq-f" data-bq-wrap="explanation">Explanation<textarea rows="3" data-bulk-field="explanation">${e(question.explanation)}</textarea></label>
+      <button type="button" class="bq-remove" data-bulk-remove="${index}" aria-label="Remove question">🗑</button>
+    </header>
+    <div class="bq-errors" data-bq-errors ${question.errors.length ? "" : "hidden"}>${question.errors.map((m) => `<div>${e(m)}</div>`).join("")}</div>
+    <div class="bq-meta">
+      <label class="bq-f" data-bq-wrap="subject">Subject
+        <select class="ui-select" data-bulk-field="subject"><option value="">Select subject</option>${BULK_SUBJECTS.map((s2) => `<option ${s2 === subj ? "selected" : ""}>${s2}</option>`).join("")}</select></label>
+      <label class="bq-f" data-bq-wrap="chapter">Chapter
+        <select class="ui-select" data-bulk-field="chapter">${bulkChapterOptions(question.subject, question.chapter.trim())}</select></label>
     </div>
+    <label class="bq-f" data-bq-wrap="question">Question<textarea rows="4" data-bulk-field="question">${e(question.question)}</textarea></label>
+    ${options}
+    <label class="bq-f" data-bq-wrap="explanation">Explanation<textarea rows="3" data-bulk-field="explanation">${e(question.explanation)}</textarea></label>
+    <details class="bq-preview"><summary>Rendered preview</summary><div data-bq-rendered>${bulkRenderedHtml(question)}</div></details>
   </article>`;
 }
 
@@ -7098,15 +7294,6 @@ function bindBulkPreviewEvents() {
     } else refreshBulkCard(index);
   });
   preview.addEventListener("click", (event) => {
-    const edit = event.target.closest("[data-bq-edit]");
-    if (edit) {
-      const card = edit.closest("[data-bulk-card]");
-      const editor = card.querySelector("[data-bq-editor]");
-      const isHidden = editor.hasAttribute("hidden");
-      editor.toggleAttribute("hidden", !isHidden);
-      edit.textContent = isHidden ? "Hide editor" : "Edit question";
-      return;
-    }
     const remove = event.target.closest("[data-bulk-remove]");
     if (remove) {
       bulkQuestions[Number(remove.dataset.bulkRemove)].removed = true;
@@ -7317,6 +7504,143 @@ async function loadAdminReportsInbox() {
     })
     .join("");
   renderMath(list);
+}
+
+/* =========================================================================
+   PRACTICE LABELS — group tests under a category (for example PYQ -> "JEE Main 2025")
+   ========================================================================= */
+async function refreshLabelSelect(selectedId = "") {
+  const sel = document.getElementById("practiceLabelInput");
+  if (!sel) return;
+  const cat = document.getElementById("practiceCategoryInput").value;
+  sel.innerHTML = `<option value="">No label</option>`;
+  const add = document.getElementById("newLabelBtn");
+  const none = cat === "all"; // "General practice" has no labels
+  sel.disabled = none;
+  if (add) add.disabled = none;
+  if (none) return;
+  const { data } = await sb.from("practice_labels").select("id, name").eq("category", cat).order("sort_order").order("name");
+  (data || []).forEach((l) => sel.insertAdjacentHTML("beforeend", `<option value="${l.id}">${escapeHtml(l.name)}</option>`));
+  sel.value = selectedId && (data || []).some((l) => l.id === selectedId) ? selectedId : "";
+}
+
+async function createLabelFromForm() {
+  const cat = document.getElementById("practiceCategoryInput").value;
+  if (cat === "all") return;
+  const name = (prompt("Label name, for example: JEE Main 2025") || "").trim();
+  if (!name) return;
+  const { data, error } = await sb.from("practice_labels").insert({ category: cat, name }).select("id").single();
+  if (error) {
+    toast(/duplicate|unique/i.test(error.message || "") ? "That label already exists in this category." : friendlyError(error), "error");
+    return;
+  }
+  await refreshLabelSelect(data.id);
+  toast("Label created", "success");
+}
+
+let alBound = false;
+
+async function enterAdminLabelsView() {
+  myProfile = myProfile || (await getMyProfile());
+  const ok = myProfile?.role === "admin";
+  document.getElementById("alNotAdmin").style.display = ok ? "none" : "block";
+  document.getElementById("alContent").style.display = ok ? "block" : "none";
+  if (!ok) return;
+  if (!alBound) {
+    alBound = true;
+    document.getElementById("alCategory").addEventListener("change", loadAdminLabels);
+    const add = async () => {
+      const input = document.getElementById("alNewName");
+      const name = input.value.trim();
+      if (!name) return;
+      const { error } = await sb.from("practice_labels").insert({ category: document.getElementById("alCategory").value, name });
+      if (error) {
+        toast(/duplicate|unique/i.test(error.message || "") ? "That label already exists here." : friendlyError(error), "error");
+        return;
+      }
+      input.value = "";
+      await loadAdminLabels();
+    };
+    document.getElementById("alAddBtn").addEventListener("click", add);
+    document.getElementById("alNewName").addEventListener("keydown", (e) => { if (e.key === "Enter") add(); });
+    document.getElementById("alContent").addEventListener("click", async (e) => {
+      const act = e.target.closest("[data-al]");
+      if (act) {
+        const id = act.dataset.id;
+        if (act.dataset.al === "rename") {
+          const name = (prompt("New label name", act.dataset.name || "") || "").trim();
+          if (!name) return;
+          const { error } = await sb.from("practice_labels").update({ name }).eq("id", id);
+          if (error) toast(friendlyError(error), "error");
+          else await loadAdminLabels();
+        } else if (act.dataset.al === "delete") {
+          if (!confirm("Delete this label? Its tests stay in the category, just without a label.")) return;
+          const { error } = await sb.from("practice_labels").delete().eq("id", id);
+          if (error) toast(friendlyError(error), "error");
+          else await loadAdminLabels();
+        }
+        return;
+      }
+      if (e.target.id === "alMoveBtn") {
+        const ids = [...document.querySelectorAll("[data-al-test]:checked")].map((c) => c.dataset.alTest);
+        if (!ids.length) {
+          toast("Select at least one test.", "error");
+          return;
+        }
+        const label = document.getElementById("alMoveTo").value || null;
+        const { error } = await sb.from("tests").update({ practice_label_id: label }).in("id", ids);
+        if (error) toast(friendlyError(error), "error");
+        else {
+          toast(label ? `${ids.length} test${ids.length === 1 ? "" : "s"} moved` : "Label removed", "success");
+          await loadAdminLabels();
+        }
+      }
+    });
+    document.getElementById("alContent").addEventListener("change", (e) => {
+      if (e.target.id === "alSelectAll") document.querySelectorAll("[data-al-test]").forEach((c) => (c.checked = e.target.checked));
+    });
+  }
+  await loadAdminLabels();
+}
+
+async function loadAdminLabels() {
+  const cat = document.getElementById("alCategory").value;
+  const labelsBox = document.getElementById("alLabels");
+  const testsBox = document.getElementById("alTests");
+  testsBox.innerHTML = `<div class="empty-state">Loading…</div>`;
+  const [lab, tst] = await Promise.all([
+    sb.from("practice_labels").select("id, name, sort_order").eq("category", cat).order("sort_order").order("name"),
+    sb.from("tests").select("id, title, is_published, practice_label_id, created_at").eq("test_mode", "practice").eq("practice_category", cat).order("created_at", { ascending: false }),
+  ]);
+  const err = lab.error || tst.error;
+  if (err) {
+    const msg = /practice_labels|practice_label_id/.test(err.message || "") ? "Run migration_labels.sql to enable labels." : friendlyError(err);
+    labelsBox.innerHTML = "";
+    testsBox.innerHTML = `<div class="error-box">${escapeHtml(msg)}</div>`;
+    return;
+  }
+  const labels = lab.data || [];
+  const tests = tst.data || [];
+  const count = (id) => tests.filter((t) => t.practice_label_id === id).length;
+  labelsBox.innerHTML = labels.length
+    ? `<div class="al-labels">${labels
+        .map((l) => `<div class="al-label"><span><b>${escapeHtml(l.name)}</b><small>${count(l.id)} test${count(l.id) === 1 ? "" : "s"}</small></span><button type="button" class="btn btn-sm" data-al="rename" data-id="${l.id}" data-name="${escapeHtml(l.name)}" aria-label="Rename">✏️</button><button type="button" class="btn btn-sm" data-al="delete" data-id="${l.id}" aria-label="Delete">🗑</button></div>`)
+        .join("")}</div>`
+    : `<p class="text-muted">No labels in this category yet. Students see a normal list of tests.</p>`;
+  if (!tests.length) {
+    testsBox.innerHTML = `<div class="empty-state">No Infinite Practice tests in this category yet.</div>`;
+    return;
+  }
+  const nameOf = (id) => labels.find((l) => l.id === id)?.name;
+  testsBox.innerHTML = `
+    <div class="al-move">
+      <label class="al-all"><input type="checkbox" id="alSelectAll"> Select all</label>
+      <select id="alMoveTo" class="ui-select" aria-label="Move to label"><option value="">Remove label</option>${labels.map((l) => `<option value="${l.id}">${escapeHtml(l.name)}</option>`).join("")}</select>
+      <button type="button" class="btn btn-primary" id="alMoveBtn">Move selected</button>
+    </div>
+    <div class="al-tests">${tests
+      .map((t) => `<label class="al-test"><input type="checkbox" data-al-test="${t.id}"><span class="al-test-title">${escapeHtml(t.title)}${t.is_published ? "" : " <em>(draft)</em>"}</span><span class="al-test-label ${nameOf(t.practice_label_id) ? "has" : ""}">${escapeHtml(nameOf(t.practice_label_id) || "No label")}</span></label>`)
+      .join("")}</div>`;
 }
 
 async function enterBulkImportView() {
@@ -7791,6 +8115,7 @@ async function enterAnalyticsView() {
         const { error } = await sb.from("error_book_entries").insert(payload);
         message.textContent = error ? friendlyError(error) : "Saved privately.";
         if (!error) {
+          if (payload.image_path || payload.voice_note_path) void pushNotifications.request();
           form.reset();
           clearRecording("Your browser will ask for microphone access when you start recording.");
           await enterErrorBookView();
@@ -7874,14 +8199,14 @@ function fmtBestScore(v) {
    ========================================================================= */
 const LB_CATEGORIES = [
   { key: "global", label: "Global" },
-  { key: "jee", label: "JEE" },
+  { key: "jee", label: "JEE Main" },
   { key: "jee_advanced", label: "JEE Advanced" },
   { key: "neet", label: "NEET" },
   { key: "class_9", label: "Class 9" },
   { key: "class_10", label: "Class 10" },
   { key: "class_11", label: "Class 11" },
   { key: "class_12", label: "Class 12" },
-  { key: "dropper", label: "Dropper" },
+  { key: "other", label: "Other" },
 ];
 const lbState = { category: "global", period: "current", request: 0 };
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
@@ -7937,10 +8262,7 @@ function lbPodiumHtml(rows, myId) {
 
 function lbRowHtml(row, myId) {
   const me = row.user_id === myId;
-  const tags = [lbClassLabel(row.class_key), row.target_exam]
-    .filter(Boolean)
-    .map((tag) => `<span class="lb-tag">${escapeHtml(tag)}</span>`)
-    .join("");
+  const tags = "";
   return `<article class="lb-row${me ? " is-me" : ""}">
     <span class="lb-rank">${row.rnk}</span>
     <span class="lb-avatar">${escapeHtml(lbInitial(row.full_name))}</span>
@@ -7953,18 +8275,15 @@ function lbRowHtml(row, myId) {
 }
 
 function lbMyCardHtml(rows, mine) {
-  if (!mine)
-    return `<div class="lb-me is-empty">You're not ranked on this board yet — attempt a live test this month${
-      lbState.category === "global" ? "" : ` (this board is for ${escapeHtml(lbCategoryLabel(lbState.category))} students)`
-    }.</div>`;
-  return `<div class="lb-me"><span>Your rank</span><strong>#${mine.rnk}</strong><small>of ${rows.length} · ${Number(mine.average_score) || 0}% average</small></div>`;
+  if (!mine) return `<div class="lb-me is-empty">You are not ranked here yet.</div>`;
+  return `<div class="lb-me"><span>Your rank</span><strong>#${mine.rnk}</strong><small>of ${rows.length}</small></div>`;
 }
 
 function renderLeaderboard(rows) {
   const content = document.getElementById("leaderboardContent");
   const info = lbPeriodInfo(lbState.period);
   if (!rows.length) {
-    content.innerHTML = `<div class="empty-state">No ranked results for <b>${escapeHtml(lbCategoryLabel(lbState.category))}</b> in ${info.monthLabel} yet.<br>Rankings appear once an admin releases a test's results.</div>`;
+    content.innerHTML = `<div class="empty-state">No ranked results for <b>${escapeHtml(lbCategoryLabel(lbState.category))}</b> yet.</div>`;
     return;
   }
   const myId = myProfile?.id;
@@ -7978,7 +8297,7 @@ function renderLeaderboard(rows) {
       ${top.slice(3).map((row) => lbRowHtml(row, myId)).join("")}
       ${outside ? `<div class="lb-gap" aria-hidden="true">•••</div>${lbRowHtml(mine, myId)}` : ""}
     </div>
-    <p class="lb-note">Only released results of real attempts count — practice runs and disqualified attempts never do. The board resets on the 1st of every month.</p>`;
+    <p class="lb-note">Released live tests only. Resets monthly.</p>`;
 }
 
 function renderLeaderboardControls() {
@@ -7994,8 +8313,7 @@ function renderLeaderboardControls() {
     lbState.period === "current"
       ? `🗓 ${info.monthLabel} · resets on ${info.resetLabel} (${info.daysLeft} day${info.daysLeft === 1 ? "" : "s"} left)`
       : `🗓 ${info.monthLabel} · final standings`;
-  document.getElementById("lbSubtitle").textContent =
-    `${lbCategoryLabel(lbState.category)} · ranked by average score of released tests.`;
+  document.getElementById("lbSubtitle").textContent = lbCategoryLabel(lbState.category);
 }
 
 async function loadLeaderboard() {
@@ -8795,3 +9113,79 @@ function setupTheme() {
 
   setupThemeDrag();
 } 
+
+/* =========================================================================
+   LANDING PAGE — real screenshots
+   Put real screenshots in the "screenshots" folder using the file names in
+   the page (practice.png, error-book.png, analytics.png, leaderboard.png,
+   light-mode.png, dark-mode.png, desktop-home.png, phone-home.png).
+   Any file that exists replaces the drawn preview automatically; a missing
+   file simply keeps the drawn preview.
+   ========================================================================= */
+function initLandingShots() {
+  document.querySelectorAll("[data-real]").forEach((slot) => {
+    const file = slot.dataset.real.split("/").pop();
+    const candidates = [`assets/screenshots/${file}`, `assets/${file}`];
+    const tryNext = (i) => {
+      if (i >= candidates.length) return;
+      const probe = new Image();
+      probe.onload = () => {
+        const phone = slot.dataset.kind === "phone";
+        slot.innerHTML = `<img class="shot-real${phone ? " is-phone" : ""}" src="${probe.src}" alt="${escapeHtml(slot.dataset.alt || "")}" loading="lazy">`;
+      };
+      probe.onerror = () => tryNext(i + 1);
+      probe.src = candidates[i];
+    };
+    tryNext(0);
+  });
+}
+initLandingShots();
+
+/* =========================================================================
+   LANDING FAQ — one answer open at a time, items fade in as you scroll
+   ========================================================================= */
+function initFaq() {
+  const list = document.getElementById("faqList");
+  if (!list || list.dataset.bound) return;
+  list.dataset.bound = "1";
+  list.addEventListener("click", (event) => {
+    const q = event.target.closest(".faq-q");
+    if (!q) return;
+    const item = q.parentElement;
+    const willOpen = !item.classList.contains("open");
+    list.querySelectorAll(".faq-item.open").forEach((other) => {
+      other.classList.remove("open");
+      other.querySelector(".faq-q").setAttribute("aria-expanded", "false");
+    });
+    if (willOpen) {
+      item.classList.add("open");
+      q.setAttribute("aria-expanded", "true");
+    }
+  });
+  const items = list.querySelectorAll(".faq-item");
+  if (!("IntersectionObserver" in window)) {
+    items.forEach((item) => item.classList.add("in"));
+    return;
+  }
+  const io = new IntersectionObserver(
+    (entries) => entries.forEach((entry) => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add("in");
+        io.unobserve(entry.target);
+      }
+    }),
+    { threshold: 0.15 },
+  );
+  items.forEach((item) => io.observe(item));
+  list.querySelector(".faq-item")?.classList.add("open");
+  list.querySelector(".faq-item .faq-q")?.setAttribute("aria-expanded", "true");
+}
+initFaq();
+
+/* Landing menu links just scroll down the page; they never open the login screen. */
+document.addEventListener("click", (event) => {
+  const link = event.target.closest('a[href^="#lp-"]');
+  if (!link) return;
+  event.preventDefault();
+  document.getElementById(link.getAttribute("href").slice(1))?.scrollIntoView({ behavior: "smooth", block: "start" });
+}); 

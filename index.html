@@ -4,7 +4,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
-  <title>Test Series</title> 
+  <title>Examle</title>
+  <meta name="theme-color" content="#0E0E10">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/examle-favicon-32.png">
+  <link rel="icon" type="image/png" sizes="64x64" href="assets/examle-favicon-64.png">
+  <link rel="apple-touch-icon" href="assets/examle-apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="assets/examle-icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="assets/examle-icon-512.png"> 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -13,7 +19,12 @@
 </head>
  
 <body>
-  <button type="button" id="themeToggle" class="theme-toggle" aria-label="Switch to dark theme" title="Switch theme">
+  <div id="appSplash" class="splash" role="status" aria-label="Loading Examle">
+    <div class="splash-inner">
+      <div class="splash-bar"><i></i></div>
+    </div>
+  </div>
+    <button type="button" id="themeToggle" class="theme-toggle" aria-label="Switch to dark theme" title="Switch theme">
     🌙
   </button>
 
@@ -24,7 +35,7 @@
      ===================================================================== -->
   <aside class="app-sidebar" id="appSidebar">
     <div>
-      <a href="#/dashboard" class="app-sidebar-logo" title="JEE Hustlers"><span class="logo-mark">JH</span><span class="logo-text">JEE <span>HUSTLERS</span></span></a>
+      <a href="#/dashboard" class="app-sidebar-logo" title="Examle"><span class="logo-mark"><img src="assets/examle-head.png" alt=""></span><span class="logo-text">EXAM<span>LE</span></span></a>
       <nav class="app-sidebar-nav">
         <a href="#/dashboard" class="app-nav-item" data-nav="dashboard" title="Home"><span class="app-nav-icon">🏠</span><span class="app-nav-label">Home</span></a>
         <a href="#/practice" class="app-nav-item nav-hl" data-nav="practice" title="Infinite Practice"><span class="app-nav-icon nav-inf" aria-hidden="true"><svg viewBox="0 0 48 24" width="28" height="15" focusable="false"><path class="inf-base" pathLength="100" d="M24 12C30 2 44 2 44 12C44 22 30 22 24 12C18 2 4 2 4 12C4 22 18 22 24 12Z"/><path class="inf-run" pathLength="100" d="M24 12C30 2 44 2 44 12C44 22 30 22 24 12C18 2 4 2 4 12C4 22 18 22 24 12Z"/></svg><i class="nav-star" aria-hidden="true">✦</i></span><span class="app-nav-label">Infinite Practice</span></a>
@@ -36,6 +47,7 @@
         <a href="#/admin-test" class="app-nav-item" data-nav="admin-test" title="Admin" id="appNavAdmin" style="display:none;"><span class="app-nav-icon">🛠️</span><span class="app-nav-label">Admin</span></a>
         <a href="#/bulk-import" class="app-nav-item" data-nav="bulk-import" title="Bulk import" id="appNavBulkImport" style="display:none;"><span class="app-nav-icon">📥</span><span class="app-nav-label">Bulk import</span></a>
       <a href="#/admin-reports" class="app-nav-item" data-nav="admin-reports" title="Reported questions" id="appNavReports" style="display:none;"><span class="app-nav-icon">🚩</span><span class="app-nav-label">Reports</span></a>
+        <a href="#/admin-labels" class="app-nav-item" data-nav="admin-labels" title="Practice labels" id="appNavLabels" style="display:none;"><span class="app-nav-icon">🏷️</span><span class="app-nav-label">Labels</span></a>
       </nav>
     </div>
   </aside>
@@ -52,7 +64,7 @@
   <header class="app-topbar" id="appTopbar">
     <div class="topbar-left">
       <button type="button" class="topbar-icon-btn topbar-collapse" id="sidebarToggle" aria-label="Collapse sidebar" aria-expanded="true" title="Collapse sidebar"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
-      <a href="#/dashboard" class="topbar-brand">JEE <span>HUSTLERS</span></a>
+      <a href="#/dashboard" class="topbar-brand"><img class="brand-head" src="assets/examle-head.png" alt="">EXAM<span>LE</span></a>
       <div class="topbar-title">
         <span class="topbar-eyebrow" id="topbarEyebrow">Student</span>
         <strong id="topbarTitle">Home</strong>
@@ -83,7 +95,7 @@
 
     <nav class="landing-navbar">
       <div class="landing-navbar-inner">
-        <a href="#/" class="landing-logo">JEE <span>HUSTLERS</span></a>
+        <a href="#/" class="landing-logo"><img class="brand-head" src="assets/examle-head.png" alt="">EXAM<span>LE</span></a>
 
         <button type="button" class="landing-hamburger" id="landingHamburger" aria-label="Open menu" aria-expanded="false">
           <span></span><span></span><span></span>
@@ -93,8 +105,9 @@
           <a href="#lp-features" class="landing-nav-link">Features</a>
           <a href="#lp-how" class="landing-nav-link">Process</a>
           <a href="#lp-community" class="landing-nav-link">Community</a>
+          <a href="#lp-faq" class="landing-nav-link">FAQ</a>
           <a href="#/login" class="landing-nav-login">Log in</a>
-          <a href="#/login" class="btn btn-primary btn-sm landing-nav-cta">Participate</a>
+          <a href="#/register" class="btn btn-primary btn-sm landing-nav-cta">Start now</a>
         </div>
       </div>
     </nav>
@@ -102,94 +115,218 @@
     <header class="landing-hero" id="lp-home">
       <div class="landing-hero-inner">
         <div class="landing-hero-text">
-          <div class="landing-eyebrow">JEE HUSTLERS</div>
-          <h1 class="landing-title">JEE Hustlers<br><span class="landing-title-accent">Test Series</span></h1>
+          <div class="landing-eyebrow">EXAMLE</div>
+          <h1 class="landing-title">Examle<br><span class="landing-title-accent">Personalized Practice Platform</span></h1>
           <p class="landing-subline">Attempt smarter. Compete fairly. See exactly where you stand.</p>
 
           <div class="landing-hero-actions">
-            <a href="#/login" class="btn landing-cta-btn landing-participate-btn">Participate</a>
+            <a href="#/register" class="btn landing-cta-btn landing-participate-btn">Start now</a>
             <a href="#/login" class="landing-login-btn">Log in <span aria-hidden="true">→</span></a>
           </div>
         </div>
       </div>
     </header>
 
-    <section class="landing-proof" aria-label="Platform preview">
-      <div class="landing-proof-inner">
-        <div class="landing-proof-copy">
+    <section class="lp2-showcase" id="lp-features" aria-label="Platform features">
+      <img class="lp-chee c1" src="assets/examle-head.png" alt="" aria-hidden="true"><img class="lp-chee c2" src="assets/examle-head.png" alt="" aria-hidden="true"><img class="lp-chee c3" src="assets/examle-head.png" alt="" aria-hidden="true">
+      <div class="container lp2-wrap">
+
+        <div class="lp2-intro">
           <span class="landing-section-kicker">Built for serious preparation</span>
           <h2>Everything you need to move from practice to performance.</h2>
-          <p>One focused workspace for live tests, clear reports, and the next right step.</p>
         </div>
-        <div class="landing-product-preview">
-          <div class="preview-window-bar"><span></span><span></span><span></span><b>JEE HUSTLERS</b><em>Live test</em></div>
-          <div class="preview-window-body">
-            <div class="preview-sidebar"><i></i><i></i><i></i><i></i></div>
-            <div class="preview-dashboard"><div class="preview-line preview-line-wide"></div><div class="preview-line"></div><div class="preview-metrics"><span></span><span></span><span></span></div><div class="preview-chart"><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+
+        <div class="lp2-row">
+          <div class="lp2-text">
+            <span class="lp2-tag">♾️ Infinite Practice</span>
+            <h3>Practise without limits</h3>
+            <p>Unlimited attempts. No rank.</p>
+          </div>
+          <div class="lp2-shot" data-real="screenshots/practice.png" data-alt="Infinite Practice screen">
+            <div class="shot shot-browser">
+              <div class="shot-bar"><i></i><i></i><i></i><span>examle &middot; Practice</span></div>
+              <div class="shot-body">
+                <div class="sm-hero"><b>♾️ Infinite Practice</b><small>Unlimited attempts. No rank.</small></div>
+                <div class="sm-cats"><span>📜 PYQ</span><span>🎯 Chapter-wise</span><span>📚 Subject-wise</span><span>🧪 JEE Main</span><span>🚀 JEE Advanced</span><span>🧬 NEET</span></div>
+                <div class="sm-card"><div><b>Kinematics &middot; Chapter test</b><small>30 Q &middot; 60 min</small></div><div class="sm-prog"><em>Best 82%</em><i style="--w:82%"></i></div></div>
+                <div class="sm-card"><div><b>JEE Main 2024 &middot; Shift 1</b><small>75 Q &middot; 180 min</small></div><div class="sm-prog"><em>Best 61%</em><i style="--w:61%"></i></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="lp2-row is-flip">
+          <div class="lp2-text">
+            <span class="lp2-tag">📖 Error Book</span>
+            <h3>Never repeat a mistake</h3>
+            <p>Notes, photos, voice notes.</p>
+          </div>
+          <div class="lp2-shot" data-real="screenshots/error-book.png" data-alt="Error Book on a phone" data-kind="phone">
+            <div class="shot shot-phone">
+              <div class="sp-notch"></div>
+              <div class="shot-body">
+                <div class="sm-title">📖 Error Book</div>
+                <div class="sm-tabs"><span class="on">All</span><span>Physics</span><span>Chem</span><span>Maths</span></div>
+                <div class="sm-row"><i class="d phys"></i><div><b>Rotational Motion</b><small><u class="phys">Physics</u> &middot; Concept gap</small></div><em>&#9662;</em></div>
+                <div class="sm-open">
+                  <div class="sm-q">A disc of mass $M$ and radius $R$ rolls without slipping. Find its kinetic energy.</div>
+                  <div class="sm-note">📝 Forgot $\tfrac12 I\omega^2$</div>
+                  <div class="sm-media"><span class="sm-photo"></span><span class="sm-voice"><b>&#9654;</b><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><em>0:14</em></span></div>
+                </div>
+                <div class="sm-row"><i class="d chem"></i><div><b>Chemical Equilibrium</b><small><u class="chem">Chemistry</u> &middot; Calculation</small></div><em>&#9662;</em></div>
+                <div class="sm-row"><i class="d math"></i><div><b>Definite Integration</b><small><u class="math">Maths</u> &middot; Silly mistake</small></div><em>&#9662;</em></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="lp2-row">
+          <div class="lp2-text">
+            <span class="lp2-tag">📊 Analytics</span>
+            <h3>See your progress</h3>
+            <p>Live and practice in one place.</p>
+          </div>
+          <div class="lp2-shot" data-real="screenshots/analytics.png" data-alt="Analytics page">
+            <div class="shot shot-browser">
+              <div class="shot-bar"><i></i><i></i><i></i><span>examle &middot; Analytics</span></div>
+              <div class="shot-body">
+                <div class="sm-stats"><span><b>1,248</b>Questions</span><span><b>78%</b>Accuracy</span><span><b>🔥 12</b>Streak</span><span><b>34</b>Tests</span></div>
+                <div class="sm-chart"><i style="--h:38%"></i><i style="--h:52%"></i><i style="--h:46%"></i><i style="--h:63%"></i><i style="--h:58%"></i><i style="--h:74%"></i><i style="--h:82%"></i></div>
+                <div class="sm-bars"><div><span>Physics</span><i style="--w:72%"></i><em>72%</em></div><div><span>Chemistry</span><i style="--w:81%"></i><em>81%</em></div><div><span>Maths</span><i style="--w:64%"></i><em>64%</em></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="lp2-row is-flip">
+          <div class="lp2-text">
+            <span class="lp2-tag">🔴 Live Tests</span>
+            <h3>Compete in real tests</h3>
+            <p>Rank, percentile, leaderboard.</p>
+          </div>
+          <div class="lp2-shot" data-real="screenshots/leaderboard.png" data-alt="Leaderboard">
+            <div class="shot shot-browser">
+              <div class="shot-bar"><i></i><i></i><i></i><span>examle &middot; Leaderboard</span></div>
+              <div class="shot-body">
+                <div class="sm-lb"><span class="r1">1</span><b>Aarav</b><em>99.2 %ile</em><strong>284</strong></div>
+                <div class="sm-lb"><span class="r2">2</span><b>Diya</b><em>98.6 %ile</em><strong>276</strong></div>
+                <div class="sm-lb"><span class="r3">3</span><b>Kabir</b><em>97.9 %ile</em><strong>268</strong></div>
+                <div class="sm-lb is-you"><span>12</span><b>You</b><em>91.8 %ile</em><strong>214</strong></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="lp2-row">
+          <div class="lp2-text">
+            <span class="lp2-tag">🌙 Dark mode</span>
+            <h3>Study day or night</h3>
+            <p>Light and dark, one tap.</p>
+          </div>
+          <div class="lp2-shot lp2-duo">
+            <div class="lp2-slot" data-real="screenshots/light-mode.png" data-alt="Light mode" data-kind="phone">
+              <div class="shot shot-phone"><div class="sp-notch"></div><div class="shot-body">
+                <div class="sm-title">♾️ Practice</div>
+                <div class="sm-hero"><b>Infinite Practice</b><small>Unlimited attempts</small></div>
+                <div class="sm-card"><div><b>Kinematics</b><small>30 Q</small></div><div class="sm-prog"><em>82%</em><i style="--w:82%"></i></div></div>
+                <div class="sm-card"><div><b>Thermodynamics</b><small>25 Q</small></div><div class="sm-prog"><em>64%</em><i style="--w:64%"></i></div></div>
+              </div></div>
+            </div>
+            <div class="lp2-slot" data-real="screenshots/dark-mode.png" data-alt="Dark mode" data-kind="phone">
+              <div class="shot shot-phone is-dark"><div class="sp-notch"></div><div class="shot-body">
+                <div class="sm-title">♾️ Practice</div>
+                <div class="sm-hero"><b>Infinite Practice</b><small>Unlimited attempts</small></div>
+                <div class="sm-card"><div><b>Kinematics</b><small>30 Q</small></div><div class="sm-prog"><em>82%</em><i style="--w:82%"></i></div></div>
+                <div class="sm-card"><div><b>Thermodynamics</b><small>25 Q</small></div><div class="sm-prog"><em>64%</em><i style="--w:64%"></i></div></div>
+              </div></div>
+            </div>
           </div>
         </div>
       </div>
     </section>
 
-    <section class="landing-features" id="lp-features">
-      <div class="container">
-        <h2 class="landing-section-title">What You Get</h2>
-
-        <div class="landing-feature-grid">
-          <div class="landing-feature-card">
-            <div class="landing-feature-icon">📝</div>
-            <h3>Full-Length Test Series</h3>
-            <p>Timed, JEE-style tests across Physics, Chemistry &amp; Maths.</p>
+    <section class="lp2-device" aria-label="Desktop and mobile">
+      <img class="lp-chee c4" src="assets/examle-head.png" alt="" aria-hidden="true"><img class="lp-chee c5" src="assets/examle-head.png" alt="" aria-hidden="true">
+      <div class="container lp2-wrap">
+        <div class="lp2-intro">
+          <span class="landing-section-kicker">Desktop and mobile</span>
+          <h2>One platform, every screen.</h2>
+        </div>
+        <div class="lp2-devices">
+          <div class="lp2-slot lp2-slot-desktop" data-real="screenshots/desktop-home.png" data-alt="Desktop layout with side panel">
+            <div class="shot shot-browser shot-desktop">
+              <div class="shot-bar"><i></i><i></i><i></i><span>examle &middot; Home</span></div>
+              <div class="sd-layout">
+                <aside class="sd-side">
+                  <div class="sd-logo"><img src="assets/examle-head.png" alt="">EXAMLE</div>
+                  <span class="on">🏠 Home</span>
+                  <span class="hl">♾️ Infinite Practice</span>
+                  <span>📝 My Tests</span>
+                  <span class="hl">📖 Error Book</span>
+                  <span>📊 Analytics</span>
+                  <span>🏆 Leaderboard</span>
+                  <span>👤 Profile</span>
+                </aside>
+                <div class="sd-main">
+                  <div class="sd-top"><b>Home</b><em>🌙</em></div>
+                  <div class="sm-two"><span><b>1,248</b>Questions practised</span><span><b>34</b>Tests attempted</span></div>
+                  <div class="sm-hero"><b>♾️ Infinite Practice</b><small>PYQs, chapters, JEE and NEET papers</small></div>
+                  <div class="sd-grid">
+                    <div class="sm-card"><div><b>Kinematics</b><small>30 Q</small></div><div class="sm-prog"><em>82%</em><i style="--w:82%"></i></div></div>
+                    <div class="sm-card"><div><b>NEET 2023</b><small>180 Q</small></div><div class="sm-prog"><em>67%</em><i style="--w:67%"></i></div></div>
+                    <div class="sm-card"><div><b>Organic GOC</b><small>25 Q</small></div><div class="sm-prog"><em>New</em><i style="--w:0%"></i></div></div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
-          <div class="landing-feature-card">
-            <div class="landing-feature-icon">⏱️</div>
-            <h3>Real Exam Interface</h3>
-            <p>Live timer, question palette, and mark-for-review — just like the real thing.</p>
+          <div class="lp2-slot lp2-slot-phone" data-real="screenshots/phone-home.png" data-alt="Phone layout with bottom bar" data-kind="phone">
+            <div class="shot shot-phone">
+              <div class="sp-notch"></div>
+              <div class="shot-body">
+                <div class="sm-title">Home</div>
+                <div class="sm-two"><span><b>1,248</b>Practised</span><span><b>34</b>Tests</span></div>
+                <div class="sm-hero"><b>♾️ Infinite Practice</b><small>Start practising</small></div>
+                <div class="sm-card"><div><b>Kinematics</b><small>30 Q</small></div><div class="sm-prog"><em>82%</em><i style="--w:82%"></i></div></div>
+                <div class="sm-nav"><span>🏠<small>Home</small></span><span>📝<small>Tests</small></span><span class="hl">♾️<small>Practice</small></span><span class="hl">📖<small>Errors</small></span><span>📊<small>Stats</small></span></div>
+              </div>
+            </div>
           </div>
-          <div class="landing-feature-card">
-            <div class="landing-feature-icon">📊</div>
-            <h3>Detailed Reports</h3>
-            <p>Answer-by-answer breakdown with explanations after every test.</p>
-          </div>
-          <div class="landing-feature-card">
-            <div class="landing-feature-icon">🏆</div>
-            <h3>Leaderboard &amp; Rank</h3>
-            <p>See your rank and percentile against other students.</p>
-          </div>
+        </div>
+        <div class="lp2-chips">
+          <span>🎯 Chapter-wise</span><span>🧮 LaTeX maths</span><span>✨ Custom tests</span><span>🔥 Streaks</span><span>🖼️ Photo &amp; voice notes</span><span>📱 Phone friendly</span>
         </div>
       </div>
     </section>
 
     <section class="landing-how" id="lp-how">
+      <img class="lp-chee c6" src="assets/examle-head.png" alt="" aria-hidden="true">
       <div class="container">
         <h2 class="landing-section-title">How It Works</h2>
 
         <div class="landing-how-grid">
           <div class="landing-how-step">
             <div class="landing-how-num">1</div>
-            <h3>Sign up for free</h3>
-            <p>Create your account in seconds.</p>
+            <h3>Sign up</h3>
           </div>
           <div class="landing-how-step">
             <div class="landing-how-num">2</div>
-            <h3>Pick a test</h3>
-            <p>Choose from the available test series.</p>
+            <h3>Choose a topic</h3>
           </div>
           <div class="landing-how-step">
             <div class="landing-how-num">3</div>
-            <h3>Attempt it live</h3>
-            <p>Real timer, real exam pressure.</p>
+            <h3>Practise</h3>
           </div>
           <div class="landing-how-step">
             <div class="landing-how-num">4</div>
-            <h3>Get your report</h3>
-            <p>Instant rank, percentile, and explanations.</p>
+            <h3>Improve</h3>
           </div>
         </div>
       </div>
     </section>
 
     <section class="landing-community" id="lp-community">
+      <img class="lp-chee c7" src="assets/examle-head.png" alt="" aria-hidden="true">
       <div class="container">
         <h2 class="landing-section-title">Join the Community</h2>
 
@@ -212,14 +349,57 @@
       </div>
     </section>
 
+    <section class="lp-faq" id="lp-faq" aria-label="Frequently asked questions">
+      <img class="lp-chee c9" src="assets/examle-head.png" alt="" aria-hidden="true">
+      <div class="container lp-faq-wrap">
+        <div class="lp2-intro">
+          <span class="landing-section-kicker">FAQ</span>
+          <h2>Quick answers.</h2>
+          <span class="faq-free"><i></i>Completely free for now</span>
+        </div>
+        <div class="faq-list" id="faqList">
+        <div class="faq-item" style="--i:0">
+          <button type="button" class="faq-q" aria-expanded="false" aria-controls="faq-a1" id="faq-q1"><span class="faq-n">01</span><span class="faq-t">Is Examle really free?</span><i class="faq-ico" aria-hidden="true"></i></button>
+          <div class="faq-a" id="faq-a1" role="region" aria-labelledby="faq-q1"><div><p>Yes. Everything on Examle is free right now: practice tests, live tests, reports and the Error Book. No payment details are asked.</p></div></div>
+        </div>
+        <div class="faq-item" style="--i:1">
+          <button type="button" class="faq-q" aria-expanded="false" aria-controls="faq-a2" id="faq-q2"><span class="faq-n">02</span><span class="faq-t">What is Infinite Practice?</span><i class="faq-ico" aria-hidden="true"></i></button>
+          <div class="faq-a" id="faq-a2" role="region" aria-labelledby="faq-q2"><div><p>Tests you can attempt as many times as you like. Every attempt gets a full report, but there is no rank, percentile or leaderboard.</p></div></div>
+        </div>
+        <div class="faq-item" style="--i:2">
+          <button type="button" class="faq-q" aria-expanded="false" aria-controls="faq-a3" id="faq-q3"><span class="faq-n">03</span><span class="faq-t">How is a live test different?</span><i class="faq-ico" aria-hidden="true"></i></button>
+          <div class="faq-a" id="faq-a3" role="region" aria-labelledby="faq-q3"><div><p>A live test opens and closes at set times and is ranked. Results appear on the leaderboard once released. After it closes you can re-attempt it for revision.</p></div></div>
+        </div>
+        <div class="faq-item" style="--i:3">
+          <button type="button" class="faq-q" aria-expanded="false" aria-controls="faq-a4" id="faq-q4"><span class="faq-n">04</span><span class="faq-t">Which exams are covered?</span><i class="faq-ico" aria-hidden="true"></i></button>
+          <div class="faq-a" id="faq-a4" role="region" aria-labelledby="faq-q4"><div><p>JEE Main, JEE Advanced and NEET, plus Class 9 to 12. Practise by PYQ, chapter, subject, full paper or full syllabus test.</p></div></div>
+        </div>
+        <div class="faq-item" style="--i:4">
+          <button type="button" class="faq-q" aria-expanded="false" aria-controls="faq-a5" id="faq-q5"><span class="faq-n">05</span><span class="faq-t">What is the Error Book?</span><i class="faq-ico" aria-hidden="true"></i></button>
+          <div class="faq-a" id="faq-a5" role="region" aria-labelledby="faq-q5"><div><p>Your personal notebook of mistakes. Save any question from a report with a note, photo or voice note. It is sorted by subject and chapter.</p></div></div>
+        </div>
+        <div class="faq-item" style="--i:5">
+          <button type="button" class="faq-q" aria-expanded="false" aria-controls="faq-a6" id="faq-q6"><span class="faq-n">06</span><span class="faq-t">Do practice tests count on the leaderboard?</span><i class="faq-ico" aria-hidden="true"></i></button>
+          <div class="faq-a" id="faq-a6" role="region" aria-labelledby="faq-q6"><div><p>No. Only released live tests count. Each board follows the exam the test was made for, and it resets every month.</p></div></div>
+        </div>
+        <div class="faq-item" style="--i:6">
+          <button type="button" class="faq-q" aria-expanded="false" aria-controls="faq-a7" id="faq-q7"><span class="faq-n">07</span><span class="faq-t">Can I use it on my phone?</span><i class="faq-ico" aria-hidden="true"></i></button>
+          <div class="faq-a" id="faq-a7" role="region" aria-labelledby="faq-q7"><div><p>Yes. It runs in any browser on phone, tablet and desktop, in light or dark mode. No app download is needed.</p></div></div>
+        </div>
+        </div>
+      </div>
+    </section>
+
     <footer class="landing-footer">
+      <img class="lp-chee c8" src="assets/examle-head.png" alt="" aria-hidden="true">
       <div class="container landing-footer-inner">
-        <div class="landing-footer-brand">JEE HUSTLERS</div>
-        <p class="landing-footer-tagline">Prepare. Compete. Improve.</p>
+        <div class="landing-footer-brand"><img class="brand-head" src="assets/examle-head.png" alt="">EXAMLE</div>
+        <p class="landing-footer-tagline">Personalized Practice Platform</p>
         <nav class="landing-footer-links">
           <a href="#lp-home">Home</a>
           <a href="#lp-features">Features</a>
           <a href="#lp-community">Community</a>
+          <a href="#lp-faq">FAQ</a>
           <a href="#/login">Login</a>
         </nav>
         <p class="app-footer-contact">For any query, support, or doubt, contact <a href="mailto:shobhitdwivedi.in@gmail.com">shobhitdwivedi.in@gmail.com</a></p>
@@ -233,11 +413,11 @@
   <section id="view-auth" class="view">
     <div class="auth-shell">
       <div class="auth-brand">
-        <div class="brand-symbols">⚛ π ∑ √ Δ</div>
+        <img class="auth-emblem" src="assets/examle-emblem.png" alt="Examle">
 
         <div class="brand-main">
-          <h1>JEE<br>HUSTLERS</h1>
-          <div class="brand-subtitle">TEST SERIES</div>
+          <h1>EXAMLE</h1>
+          <div class="brand-subtitle">PERSONALIZED PRACTICE PLATFORM</div>
           <p>Practice. Compete. Improve.</p>
 
           <div class="brand-features">
@@ -263,6 +443,7 @@
           <div id="authMessage"></div>
 
           <form id="loginForm">
+            <p class="auth-note">Already registered? Log in with your email or Google.</p>
             <div class="field">
               <label for="loginEmail">Email</label>
               <input type="email" id="loginEmail" required autocomplete="email">
@@ -278,11 +459,16 @@
             <button type="submit" class="btn btn-primary btn-block" id="loginBtn">Log in</button>
             <div class="auth-divider"><span>or</span></div>
             <button type="button" class="btn btn-google btn-block" id="loginGoogleBtn">
-              <img class="google-mark" src="Google_logo.webp" alt="" aria-hidden="true"> Continue with Google
+              <img class="google-mark" src="assets/Google_logo.webp" alt="" aria-hidden="true"> Continue with Google
             </button>
           </form>
 
           <form id="signupForm" style="display:none">
+            <p class="auth-note"><b>New student?</b> Create your free account with Google or with your email.</p>
+            <button type="button" class="btn btn-google btn-block" id="signupGoogleBtn">
+              <img class="google-mark" src="assets/Google_logo.webp" alt="" aria-hidden="true"> Register with Google
+            </button>
+            <div class="auth-divider"><span>or sign up with email</span></div>
             <div class="field">
               <label for="signupName">Full name</label>
               <input type="text" id="signupName" required autocomplete="name">
@@ -301,10 +487,6 @@
               <div class="hint">At least 6 characters.</div>
             </div>
             <button type="submit" class="btn btn-primary btn-block" id="signupBtn">Create account</button>
-            <div class="auth-divider"><span>or</span></div>
-            <button type="button" class="btn btn-google btn-block" id="signupGoogleBtn">
-              <img class="google-mark" src="Google_logo.webp" alt="" aria-hidden="true"> Register with Google
-            </button>
           </form>
         </div>
       </div>
@@ -320,7 +502,7 @@
      ===================================================================== -->
   <section id="view-dashboard" class="view home-page">
     <header class="home-topbar">
-      <a href="#/dashboard" class="home-brand">🔥 <span>JEE HUSTLERS</span></a>
+      <a href="#/dashboard" class="home-brand"><img class="brand-head" src="assets/examle-head.png" alt=""><span>EXAMLE</span></a>
       <a href="#/profile" class="home-avatar" id="homeAvatar" aria-label="Profile">S</a>
     </header>
 
@@ -337,7 +519,7 @@
         <section class="home-practice-hero" aria-label="Infinite Practice">
           <a href="#/practice" class="hph-main">
             <span class="hph-icon nav-inf" aria-hidden="true"><svg viewBox="0 0 48 24" width="44" height="22" focusable="false"><path class="inf-base" pathLength="100" d="M24 12C30 2 44 2 44 12C44 22 30 22 24 12C18 2 4 2 4 12C4 22 18 22 24 12Z"/><path class="inf-run" pathLength="100" d="M24 12C30 2 44 2 44 12C44 22 30 22 24 12C18 2 4 2 4 12C4 22 18 22 24 12Z"/></svg><i class="nav-star" aria-hidden="true">✦</i></span>
-            <span class="hph-text"><b>Infinite Practice</b><small>PYQs, chapter tests, JEE and NEET papers. Unlimited attempts, no rank.</small></span>
+            <span class="hph-text"><b>Infinite Practice</b><small>Unlimited attempts. No rank.</small></span>
             <span class="hph-go">Start practising →</span>
           </a>
         </section>
@@ -407,7 +589,7 @@
         <div class="pr-hero-text">
           <span class="pr-hero-pill">♾️ Main feature</span>
           <h1>Infinite Practice</h1>
-          <p>Practise as much as you want, whenever you want. No rank, no pressure. Every attempt makes you stronger.</p>
+          <p>Unlimited attempts. No rank.</p>
         </div>
         <a class="btn pr-hero-btn" href="#/analytics?tab=practice">My progress →</a>
       </div>
@@ -416,7 +598,7 @@
       <div id="practiceUpdates"></div>
       <h2 class="pr-h2">Choose what to practise</h2>
       <div id="practiceCategories" class="pr-cats"></div>
-      <p class="pr-foot">Can't find what you need? <a href="#/practice-library?category=custom">Request a custom practice test</a></p>
+      <p class="pr-foot"><a href="#/practice-library?category=custom">Need a test? Request one</a></p>
     </div></div>
   </section>
 
@@ -425,6 +607,7 @@
       <a class="practice-back-link" href="#/practice">← Practice</a>
       <div class="pr-head"><div><span class="eyebrow-label">♾️ Infinite Practice</span><h1 id="pcTitle">Practice tests</h1><p class="text-muted" id="pcSub"></p></div></div>
       <div id="pcExtra"></div>
+      <div id="pcLabels"></div>
       <div class="pr-filters">
         <input type="search" id="pcSearch" class="pr-search" placeholder="Search tests" aria-label="Search tests">
         <select id="pcExam" class="pr-select" aria-label="Exam">
@@ -524,7 +707,6 @@
           <div class="section-title tests-page-head">
             <div>
               <h2>My tests</h2>
-              <p class="text-muted tests-page-sub">Live tests, Infinite Practice and live re-attempts. Each is kept separate.</p>
             </div>
             <a class="btn btn-sm" href="#/leaderboard">🏆 Leaderboard</a>
           </div>
@@ -685,6 +867,8 @@
                   </select>
                   <label for="practiceChapterInput" style="margin-top:10px;display:block;">Chapter (optional)</label>
                   <select id="practiceChapterInput"><option value="">Not set</option></select>
+                  <label for="practiceLabelInput" style="margin-top:10px;display:block;">Label (optional)</label>
+                  <div class="label-pick"><select id="practiceLabelInput"><option value="">No label</option></select><button type="button" class="btn btn-sm" id="newLabelBtn">＋ New</button></div>
                   
                 </div>
                 <div class="field">
@@ -917,6 +1101,23 @@
     </div></div>
   </section>
 
+  <section id="view-admin-labels" class="view">
+    <div class="page-body"><div class="container admin-page-container">
+      <div id="alNotAdmin" class="error-box" style="display:none;">Only admin accounts can manage labels.</div>
+      <div id="alContent">
+        <div class="pr-head"><div><span class="eyebrow-label">Admin</span><h1>Practice labels</h1>
+          <p class="text-muted">Group tests inside a category, for example PYQ &rarr; JEE Main 2025.</p></div></div>
+        <div class="al-bar">
+          <select id="alCategory" class="ui-select" aria-label="Category"><option value="pyq">📜 PYQ practice</option><option value="topic">🎯 Chapter-wise</option><option value="subject">📚 Subject-wise</option><option value="jee_main_paper">🧪 JEE Main papers</option><option value="jee_adv_paper">🚀 JEE Advanced papers</option><option value="neet_paper">🧬 NEET papers</option><option value="full">🏁 Full syllabus tests</option><option value="custom">✨ Custom tests</option></select>
+          <div class="al-new"><input type="text" id="alNewName" maxlength="60" placeholder="New label, e.g. JEE Main 2025"><button type="button" class="btn btn-primary" id="alAddBtn">Add label</button></div>
+        </div>
+        <div id="alLabels"></div>
+        <h2 class="pr-h2">Tests in this category</h2>
+        <div id="alTests"><div class="empty-state">Loading…</div></div>
+      </div>
+    </div></div>
+  </section>
+
   <section id="view-bulk-import" class="view">
 
     <div class="page-body">
@@ -948,7 +1149,7 @@
               <span>All 7 fields are required in every question</span>
               <span>Integer questions have no options</span>
               <span>Subject: Physics, Chemistry, Mathematics or Biology</span>
-              <span>Chapter: use a clear chapter name</span>
+              <span>Chapter: exact name from the syllabus list</span>
               <span>LaTeX: $x^2$ or $$\frac{a}{b}$$</span>
             </div>
             <details class="bulk-example">
@@ -984,7 +1185,7 @@
             <div class="section-title">
               <div>
                 <h2 style="font-size:17px;">Preview and validate</h2>
-                <p class="helper-text">Review each question as students will see it. Select Edit question to change any field.</p>
+                <p class="helper-text">Every field remains editable. Questions with errors are excluded until corrected.</p>
               </div>
               <div id="bulkImportSummary" class="bulk-import-summary"></div>
             </div>
@@ -1066,31 +1267,27 @@
 
 <!-- Begin / Test Instructions -->
 <div class="modal-backdrop" id="beginModal">
-  <div class="modal begin-test-modal">
-
-    <div class="begin-test-header">
+  <div class="ins-sheet" role="dialog" aria-modal="true" aria-labelledby="beginModalTitle">
+    <div class="ins-head">
       <h3 id="beginModalTitle">Test Instructions</h3>
-      <span class="begin-test-badge">READ CAREFULLY</span>
+      <span class="ins-badge">READ CAREFULLY</span>
     </div>
 
-    <div id="beginInstructions" class="begin-instructions">
-      Loading instructions... 
-    </div>
+    <div id="beginInstructions" class="ins-body">Loading instructions…</div>
+
     <div id="beginNotificationGate" class="notification-gate" hidden>
       <p>Browser notifications must be enabled before a test can start.</p>
       <button type="button" class="btn" id="beginEnableNotificationsBtn">Enable Notifications</button>
       <small id="beginNotificationStatus"></small>
     </div>
- 
-    <div class="begin-test-footer">
-      <button class="btn btn-primary btn-block" id="beginBtn">
-        Begin Test
-      </button> 
-    </div>
 
-  </div>   
+    <div class="ins-foot">
+      <label class="ins-declare"><input type="checkbox" id="declarationCheckbox"><span>I have read and understood the instructions and agree to follow them.</span></label>
+      <button class="btn btn-primary" id="beginBtn" disabled>Begin Test</button>
+    </div>
+  </div>
 </div>
- 
+
       <!-- Violation warning -->
       <div class="modal-backdrop" id="violationModal">
         <div class="modal warning">
@@ -1198,7 +1395,7 @@
     <div class="page-body">
       <div class="container">
         <div class="section-title analytics-heading">
-          <div><span class="eyebrow-label">Performance cockpit</span><h1>Analytics</h1><p class="text-muted">Live tests and practice together, in one place.</p></div>
+          <div><span class="eyebrow-label">Performance cockpit</span><h1>Analytics</h1></div>
         </div>
         <div id="analyticsContent"><div class="empty-state">Loading analytics…</div></div>
         <div id="analysisHistory" class="analysis-history"></div>
