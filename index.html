@@ -105,6 +105,7 @@
     </div>
     <div class="topbar-right">
       <a href="#/leaderboard" class="topbar-icon-btn topbar-trophy" aria-label="Leaderboard" title="Leaderboard">🏆</a>
+      <button type="button" class="ann-btn" id="annBtn" aria-label="Announcements" title="Announcements"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span class="ann-badge" id="annBadge" hidden>0</span></button>
       <button type="button" class="topbar-pill" id="notifPill" hidden><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span class="topbar-pill-label"></span></button>
       <div class="topbar-user">
         <button type="button" class="topbar-user-btn" id="topbarUserBtn" aria-haspopup="menu" aria-expanded="false">
@@ -115,6 +116,7 @@
         <div class="topbar-menu" id="topbarMenu" role="menu" hidden>
           <a href="#/profile" role="menuitem">👤 My profile</a>
           <a href="#/leaderboard" role="menuitem">🏆 Leaderboard</a>
+          <a href="#" role="menuitem" id="menuNotifBtn">🔔 Push notifications</a>
           <button type="button" class="js-logout" role="menuitem">⎋ Log out</button>
         </div>
       </div>
@@ -1126,6 +1128,45 @@
   <!-- =====================================================================
      BULK QUESTION IMPORT VIEW — admin-only, parse/validate before insert
      ===================================================================== -->
+  <section id="view-announcements" class="view">
+    <div class="page-body"><div class="ann-page">
+      <div class="ann-head"><h1>📢 Announcements</h1></div>
+      <div class="ann-scroll" id="annScroll">
+        <div id="annFeed" class="ann-feed"><div class="empty-state">Loading…</div></div>
+        <div class="ann-more-wrap"><button type="button" class="btn" id="annMore" hidden>Load older</button></div>
+      </div>
+
+      <div class="ann-bar" id="annBar">
+        <div class="ann-target" id="annTarget" hidden>
+          <div class="ann-target-text"><b id="annTargetTitle"></b><small id="annTargetSnippet"></small></div>
+          <button type="button" id="annTargetClear" aria-label="Cancel reply">✕</button>
+        </div>
+        <div class="ann-tray" id="annTray" hidden>
+          <div class="ann-aud" id="annAud" hidden></div>
+          <div class="ann-poll" id="annPollBox" hidden>
+            <div id="annPollOptions"></div>
+            <button type="button" class="btn btn-sm" id="annAddOption">＋ Add option</button>
+          </div>
+          <input type="url" id="annLink" class="ann-linkin" placeholder="Paste a link, https://…" hidden>
+          <div id="annAttachInfo" class="ann-attach-info"></div>
+        </div>
+        <div class="ann-menu" id="annMenu" hidden>
+          <label class="ann-menu-item">🖼️ <span>Image</span><input type="file" id="annImage" accept="image/*" hidden></label>
+          <label class="ann-menu-item">🎵 <span>Audio file</span><input type="file" id="annAudioFile" accept="audio/*" hidden></label>
+          <button type="button" class="ann-menu-item" id="annPollBtn">📊 <span>Poll</span></button>
+          <button type="button" class="ann-menu-item" id="annLinkBtn">🔗 <span>Link</span></button>
+        </div>
+        <button type="button" class="ann-aud-pill" id="annAudBtn" hidden>👥 <span id="annAudLabel">To: All students</span> ▾</button>
+        <div class="ann-row">
+          <button type="button" class="ann-ico" id="annClip" aria-label="Attach" hidden><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></button>
+          <div class="ann-input-wrap"><textarea id="annInput" rows="1" maxlength="2000" placeholder="Write an announcement"></textarea></div>
+          <button type="button" class="ann-send" id="annSend" aria-label="Send"><svg class="ic-mic" viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V22h2v-3.08A7 7 0 0 0 19 12h-2z"/></svg><svg class="ic-send" viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><path d="M2.01 21 23 12 2.01 3 2 10l15 2-15 2z"/></svg></button>
+        </div>
+        <div id="annMsg" class="ann-msg" aria-live="polite"></div>
+      </div>
+    </div></div>
+  </section>
+
   <section id="view-admin-reports" class="view">
     <div class="page-body"><div class="container admin-page-container">
       <div id="arNotAdmin" class="error-box" style="display:none;">Only admin accounts can see reported questions.</div>

@@ -221,6 +221,7 @@ const VIEWS = [
   "practice-category",
   "admin-reports",
   "admin-labels",
+  "announcements",
   "practice-report",
   "practice-stats",
   "test-details",
@@ -246,6 +247,7 @@ const APP_SHELL_VIEWS = new Set([
   "practice-category",
   "admin-reports",
   "admin-labels",
+  "announcements",
   "practice-report",
   "practice-stats",
   "test-details",
@@ -398,6 +400,10 @@ async function routerCore() {
       showView("practice");
       await enterPracticeView();
       break;
+    case "/announcements":
+      showView("announcements");
+      await enterAnnouncementsView();
+      break;
     case "/admin-labels":
       showView("admin-labels");
       await enterAdminLabelsView();
@@ -484,9 +490,6 @@ async function routerCore() {
 const pushNotifications = (() => {
   const listeners = new Set();
   let sdkPromise = null;
-  let listenersBound = false;
-  let requestPromise = null;
-  let promptRequested = false;
 
   const notify = async () => {
     const current = await state();
@@ -500,14 +503,11 @@ const pushNotifications = (() => {
         window.OneSignalDeferred = window.OneSignalDeferred || [];
         window.OneSignalDeferred.push((OneSignal) => {
           clearTimeout(timer);
-          if (!listenersBound) {
-            listenersBound = true;
-            try {
-              OneSignal.Notifications.addEventListener("permissionChange", notify);
-              OneSignal.User.PushSubscription.addEventListener("change", notify);
-            } catch (err) {
-              console.warn("OneSignal listeners unavailable:", err);
-            }
+          try {
+            OneSignal.Notifications.addEventListener("permissionChange", notify);
+            OneSignal.User.PushSubscription.addEventListener("change", notify);
+          } catch (err) {
+            console.warn("OneSignal listeners unavailable:", err);
           }
           resolve(OneSignal);
         });
@@ -545,14 +545,6 @@ const pushNotifications = (() => {
   // Shows OneSignal's own pop-up. A browser that has blocked notifications
   // cannot be asked again, so that case is reported back instead.
   async function request() {
-    if (requestPromise) return requestPromise;
-    if (promptRequested) return state();
-    promptRequested = true;
-    requestPromise = requestOnce();
-    return requestPromise;
-  }
-
-  async function requestOnce() {
     const os = await sdk();
     const current = await state();
     if (!os || current !== "default") return current;
@@ -589,6 +581,7 @@ const PAGE_TITLES = {
   "practice-category": "Practice tests",
   "admin-reports": "Reported questions",
   "admin-labels": "Practice labels",
+  announcements: "Announcements",
   practice: "Practice",
   "practice-report": "Practice report",
   "practice-stats": "My practice progress",
@@ -676,6 +669,7 @@ async function syncAppShell(viewName, signedIn) {
   const show = signedIn && APP_SHELL_VIEWS.has(viewName);
   document.body.classList.toggle("app-shell-on", show);
   if (!show) return;
+  refreshAnnouncementBadge();
 
   document.querySelectorAll(".app-nav-item, .app-bottom-item").forEach((el) => {
     el.classList.toggle("active", el.dataset.nav === (viewName === "practice-report" || viewName === "practice-stats" || viewName === "practice-category" || viewName === "practice-library" ? "practice" : viewName));
@@ -702,7 +696,34 @@ async function syncAppShell(viewName, signedIn) {
 }
 
 window.addEventListener("hashchange", router);
+
+/* =========================================================================
+   Less database load: read-only summaries are cached for 45 seconds and
+   identical requests made at the same time share one call. The cache is
+   cleared whenever a test is started or submitted, and on sign in / out.
+   ========================================================================= */
+const rpcCache = new Map();
+function invalidateRpcCache() {
+  rpcCache.clear();
+}
+function cachedRpc(name, args, ttl = 45000) {
+  const key = name + JSON.stringify(args || {});
+  const hit = rpcCache.get(key);
+  if (hit) {
+    if (hit.p) return hit.p;
+    if (Date.now() - hit.t < ttl) return Promise.resolve(hit.res);
+  }
+  const p = (args === undefined ? sb.rpc(name) : sb.rpc(name, args)).then((res) => {
+    if (res.error) rpcCache.delete(key);
+    else rpcCache.set(key, { t: Date.now(), res });
+    return res;
+  });
+  rpcCache.set(key, { p });
+  return p;
+}
+
 sb.auth.onAuthStateChange(async (event, session) => {
+  invalidateRpcCache();
   router();
 
 });
@@ -1283,6 +1304,92 @@ document.addEventListener("click", (e) => {
    Resolves with the edited File, the original File if nothing was changed,
    or null if the student cancels.
    ========================================================================= */
+/* =========================================================================
+   Photos are shrunk before upload: longest side 1600px, WebP/JPEG at 80%.
+   Usually 4-8 MB camera photos become 100-300 KB.
+   ========================================================================= */
+async function compressImage(file, maxSide = 1600, quality = 0.8) {
+  try {
+    if (!file || !/^image\//.test(file.type) || /gif|svg/.test(file.type)) return file;
+    const url = URL.createObjectURL(file);
+    const img = await new Promise((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = reject;
+      el.src = url;
+    });
+    URL.revokeObjectURL(url);
+    const k = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(img.naturalWidth * k));
+    canvas.height = Math.max(1, Math.round(img.naturalHeight * k));
+    canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+    const webp = canvas.toDataURL("image/webp").startsWith("data:image/webp");
+    const type = webp ? "image/webp" : "image/jpeg";
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, type, quality));
+    if (!blob || (k === 1 && blob.size >= file.size)) return file;
+    const base = (file.name || "photo").replace(/\.[^.]+$/, "");
+    return new File([blob], `${base}.${webp ? "webp" : "jpg"}`, { type });
+  } catch (_) {
+    return file;
+  }
+}
+
+/* in-page camera: take a photo without leaving the website */
+function openCameraCapture() {
+  return new Promise((resolve) => {
+    const ov = document.createElement("div");
+    ov.className = "cam-overlay";
+    ov.innerHTML = `<div class="cam-sheet" role="dialog" aria-modal="true" aria-label="Take a photo">
+      <video class="cam-video" autoplay playsinline muted></video>
+      <p class="cam-msg" hidden></p>
+      <div class="cam-bar"><button type="button" class="btn" data-cam="cancel">Cancel</button><button type="button" class="cam-shutter" data-cam="shot" aria-label="Take photo"></button><button type="button" class="btn" data-cam="flip">Flip</button></div>
+    </div>`;
+    document.body.appendChild(ov);
+    const video = ov.querySelector("video");
+    const msg = ov.querySelector(".cam-msg");
+    let stream = null;
+    let facing = "environment";
+    const stop = () => stream?.getTracks().forEach((t) => t.stop());
+    const start = async () => {
+      stop();
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: facing }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
+        video.srcObject = stream;
+        msg.hidden = true;
+      } catch (err) {
+        msg.hidden = false;
+        msg.textContent = err?.name === "NotAllowedError" ? "Camera is blocked. Allow camera access in your browser settings." : "Could not open the camera.";
+      }
+    };
+    const onKey = (e) => { if (e.key === "Escape") finish(null); };
+    const finish = (file) => {
+      stop();
+      document.removeEventListener("keydown", onKey);
+      ov.remove();
+      resolve(file);
+    };
+    document.addEventListener("keydown", onKey);
+    ov.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-cam]");
+      if (!b) return;
+      if (b.dataset.cam === "cancel") finish(null);
+      else if (b.dataset.cam === "flip") {
+        facing = facing === "environment" ? "user" : "environment";
+        start();
+      } else if (b.dataset.cam === "shot") {
+        if (!video.videoWidth) return;
+        const c = document.createElement("canvas");
+        c.width = video.videoWidth;
+        c.height = video.videoHeight;
+        c.getContext("2d").drawImage(video, 0, 0);
+        c.toBlob((blob) => finish(blob ? new File([blob], `photo-${Date.now()}.jpg`, { type: "image/jpeg" }) : null), "image/jpeg", 0.92);
+      }
+    });
+    start();
+  });
+}
+
 function openImageEditor(file) {
   return new Promise((resolve) => {
     const url = URL.createObjectURL(file);
@@ -1290,7 +1397,7 @@ function openImageEditor(file) {
     img.onerror = () => {
       URL.revokeObjectURL(url);
       toast("This photo can't be edited here, so it will be used as it is.", "error");
-      resolve(file);
+      compressImage(file).then(resolve);
     };
     img.onload = () => {
       const MAX = 2400;
@@ -1372,12 +1479,12 @@ function openImageEditor(file) {
       box.addEventListener("pointerup", endDrag);
       box.addEventListener("pointercancel", endDrag);
 
-      const finish = (value) => {
+      const finish = async (value) => {
         document.removeEventListener("keydown", onKey);
         URL.revokeObjectURL(url);
         ov.remove();
         if (!document.getElementById("ebModal")) document.body.classList.remove("eb-open");
-        resolve(value);
+        resolve(value instanceof File ? await compressImage(value) : value);
       };
       const onKey = (e) => { if (e.key === "Escape") finish(null); };
       document.addEventListener("keydown", onKey);
@@ -1471,7 +1578,7 @@ async function openErrorBookModal(question, attemptId, onSaved, entry = null) {
         </div>
         <label class="eb-field">My note<textarea id="ebNote" rows="3" placeholder="What will you do differently next time?"></textarea></label>
         <div class="eb-field">Photo
-          <div class="eb-row"><label class="btn btn-sm eb-file">📷 Add photo<input type="file" id="ebImage" accept="image/*" hidden></label><button type="button" class="btn btn-sm" id="ebImageEdit" hidden>✂️ Rotate / crop</button><span id="ebImageName" class="text-muted"></span></div>
+          <div class="eb-row"><label class="btn btn-sm eb-file">🖼️ Gallery<input type="file" id="ebImage" accept="image/*" hidden></label><label class="btn btn-sm eb-file eb-cam-phone">📷 Camera<input type="file" id="ebImageCam" accept="image/*" capture="environment" hidden></label><button type="button" class="btn btn-sm eb-cam-desktop" id="ebCamBtn">📷 Camera</button><button type="button" class="btn btn-sm" id="ebImageEdit" hidden>✂️ Rotate / crop</button><span id="ebImageName" class="text-muted"></span></div>
           <img id="ebImagePreview" class="eb-preview" hidden alt="Selected photo">
         </div>
         <div class="eb-field">Voice note
@@ -1519,7 +1626,7 @@ async function openErrorBookModal(question, attemptId, onSaved, entry = null) {
   wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
 
   const showPicked = () => {
-    $("ebImageName").textContent = imageFile ? "" : "";
+    $("ebImageName").textContent = imageFile ? `Ready · ${Math.max(1, Math.round(imageFile.size / 1024))} KB` : "";
     $("ebImageEdit").hidden = !imageFile;
     const img = $("ebImagePreview");
     if (imageFile) {
@@ -1529,13 +1636,23 @@ async function openErrorBookModal(question, attemptId, onSaved, entry = null) {
       img.hidden = false;
     } else img.hidden = true;
   };
-  $("ebImage").addEventListener("change", async (e) => {
-    const picked = e.target.files?.[0] || null;
-    if (!picked) return;
+  const handlePicked = async (picked) => {
     const edited = await openImageEditor(picked);
     imageFile = edited || null;
-    if (!edited) e.target.value = "";
     showPicked();
+  };
+  const onFileInput = async (e) => {
+    const picked = e.target.files?.[0];
+    if (!picked) return;
+    await handlePicked(picked);
+    e.target.value = "";
+  };
+  $("ebImage").addEventListener("change", onFileInput);
+  $("ebImageCam").addEventListener("change", onFileInput);
+  $("ebCamBtn").addEventListener("click", async () => {
+    if (!navigator.mediaDevices?.getUserMedia || !window.isSecureContext) return $("ebImageCam").click();
+    const shot = await openCameraCapture();
+    if (shot) await handlePicked(shot);
   });
   $("ebImageEdit").addEventListener("click", async () => {
     if (!imageFile) return;
@@ -1624,7 +1741,6 @@ async function openErrorBookModal(question, attemptId, onSaved, entry = null) {
     }
     close();
     toast("Saved to your Error Book", "success");
-    if (imageFile || voiceBlob || existing?.image_path || existing?.voice_note_path) void pushNotifications.request();
     if (document.getElementById("view-errors")?.classList.contains("active")) enterErrorBookView();
     if (onSaved) onSaved();
   });
@@ -1863,7 +1979,7 @@ async function enterPracticeView() {
   const box = document.getElementById("practiceCategories");
   if (!box) return;
   box.innerHTML = `<div class="empty-state">Loading…</div>`;
-  const [hub, overall] = await Promise.all([sb.rpc("get_practice_hub"), sb.rpc("get_practice_overall_report")]);
+  const [hub, overall] = await Promise.all([cachedRpc("get_practice_hub"), cachedRpc("get_practice_overall_report")]);
   if (hub.error) {
     box.innerHTML = `<div class="error-box">${escapeHtml(prDeploymentHint(hub.error))}</div>`;
     return;
@@ -1891,7 +2007,7 @@ async function enterPracticeCategoryView() {
   const list = document.getElementById("pcList");
   list.innerHTML = `<div class="empty-state">Loading…</div>`;
   const [hub, labels] = await Promise.all([
-    sb.rpc("get_practice_hub"),
+    cachedRpc("get_practice_hub"),
     cat === "all"
       ? Promise.resolve({ data: [] })
       : sb.from("practice_labels").select("id, category, name, sort_order").eq("category", cat).order("sort_order").order("name"),
@@ -2100,7 +2216,7 @@ function bindCustomRequestForm() {
 let testsCatalogCache = [];
 const testsView = { q: "", kind: "all", sort: "newest" };
 function fetchTestsCatalog() {
-  return sb.rpc("get_student_dashboard_tests").then(({ data, error }) => ({
+  return cachedRpc("get_student_dashboard_tests").then(({ data, error }) => ({
     data: (data || []).map((entry) => ({
       ...entry,
       windowState:
@@ -2125,7 +2241,7 @@ function fetchTestsCatalog() {
 }
 
 function fetchPracticeCatalog() {
-  return sb.rpc("get_student_practice_catalog").then(async ({ data, error }) => {
+  return cachedRpc("get_student_practice_catalog").then(async ({ data, error }) => {
     if (!error) {
       return {
         data: (data || []).map((entry) => ({
@@ -2142,7 +2258,7 @@ function fetchPracticeCatalog() {
     if (!/get_student_practice_catalog|schema cache|does not exist/i.test(error.message || "")) {
       return { data: [], error };
     }
-    const fallback = await sb.rpc("get_student_test_catalog");
+    const fallback = await cachedRpc("get_student_test_catalog");
     return {
       data: (fallback.data || [])
         .filter((entry) => entry.is_practice)
@@ -2462,7 +2578,7 @@ async function loadTestsCatalog() {
     grid.innerHTML = `<div class="error-box">${escapeHtml(friendlyError(error))}</div>`;
     return;
   }
-  const hub = await sb.rpc("get_practice_hub");
+  const hub = await cachedRpc("get_practice_hub");
   testsPracticeHub = hub.data || [];
   renderPastTests();
 }
@@ -2640,7 +2756,7 @@ function renderHomeSpotlight(merged) {
 async function renderHomeStats() {
   const el = document.getElementById("homeStats");
   if (!el) return;
-  const { data } = await sb.rpc("get_combined_overview");
+  const { data } = await cachedRpc("get_combined_overview");
   const t = data?.totals || {};
   el.innerHTML = `
     <div class="home-stat-card"><div class="home-stat-val">${Number(t.questions_attempted || 0)}</div><div class="home-stat-lbl">Questions practised</div></div>
@@ -5909,6 +6025,7 @@ async function doSubmit(reason) {
   // the test (since the previous ~45s tick) is lost before scoring.
   await flushTimeDeltas({ awaitCompletion: true });
 
+  invalidateRpcCache();
   const { data, error } = await sb.rpc("submit_attempt", {
     p_attempt_id: attemptId,
     p_auto: reason !== "manual",
@@ -5951,7 +6068,6 @@ async function onBegin() {
 
   const beginBtn = document.getElementById("beginBtn");
   const originalBtnText = beginBtn.textContent;
-  void pushNotifications.request();
   const notificationState = await pushNotifications.state();
   if (notificationState !== "granted") {
     toast("Notifications are optional. You can enable them from your profile for test reminders.", "info");
@@ -5985,8 +6101,8 @@ async function onBegin() {
   // This is the moment the exam clock actually starts — start_attempt
   // stamps started_at server-side right now, not back when the page loaded.
   const { data, error } = pendingIsPractice
-    ? await sb.rpc("start_practice_attempt", { p_test_id: pendingTestId })
-    : await sb.rpc("start_attempt_by_test", { p_test_id: pendingTestId });
+    ? (invalidateRpcCache(), await sb.rpc("start_practice_attempt", { p_test_id: pendingTestId }))
+    : (invalidateRpcCache(), await sb.rpc("start_attempt_by_test", { p_test_id: pendingTestId }));
 
   if (error) {
     closeModal("beginModal");
@@ -7936,8 +8052,8 @@ async function enterAnalyticsView() {
   if (historyContainer) historyContainer.innerHTML = "";
   const [live, overall, practice] = await Promise.all([
     sb.rpc("get_student_analytics"),
-    sb.rpc("get_combined_overview"),
-    sb.rpc("get_practice_overall_report"),
+    cachedRpc("get_combined_overview"),
+    cachedRpc("get_practice_overall_report"),
   ]);
   const tab = ["overall", "live", "practice"].includes(qs("tab")) ? qs("tab") : "overall";
   content.innerHTML = `
@@ -8115,7 +8231,6 @@ async function enterAnalyticsView() {
         const { error } = await sb.from("error_book_entries").insert(payload);
         message.textContent = error ? friendlyError(error) : "Saved privately.";
         if (!error) {
-          if (payload.image_path || payload.voice_note_path) void pushNotifications.request();
           form.reset();
           clearRecording("Your browser will ask for microphone access when you start recording.");
           await enterErrorBookView();
@@ -8361,7 +8476,8 @@ function setupLeaderboardListeners() {
    ========================================================================= */
 const CLASS_OPTIONS = ["Class 9", "Class 10", "Class 11", "Class 12", "Dropper"];
 const GENDER_OPTIONS = ["Female", "Male", "Non-binary", "Other"];
-const EXAM_OPTIONS = ["JEE Main", "JEE Advanced", "NEET", "Olympiads", "Other"];
+const EXAM_OPTIONS = ["JEE", "NEET", "Foundation", "Olympiads", "Other"];
+const examOptionFor = (raw) => (/^jee/i.test(String(raw || "")) ? "JEE" : raw);
 const BOARD_OPTIONS = ["CBSE", "ICSE", "State Board", "Other"];
 
 // Older profiles stored the class as free text ("12", "12th", "dropper").
@@ -8389,7 +8505,7 @@ const PROFILE_FIELDS = [
   { key: "date_of_birth", id: "profileDobInput", label: "Date of birth", message: "Pick your date of birth.", valid: (v) => v >= "1970-01-01" && v <= isoToday() },
   { key: "gender", id: "profileGenderInput", label: "Gender", message: "Select your gender.", valid: oneOf(GENDER_OPTIONS) },
   { key: "class_grade", id: "profileClassInput", label: "Class", message: "Select your class.", valid: oneOf(CLASS_OPTIONS), read: classOptionFor },
-  { key: "target_exam", id: "profileTargetInput", label: "Target exam", message: "Select your target exam.", valid: oneOf(EXAM_OPTIONS) },
+  { key: "target_exam", id: "profileTargetInput", label: "Target exam", message: "Select your target exam.", valid: (v) => EXAM_OPTIONS.includes(examOptionFor(v)) },
   { key: "board", id: "profileBoardInput", label: "Board", message: "Select your board.", valid: oneOf(BOARD_OPTIONS) },
 ];
 
@@ -8453,7 +8569,7 @@ function profileFormHtml(profile) {
     ${profileFieldHtml(dob, `<input type="date" id="${dob.id}" value="${value(dob)}" min="1970-01-01" max="${isoToday()}" required>`)}
     ${select(gender, "Select gender", GENDER_OPTIONS)}
     ${select(klass, "Select class", CLASS_OPTIONS)}
-    ${select(exam, "Select target exam", EXAM_OPTIONS)}
+    ${select(examOptionFor(exam), "Select target exam", EXAM_OPTIONS)}
     ${select(board, "Select board", BOARD_OPTIONS)}
     <div class="pf-notify" id="profileNotify">
       <div><strong>Notifications <span class="text-muted">(optional)</span></strong><small>Enable reminders and important updates when you want them.</small></div>
@@ -9188,4 +9304,479 @@ document.addEventListener("click", (event) => {
   if (!link) return;
   event.preventDefault();
   document.getElementById(link.getAttribute("href").slice(1))?.scrollIntoView({ behavior: "smooth", block: "start" });
-}); 
+});
+
+/* =========================================================================
+   ANNOUNCEMENTS — official posts from admins; students can like once and
+   reply inside an announcement; admins answer each student in that same
+   announcement. One WhatsApp-style bar sits at the bottom of the screen.
+   ========================================================================= */
+const ANN_AUDIENCES = [
+  ["all", "All students"], ["jee", "JEE"], ["neet", "NEET"], ["foundation", "Foundation"],
+  ["class_9", "Class 9"], ["class_10", "Class 10"], ["class_11", "Class 11"], ["class_12", "Class 12"], ["dropper", "Dropper"],
+];
+const ann = { before: null, bound: false, isAdmin: false, uid: null, image: null, audio: null, poll: false, link: false, recorder: null, recTimer: null, target: null };
+let annBadgeAt = 0;
+
+async function refreshAnnouncementBadge(force = false) {
+  const badge = document.getElementById("annBadge");
+  if (!badge || !document.body.classList.contains("app-shell-on")) return;
+  if (!force && Date.now() - annBadgeAt < 60000) return; // at most once a minute: very light on the database
+  annBadgeAt = Date.now();
+  const { data, error } = await sb.rpc("get_announcement_unread_count");
+  if (error) return;
+  const n = Number(data) || 0;
+  badge.hidden = n < 1;
+  badge.textContent = n > 99 ? "99+" : String(n);
+  document.getElementById("annBtn")?.setAttribute("aria-label", n ? `Announcements, ${n} unread` : "Announcements");
+}
+
+const annLinkify = (escaped) => escaped.replace(/https?:\/\/[^\s<]+/g, (u) => `<a href="${u}" target="_blank" rel="noopener noreferrer nofollow">${u}</a>`);
+const annPublicUrl = (path) => sb.storage.from("announcements").getPublicUrl(path).data.publicUrl;
+const annAudienceLabel = (list) => (list || []).map((k) => ANN_AUDIENCES.find((a) => a[0] === k)?.[1] || k).join(", ");
+const annSnippet = (t, n = 60) => (String(t || "").replace(/\s+/g, " ").trim().slice(0, n) || "Announcement");
+const annTime = (iso) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+function annPollHtml(post) {
+  const poll = post.poll;
+  const total = poll.counts.reduce((a, b) => a + b, 0);
+  const voted = poll.my_vote !== null && poll.my_vote !== undefined;
+  return `<div class="ann-poll-view" data-poll="${post.id}">${poll.options
+    .map((opt, i) => {
+      const pct = total ? Math.round((poll.counts[i] / total) * 100) : 0;
+      return `<button type="button" class="ann-opt ${voted && poll.my_vote === i ? "is-mine" : ""}" data-vote="${i}" data-id="${post.id}">
+        ${voted ? `<i style="width:${pct}%"></i>` : ""}<span class="ann-opt-t">${escapeHtml(opt)}</span>${voted ? `<b>${pct}%</b>` : ""}</button>`;
+    })
+    .join("")}<small>${total} vote${total === 1 ? "" : "s"}${voted ? " · tap another option to change" : ""}</small></div>`;
+}
+
+function annRepliesLabel(post) {
+  const n = Number(post.reply_count) || 0;
+  return n ? `Replies (${n})` : ann.isAdmin ? "Replies" : "Reply";
+}
+
+function annPostHtml(post) {
+  const canDelete = ann.isAdmin || post.mine;
+  let host = "";
+  if (post.link_url) {
+    try { host = new URL(post.link_url).hostname.replace(/^www\./, ""); } catch (_) { host = post.link_url; }
+  }
+  const text = post.body ? `<div class="ann-text">${post.author_is_admin ? annLinkify(escapeHtml(post.body)) : escapeHtml(post.body)}</div>` : "";
+  return `<article class="ann-post ${post.author_is_admin ? "is-admin" : ""} ${post.is_unread ? "is-unread" : ""}" data-post="${post.id}" data-snippet="${escapeHtml(annSnippet(post.body))}">
+    <header class="ann-post-head">
+      <span class="ann-avatar">${post.author_is_admin ? "📢" : escapeHtml(post.author_name.slice(0, 1).toUpperCase())}</span>
+      <div class="ann-who"><b>${escapeHtml(post.author_name)}${post.author_is_admin ? ` <i class="ann-tag">Official</i>` : ""}</b>
+        <small>${formatDateTime(post.created_at)}${ann.isAdmin && post.author_is_admin && !post.audience.includes("all") ? ` · To: ${escapeHtml(annAudienceLabel(post.audience))}` : ""}</small></div>
+      ${canDelete ? `<button type="button" class="ann-del" data-del="${post.id}" aria-label="Delete">🗑</button>` : ""}
+    </header>
+    ${text}
+    ${post.image_path ? `<img class="eb-preview ann-img" src="${annPublicUrl(post.image_path)}" alt="Announcement image" loading="lazy">` : ""}
+    ${post.audio_path ? `<audio class="ann-audio" controls preload="none" src="${annPublicUrl(post.audio_path)}"></audio>` : ""}
+    ${post.link_url ? `<a class="ann-link" href="${escapeHtml(post.link_url)}" target="_blank" rel="noopener noreferrer nofollow">🔗 ${escapeHtml(host)}</a>` : ""}
+    ${post.kind === "poll" && post.poll ? annPollHtml(post) : ""}
+    ${post.author_is_admin ? `<div class="ann-act-row">
+        <button type="button" class="ann-like ${post.liked ? "is-on" : ""}" data-like="${post.id}" aria-pressed="${post.liked ? "true" : "false"}"><span>${post.liked ? "❤️" : "🤍"}</span><b>${post.like_count}</b></button>
+        <button type="button" class="ann-replies-btn" data-replies="${post.id}">💬 <span>${annRepliesLabel(post)}</span>${Number(post.new_replies) ? `<i class="ann-dot"></i>` : ""}</button>
+      </div>
+      <div class="ann-thread" data-thread="${post.id}" hidden></div>` : ""}
+  </article>`;
+}
+
+/* ---- reply threads ---- */
+const annWho = (name, cls, exam) => `<b>${escapeHtml(name)}</b>${[cls, exam].filter(Boolean).length ? `<small>${escapeHtml([cls, exam].filter(Boolean).join(" · "))}</small>` : ""}`;
+
+function annBubble(r) {
+  const showWho = !r.author_is_admin && ann.isAdmin; // admins see which student wrote it (name, class, exam)
+  const who = r.author_is_admin
+    ? `<div class="ann-bub-who"><b>Examle Team</b></div>`
+    : showWho ? `<div class="ann-bub-who">${annWho(r.student_name, r.student_class, r.student_exam)}</div>` : `<div class="ann-bub-who"><b>You</b></div>`;
+  const canDel = ann.isAdmin || r.mine;
+  return `<div class="ann-bub ${r.mine ? "mine" : "theirs"}">${who}<div class="ann-bub-text">${escapeHtml(r.body)}</div>
+    <div class="ann-bub-meta"><time>${annTime(r.created_at)}</time>${canDel ? `<button type="button" data-del-reply="${r.id}" aria-label="Delete reply">🗑</button>` : ""}</div></div>`;
+}
+
+function annThreadHtml(replies) {
+  if (!replies.length) return `<p class="ann-thread-empty">${ann.isAdmin ? "No replies yet." : "Type your question in the box below. Only the Examle team can see it."}</p>`;
+  if (!ann.isAdmin) return replies.map(annBubble).join("");
+  const groups = new Map();
+  replies.forEach((r) => {
+    if (!groups.has(r.thread_user_id)) groups.set(r.thread_user_id, []);
+    groups.get(r.thread_user_id).push(r);
+  });
+  return [...groups.entries()]
+    .map(([uid, list]) => {
+      const f = list[0];
+      return `<div class="ann-tgroup"><div class="ann-tg-head"><div class="ann-tg-who">${annWho(f.student_name, f.student_class, f.student_exam)}</div>
+        <button type="button" class="btn btn-sm btn-primary" data-reply-to="${uid}" data-name="${escapeHtml(f.student_name)}" data-meta="${escapeHtml([f.student_class, f.student_exam].filter(Boolean).join(" · "))}">Reply</button></div>
+        ${list.map(annBubble).join("")}</div>`;
+    })
+    .join("");
+}
+
+async function annLoadThread(card, { open = false } = {}) {
+  const id = card.dataset.post;
+  const panel = card.querySelector("[data-thread]");
+  if (open) panel.hidden = false;
+  if (panel.hidden) return;
+  if (!panel.dataset.loaded) panel.innerHTML = `<p class="ann-thread-empty">Loading…</p>`;
+  const { data, error } = await sb.rpc("get_announcement_replies", { p_id: id });
+  if (error) { panel.innerHTML = `<div class="error-box">${escapeHtml(friendlyError(error))}</div>`; return; }
+  panel.dataset.loaded = "1";
+  panel.innerHTML = annThreadHtml(data || []);
+  const btnLabel = card.querySelector(".ann-replies-btn span");
+  const n = (data || []).length;
+  if (btnLabel) btnLabel.textContent = n ? `Replies (${n})` : ann.isAdmin ? "Replies" : "Reply";
+  card.querySelector(".ann-dot")?.remove();
+  if (!ann.isAdmin) annSetTarget({ id, threadUser: ann.uid, title: "Replying to Examle Team", snippet: card.dataset.snippet });
+  else {
+    const only = [...new Set((data || []).map((r) => r.thread_user_id))];
+    if (only.length === 1) {
+      const f = data[0];
+      annSetTarget({ id, threadUser: only[0], title: `Replying to ${f.student_name}`, snippet: [f.student_class, f.student_exam].filter(Boolean).join(" · ") || annSnippet(card.dataset.snippet) });
+    }
+  }
+}
+
+/* ---- the WhatsApp-style bar ---- */
+function annSetTarget(t) {
+  ann.target = t;
+  annSyncBar();
+  if (t) document.getElementById("annInput").focus({ preventScroll: true });
+}
+
+function annSyncBar() {
+  const input = document.getElementById("annInput");
+  const sendBtn = document.getElementById("annSend");
+  const bar = document.getElementById("annBar");
+  const replying = !!ann.target;
+  const announcing = ann.isAdmin && !replying;
+  document.getElementById("annTarget").hidden = !replying;
+  if (replying) {
+    document.getElementById("annTargetTitle").textContent = ann.target.title;
+    document.getElementById("annTargetSnippet").textContent = ann.target.snippet || "";
+  }
+  document.getElementById("annClip").hidden = !announcing;
+  document.getElementById("annAudBtn").hidden = !announcing;
+  if (!announcing) {
+    document.getElementById("annMenu").hidden = true;
+    document.getElementById("annAud").hidden = true;
+  }
+  const hasMedia = !!(ann.image || ann.audio || ann.poll || ann.link);
+  document.getElementById("annTray").hidden = !(announcing && (hasMedia || !document.getElementById("annAud").hidden));
+  const canType = ann.isAdmin || replying;
+  input.disabled = !canType;
+  input.maxLength = announcing ? 2000 : 500;
+  input.placeholder = announcing ? (ann.poll ? "Write the poll question" : "Write an announcement")
+    : replying ? (ann.isAdmin ? "Write a reply" : "Write your reply") : "Tap Reply on an announcement to message the team";
+  const hasText = input.value.trim().length > 0;
+  const recording = ann.recorder?.state === "recording";
+  // mic when the box is empty (admins), send arrow when there is something to send
+  const showSend = !announcing || hasText || hasMedia || ann.poll;
+  bar.classList.toggle("show-send", showSend && !recording);
+  bar.classList.toggle("is-recording", recording);
+  sendBtn.disabled = !canType;
+  sendBtn.setAttribute("aria-label", showSend ? "Send" : "Record voice message");
+  input.style.height = "auto";
+  input.style.height = Math.min(input.scrollHeight, 128) + "px";
+}
+
+function annRenderAudience() {
+  const box = document.getElementById("annAud");
+  if (box.dataset.ready) return;
+  box.dataset.ready = "1";
+  box.innerHTML = ANN_AUDIENCES.map(([k, label]) => `<label class="ann-aud-chip"><input type="checkbox" value="${k}" ${k === "all" ? "checked" : ""}><span>${label}</span></label>`).join("");
+  box.addEventListener("change", (e) => {
+    const boxes = [...box.querySelectorAll("input")];
+    if (e.target.value === "all" && e.target.checked) boxes.forEach((b) => (b.checked = b.value === "all"));
+    else if (e.target.checked) boxes.find((b) => b.value === "all").checked = false;
+    if (!boxes.some((b) => b.checked)) boxes.find((b) => b.value === "all").checked = true;
+    const picked = boxes.filter((b) => b.checked).map((b) => b.value);
+    document.getElementById("annAudLabel").textContent = "To: " + annAudienceLabel(picked);
+  });
+}
+
+function annAddPollOption(value = "") {
+  const wrap = document.getElementById("annPollOptions");
+  if (wrap.children.length >= 6) return;
+  const input = document.createElement("input");
+  input.type = "text";
+  input.maxLength = 80;
+  input.placeholder = `Option ${wrap.children.length + 1}`;
+  input.value = value;
+  wrap.appendChild(input);
+}
+
+function annAttachInfo() {
+  const parts = [];
+  if (ann.image) parts.push(`🖼️ ${escapeHtml(ann.image.name)} · ${Math.max(1, Math.round(ann.image.size / 1024))} KB <button type="button" data-rm="image" aria-label="Remove image">✕</button>`);
+  if (ann.audio) parts.push(`🎵 Audio ready <button type="button" data-rm="audio" aria-label="Remove audio">✕</button>`);
+  document.getElementById("annAttachInfo").innerHTML = parts.map((p) => `<span>${p}</span>`).join("");
+  annSyncBar();
+}
+
+async function annUpload(file, kind) {
+  const ext = kind === "audio" ? audioExt(file.type) : (file.name.match(/\.[a-z0-9]+$/i)?.[0] || ".jpg");
+  const path = `${ann.uid}/${Date.now()}-${kind}${ext}`;
+  const { error } = await sb.storage.from("announcements").upload(path, file, { upsert: false, contentType: cleanMime(file.type) });
+  if (error) throw error;
+  return path;
+}
+
+async function annToggleRecord() {
+  const msg = document.getElementById("annMsg");
+  if (ann.recorder?.state === "recording") { ann.recorder.stop(); return; }
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { msg.textContent = "Recording is not supported in this browser."; return; }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const chunks = [];
+    ann.recorder = new MediaRecorder(stream, recorderOptions());
+    ann.recorder.addEventListener("dataavailable", (ev) => { if (ev.data.size) chunks.push(ev.data); });
+    ann.recorder.addEventListener("stop", () => {
+      clearInterval(ann.recTimer);
+      stream.getTracks().forEach((t) => t.stop());
+      const blob = new Blob(chunks, { type: cleanMime(ann.recorder.mimeType) || "audio/webm" });
+      document.getElementById("annInput").placeholder = "Write an announcement";
+      if (blob.size) ann.audio = blob; else msg.textContent = "Nothing was recorded.";
+      annAttachInfo();
+    });
+    ann.recorder.start();
+    msg.textContent = "";
+    const t0 = Date.now();
+    const input = document.getElementById("annInput");
+    ann.recTimer = setInterval(() => { input.placeholder = `● Recording ${Math.round((Date.now() - t0) / 1000)}s · tap to stop`; }, 400);
+    input.placeholder = "● Recording 0s · tap to stop";
+    annSyncBar();
+  } catch (err) {
+    msg.textContent = err?.name === "NotAllowedError" ? "Microphone is blocked. Allow it in browser settings." : "Could not start recording.";
+  }
+}
+
+async function annSend() {
+  const input = document.getElementById("annInput");
+  const msg = document.getElementById("annMsg");
+  const btn = document.getElementById("annSend");
+  const body = input.value.trim();
+  msg.textContent = "";
+
+  // reply inside an announcement (students and admins)
+  if (ann.target) {
+    if (!body) return;
+    btn.disabled = true;
+    const { error } = await sb.rpc("post_announcement_reply", { p_id: ann.target.id, p_body: body, p_thread_user: ann.isAdmin ? ann.target.threadUser : null });
+    btn.disabled = false;
+    if (error) { msg.textContent = friendlyError(error); return; }
+    input.value = "";
+    annSyncBar();
+    const card = document.querySelector(`[data-post="${ann.target.id}"]`);
+    if (card) await annLoadThread(card, { open: true });
+    return;
+  }
+
+  // new announcement (admins only)
+  if (!ann.isAdmin) return;
+  const link = document.getElementById("annLink").value.trim();
+  const audience = [...document.querySelectorAll("#annAud input:checked")].map((b) => b.value);
+  const options = ann.poll ? [...document.querySelectorAll("#annPollOptions input")].map((i) => i.value.trim()).filter(Boolean) : null;
+  if (ann.poll && (!body || options.length < 2)) { msg.textContent = "A poll needs a question and at least 2 options."; return; }
+  if (!ann.poll && !body && !ann.image && !ann.audio && !link) return;
+  if (link && !/^https?:\/\//i.test(link)) { msg.textContent = "The link must start with http:// or https://"; return; }
+  btn.disabled = true;
+  try {
+    const imagePath = !ann.poll && ann.image ? await annUpload(ann.image, "image") : null;
+    const audioPath = !ann.poll && ann.audio ? await annUpload(ann.audio, "audio") : null;
+    const { error } = await sb.rpc("post_announcement", {
+      p_kind: ann.poll ? "poll" : "text", p_body: body, p_audience: audience, p_link: link || null,
+      p_image_path: imagePath, p_audio_path: audioPath, p_poll_options: options,
+    });
+    if (error) throw error;
+    input.value = "";
+    document.getElementById("annLink").value = "";
+    document.getElementById("annLink").hidden = true;
+    document.getElementById("annPollOptions").innerHTML = "";
+    annAddPollOption(); annAddPollOption();
+    document.getElementById("annPollBox").hidden = true;
+    ann.image = null; ann.audio = null; ann.poll = false; ann.link = false;
+    annAttachInfo();
+    toast("Announcement sent", "success");
+    await loadAnnouncements();
+    document.getElementById("annScroll").scrollTo({ top: 0, behavior: "smooth" });
+  } catch (err) {
+    msg.textContent = friendlyError(err);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function loadAnnouncements(append = false) {
+  const feed = document.getElementById("annFeed");
+  if (!append) {
+    feed.innerHTML = `<div class="empty-state">Loading…</div>`;
+    ann.before = null;
+  }
+  const { data, error } = await sb.rpc("get_announcements", { p_before: ann.before, p_limit: 20 });
+  if (error) {
+    feed.innerHTML = `<div class="error-box">${escapeHtml(/get_announcements|schema cache|does not exist/i.test(error.message || "") ? "Announcements are not set up yet. Run the announcements migrations." : friendlyError(error))}</div>`;
+    return;
+  }
+  const posts = data || [];
+  if (!append) feed.innerHTML = "";
+  if (!append && !posts.length) feed.innerHTML = `<div class="empty-state">No announcements yet.</div>`;
+  feed.insertAdjacentHTML("beforeend", posts.map(annPostHtml).join(""));
+  ann.before = posts.length ? posts[posts.length - 1].created_at : ann.before;
+  document.getElementById("annMore").hidden = posts.length < 20;
+  renderMath(feed);
+  if (!append) {
+    await sb.rpc("mark_announcements_read");
+    annBadgeAt = Date.now();
+    const badge = document.getElementById("annBadge");
+    if (badge) badge.hidden = true;
+  }
+}
+
+function annBind() {
+  if (ann.bound) return;
+  ann.bound = true;
+  annRenderAudience();
+  annAddPollOption();
+  annAddPollOption();
+  const input = document.getElementById("annInput");
+  const menu = document.getElementById("annMenu");
+
+  input.addEventListener("input", annSyncBar);
+  input.addEventListener("keydown", (e) => {
+    // desktop: Enter sends, Shift+Enter makes a new line (like WhatsApp Web). Phones keep Enter as a new line.
+    if (e.key === "Enter" && !e.shiftKey && window.matchMedia("(pointer: fine)").matches) {
+      e.preventDefault();
+      annSend();
+    }
+  });
+  document.getElementById("annSend").addEventListener("click", () => {
+    const hasText = input.value.trim().length > 0;
+    const hasMedia = !!(ann.image || ann.audio || ann.poll || ann.link);
+    if (ann.recorder?.state === "recording") return annToggleRecord();
+    if (ann.isAdmin && !ann.target && !hasText && !hasMedia) return annToggleRecord();
+    annSend();
+  });
+  document.getElementById("annTargetClear").addEventListener("click", () => annSetTarget(null));
+
+  document.getElementById("annClip").addEventListener("click", (e) => { e.stopPropagation(); menu.hidden = !menu.hidden; });
+  document.addEventListener("click", (e) => { if (!menu.hidden && !e.target.closest("#annMenu, #annClip")) menu.hidden = true; });
+  document.getElementById("annAudBtn").addEventListener("click", () => {
+    const box = document.getElementById("annAud");
+    box.hidden = !box.hidden;
+    annSyncBar();
+  });
+  document.getElementById("annPollBtn").addEventListener("click", () => {
+    ann.poll = !ann.poll;
+    document.getElementById("annPollBox").hidden = !ann.poll;
+    menu.hidden = true;
+    annSyncBar();
+  });
+  document.getElementById("annLinkBtn").addEventListener("click", () => {
+    ann.link = !ann.link;
+    const li = document.getElementById("annLink");
+    li.hidden = !ann.link;
+    if (ann.link) li.focus(); else li.value = "";
+    menu.hidden = true;
+    annSyncBar();
+  });
+  document.getElementById("annLink").addEventListener("input", () => { ann.link = true; annSyncBar(); });
+  document.getElementById("annAddOption").addEventListener("click", () => annAddPollOption());
+  document.getElementById("annImage").addEventListener("change", async (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    menu.hidden = true;
+    if (!f) return;
+    ann.image = await compressImage(f);
+    annAttachInfo();
+  });
+  document.getElementById("annAudioFile").addEventListener("change", (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    menu.hidden = true;
+    if (!f) return;
+    ann.audio = f;
+    annAttachInfo();
+  });
+  document.getElementById("annAttachInfo").addEventListener("click", (e) => {
+    const rm = e.target.closest("[data-rm]");
+    if (!rm) return;
+    ann[rm.dataset.rm] = null;
+    annAttachInfo();
+  });
+
+  // feed actions
+  document.getElementById("annFeed").addEventListener("click", async (e) => {
+    const card = e.target.closest("[data-post]");
+    const vote = e.target.closest("[data-vote]");
+    if (vote) {
+      const { data, error } = await sb.rpc("vote_announcement", { p_id: vote.dataset.id, p_option: Number(vote.dataset.vote) });
+      if (error) { toast(friendlyError(error), "error"); return; }
+      const options = [...card.querySelectorAll(".ann-opt-t")].map((n) => n.textContent);
+      card.querySelector("[data-poll]").outerHTML = annPollHtml({ id: vote.dataset.id, poll: { options, counts: data.counts, my_vote: data.my_vote } });
+      return;
+    }
+    const like = e.target.closest("[data-like]");
+    if (like) {
+      like.disabled = true;
+      const { data, error } = await sb.rpc("toggle_announcement_like", { p_id: like.dataset.like });
+      like.disabled = false;
+      if (error) { toast(friendlyError(error), "error"); return; }
+      like.classList.toggle("is-on", data.liked);
+      like.setAttribute("aria-pressed", data.liked ? "true" : "false");
+      like.querySelector("span").textContent = data.liked ? "❤️" : "🤍";
+      like.querySelector("b").textContent = data.count;
+      return;
+    }
+    const rb = e.target.closest("[data-replies]");
+    if (rb) {
+      const panel = card.querySelector("[data-thread]");
+      if (!panel.hidden) { panel.hidden = true; if (ann.target?.id === card.dataset.post) annSetTarget(null); return; }
+      await annLoadThread(card, { open: true });
+      return;
+    }
+    const rt = e.target.closest("[data-reply-to]");
+    if (rt) {
+      annSetTarget({ id: card.dataset.post, threadUser: rt.dataset.replyTo, title: `Replying to ${rt.dataset.name}`, snippet: rt.dataset.meta || annSnippet(card.dataset.snippet) });
+      return;
+    }
+    const dr = e.target.closest("[data-del-reply]");
+    if (dr) {
+      if (!confirm("Delete this reply?")) return;
+      const { error } = await sb.rpc("delete_announcement_reply", { p_id: dr.dataset.delReply });
+      if (error) toast(friendlyError(error), "error");
+      else await annLoadThread(card);
+      return;
+    }
+    const del = e.target.closest("[data-del]");
+    if (del) {
+      if (!confirm("Delete this announcement?")) return;
+      const { error } = await sb.rpc("delete_announcement", { p_id: del.dataset.del });
+      if (error) toast(friendlyError(error), "error");
+      else card.remove();
+    }
+  });
+  document.getElementById("annMore").addEventListener("click", () => loadAnnouncements(true));
+}
+
+async function enterAnnouncementsView() {
+  document.body.classList.add("ann-open");
+  myProfile = myProfile || (await getMyProfile());
+  ann.isAdmin = myProfile?.role === "admin";
+  if (!ann.uid) ann.uid = (await sb.auth.getUser()).data.user?.id || null;
+  annBind();
+  ann.target = null;
+  document.getElementById("annMsg").textContent = "";
+  annSyncBar();
+  await loadAnnouncements();
+}
+
+document.getElementById("annBtn")?.addEventListener("click", () => navigate("/announcements"));
+document.getElementById("menuNotifBtn")?.addEventListener("click", (e) => {
+  e.preventDefault();
+  document.getElementById("notifPill")?.click();
+});
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) refreshAnnouncementBadge();
+});
+window.addEventListener("hashchange", () => document.body.classList.toggle("ann-open", location.hash.startsWith("#/announcements"))); 
