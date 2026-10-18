@@ -9383,32 +9383,36 @@ function annPostHtml(post) {
 }
 
 /* ---- reply threads ---- */
-const annWho = (name, cls, exam) => `<b>${escapeHtml(name)}</b>${[cls, exam].filter(Boolean).length ? `<small>${escapeHtml([cls, exam].filter(Boolean).join(" · "))}</small>` : ""}`;
 
 function annBubble(r) {
-  const showWho = !r.author_is_admin && ann.isAdmin; // admins see which student wrote it (name, class, exam)
-  const who = r.author_is_admin
-    ? `<div class="ann-bub-who"><b>Examle Team</b></div>`
-    : showWho ? `<div class="ann-bub-who">${annWho(r.student_name, r.student_class, r.student_exam)}</div>` : `<div class="ann-bub-who"><b>You</b></div>`;
   const canDel = ann.isAdmin || r.mine;
-  return `<div class="ann-bub ${r.mine ? "mine" : "theirs"}">${who}<div class="ann-bub-text">${escapeHtml(r.body)}</div>
+  return `<div class="ann-bub ${r.mine ? "mine" : "theirs"}">
+    ${r.author_is_admin ? `<div class="ann-bub-who">Examle Team</div>` : ""}
+    <div class="ann-bub-text">${escapeHtml(r.body)}</div>
     <div class="ann-bub-meta"><time>${annTime(r.created_at)}</time>${canDel ? `<button type="button" data-del-reply="${r.id}" aria-label="Delete reply">🗑</button>` : ""}</div></div>`;
 }
 
 function annThreadHtml(replies) {
-  if (!replies.length) return `<p class="ann-thread-empty">${ann.isAdmin ? "No replies yet." : "Type your question in the box below. Only the Examle team can see it."}</p>`;
-  if (!ann.isAdmin) return replies.map(annBubble).join("");
+  const head = `<div class="ann-th-head"><b>Replies</b><span>${replies.length}</span></div>`;
+  if (!replies.length) return head + `<p class="ann-thread-empty">${ann.isAdmin ? "No replies yet." : "Type your question in the box below. Only the Examle team can see it."}</p>`;
+  if (!ann.isAdmin) return head + `<div class="ann-bubs">${replies.map(annBubble).join("")}</div>`;
   const groups = new Map();
   replies.forEach((r) => {
     if (!groups.has(r.thread_user_id)) groups.set(r.thread_user_id, []);
     groups.get(r.thread_user_id).push(r);
   });
-  return [...groups.entries()]
+  return head + [...groups.entries()]
     .map(([uid, list]) => {
       const f = list[0];
-      return `<div class="ann-tgroup"><div class="ann-tg-head"><div class="ann-tg-who">${annWho(f.student_name, f.student_class, f.student_exam)}</div>
-        <button type="button" class="btn btn-sm btn-primary" data-reply-to="${uid}" data-name="${escapeHtml(f.student_name)}" data-meta="${escapeHtml([f.student_class, f.student_exam].filter(Boolean).join(" · "))}">Reply</button></div>
-        ${list.map(annBubble).join("")}</div>`;
+      const chips = [f.student_class, f.student_exam].filter(Boolean).map((c) => `<i>${escapeHtml(c)}</i>`).join("");
+      return `<div class="ann-tgroup">
+        <div class="ann-tg-head">
+          <span class="ann-tg-av">${escapeHtml(String(f.student_name).slice(0, 1).toUpperCase())}</span>
+          <div class="ann-tg-who"><b>${escapeHtml(f.student_name)}</b>${chips ? `<span class="ann-chips">${chips}</span>` : ""}</div>
+          <button type="button" class="ann-reply-btn" data-reply-to="${uid}" data-name="${escapeHtml(f.student_name)}" data-meta="${escapeHtml([f.student_class, f.student_exam].filter(Boolean).join(" · "))}">↩ Reply</button>
+        </div>
+        <div class="ann-bubs">${list.map(annBubble).join("")}</div>
+      </div>`;
     })
     .join("");
 }
@@ -9457,25 +9461,27 @@ function annSyncBar() {
   }
   document.getElementById("annClip").hidden = !announcing;
   document.getElementById("annAudBtn").hidden = !announcing;
+  document.getElementById("annMic").hidden = !announcing;
   if (!announcing) {
     document.getElementById("annMenu").hidden = true;
     document.getElementById("annAud").hidden = true;
   }
-  const hasMedia = !!(ann.image || ann.audio || ann.poll || ann.link);
-  document.getElementById("annTray").hidden = !(announcing && (hasMedia || !document.getElementById("annAud").hidden));
+  const hasMedia = !!(ann.image || ann.audio || ann.poll || document.getElementById("annLink").value.trim());
+  const recording = ann.recorder?.state === "recording";
+  document.getElementById("annTray").hidden = !(announcing && (hasMedia || ann.link || recording || !document.getElementById("annAud").hidden));
+  document.getElementById("annRecInfo").hidden = !recording;
   const canType = ann.isAdmin || replying;
   input.disabled = !canType;
   input.maxLength = announcing ? 2000 : 500;
   input.placeholder = announcing ? (ann.poll ? "Write the poll question" : "Write an announcement")
     : replying ? (ann.isAdmin ? "Write a reply" : "Write your reply") : "Tap Reply on an announcement to message the team";
   const hasText = input.value.trim().length > 0;
-  const recording = ann.recorder?.state === "recording";
   // mic when the box is empty (admins), send arrow when there is something to send
   const showSend = !announcing || hasText || hasMedia || ann.poll;
   bar.classList.toggle("show-send", showSend && !recording);
   bar.classList.toggle("is-recording", recording);
-  sendBtn.disabled = !canType;
-  sendBtn.setAttribute("aria-label", showSend ? "Send" : "Record voice message");
+  sendBtn.disabled = !canType || recording || !(hasText || hasMedia);
+  sendBtn.setAttribute("aria-label", "Send");
   input.style.height = "auto";
   input.style.height = Math.min(input.scrollHeight, 128) + "px";
 }
@@ -9484,7 +9490,12 @@ function annRenderAudience() {
   const box = document.getElementById("annAud");
   if (box.dataset.ready) return;
   box.dataset.ready = "1";
-  box.innerHTML = ANN_AUDIENCES.map(([k, label]) => `<label class="ann-aud-chip"><input type="checkbox" value="${k}" ${k === "all" ? "checked" : ""}><span>${label}</span></label>`).join("");
+  box.innerHTML = ANN_AUDIENCES.map(([k, label]) => `<label class="ann-aud-chip"><input type="checkbox" value="${k}" ${k === "all" ? "checked" : ""}><span>${label}</span></label>`).join("") + `<button type="button" class="ann-x is-primary" data-aud-done>Done</button>`;
+  box.addEventListener("click", (e) => {
+    if (!e.target.closest("[data-aud-done]")) return;
+    box.hidden = true;
+    annSyncBar();
+  });
   box.addEventListener("change", (e) => {
     const boxes = [...box.querySelectorAll("input")];
     if (e.target.value === "all" && e.target.checked) boxes.forEach((b) => (b.checked = b.value === "all"));
@@ -9535,16 +9546,17 @@ async function annToggleRecord() {
       clearInterval(ann.recTimer);
       stream.getTracks().forEach((t) => t.stop());
       const blob = new Blob(chunks, { type: cleanMime(ann.recorder.mimeType) || "audio/webm" });
-      document.getElementById("annInput").placeholder = "Write an announcement";
-      if (blob.size) ann.audio = blob; else msg.textContent = "Nothing was recorded.";
+      if (ann.discardRec) ann.discardRec = false;
+      else if (blob.size) ann.audio = blob;
+      else msg.textContent = "Nothing was recorded.";
       annAttachInfo();
     });
     ann.recorder.start();
     msg.textContent = "";
     const t0 = Date.now();
     const input = document.getElementById("annInput");
-    ann.recTimer = setInterval(() => { input.placeholder = `● Recording ${Math.round((Date.now() - t0) / 1000)}s · tap to stop`; }, 400);
-    input.placeholder = "● Recording 0s · tap to stop";
+    ann.recTimer = setInterval(() => { document.getElementById("annRecTime").textContent = `Recording ${Math.round((Date.now() - t0) / 1000)}s`; }, 400);
+    document.getElementById("annRecTime").textContent = "Recording 0s";
     annSyncBar();
   } catch (err) {
     msg.textContent = err?.name === "NotAllowedError" ? "Microphone is blocked. Allow it in browser settings." : "Could not start recording.";
@@ -9591,7 +9603,7 @@ async function annSend() {
     if (error) throw error;
     input.value = "";
     document.getElementById("annLink").value = "";
-    document.getElementById("annLink").hidden = true;
+    document.getElementById("annLinkRow").hidden = true;
     document.getElementById("annPollOptions").innerHTML = "";
     annAddPollOption(); annAddPollOption();
     document.getElementById("annPollBox").hidden = true;
@@ -9608,28 +9620,45 @@ async function annSend() {
 }
 
 async function loadAnnouncements(append = false) {
+  const pageSize = 10;
   const feed = document.getElementById("annFeed");
   if (!append) {
     feed.innerHTML = `<div class="empty-state">Loading…</div>`;
     ann.before = null;
   }
-  const { data, error } = await sb.rpc("get_announcements", { p_before: ann.before, p_limit: 20 });
+  const { data, error } = await sb.rpc("get_announcements", { p_before: ann.before, p_limit: pageSize + 1 });
   if (error) {
+    document.getElementById("annMore").hidden = true;
     feed.innerHTML = `<div class="error-box">${escapeHtml(/get_announcements|schema cache|does not exist/i.test(error.message || "") ? "Announcements are not set up yet. Run the announcements migrations." : friendlyError(error))}</div>`;
     return;
   }
-  const posts = data || [];
+  const posts = (data || []).slice(0, pageSize);
   if (!append) feed.innerHTML = "";
   if (!append && !posts.length) feed.innerHTML = `<div class="empty-state">No announcements yet.</div>`;
   feed.insertAdjacentHTML("beforeend", posts.map(annPostHtml).join(""));
   ann.before = posts.length ? posts[posts.length - 1].created_at : ann.before;
-  document.getElementById("annMore").hidden = posts.length < 20;
+  document.getElementById("annMore").hidden = (data || []).length <= pageSize;
   renderMath(feed);
   if (!append) {
     await sb.rpc("mark_announcements_read");
     annBadgeAt = Date.now();
     const badge = document.getElementById("annBadge");
     if (badge) badge.hidden = true;
+  }
+}
+
+function annHeartBurst(btn) {
+  btn.classList.remove("pop");
+  void btn.offsetWidth; // restart the animation
+  btn.classList.add("pop");
+  for (let i = 0; i < 7; i++) {
+    const h = document.createElement("i");
+    h.className = "ann-heart";
+    h.textContent = ["❤️", "💖", "🧡"][i % 3];
+    h.style.setProperty("--dx", `${Math.round((Math.random() - 0.5) * 56)}px`);
+    h.style.animationDelay = `${i * 40}ms`;
+    btn.appendChild(h);
+    setTimeout(() => h.remove(), 1000);
   }
 }
 
@@ -9651,12 +9680,10 @@ function annBind() {
     }
   });
   document.getElementById("annSend").addEventListener("click", () => {
-    const hasText = input.value.trim().length > 0;
-    const hasMedia = !!(ann.image || ann.audio || ann.poll || ann.link);
-    if (ann.recorder?.state === "recording") return annToggleRecord();
-    if (ann.isAdmin && !ann.target && !hasText && !hasMedia) return annToggleRecord();
+    if (ann.recorder?.state === "recording") return;
     annSend();
   });
+  document.getElementById("annMic").addEventListener("click", annToggleRecord);
   document.getElementById("annTargetClear").addEventListener("click", () => annSetTarget(null));
 
   document.getElementById("annClip").addEventListener("click", (e) => { e.stopPropagation(); menu.hidden = !menu.hidden; });
@@ -9675,12 +9702,32 @@ function annBind() {
   document.getElementById("annLinkBtn").addEventListener("click", () => {
     ann.link = !ann.link;
     const li = document.getElementById("annLink");
-    li.hidden = !ann.link;
+    document.getElementById("annLinkRow").hidden = !ann.link;
     if (ann.link) li.focus(); else li.value = "";
     menu.hidden = true;
     annSyncBar();
   });
-  document.getElementById("annLink").addEventListener("input", () => { ann.link = true; annSyncBar(); });
+  document.getElementById("annLink").addEventListener("input", annSyncBar);
+  document.getElementById("annLinkCancel").addEventListener("click", () => {
+    ann.link = false;
+    document.getElementById("annLink").value = "";
+    document.getElementById("annLinkRow").hidden = true;
+    annSyncBar();
+  });
+  document.getElementById("annPollCancel").addEventListener("click", () => {
+    ann.poll = false;
+    document.getElementById("annPollBox").hidden = true;
+    document.getElementById("annPollOptions").innerHTML = "";
+    annAddPollOption();
+    annAddPollOption();
+    annSyncBar();
+  });
+  document.getElementById("annRecStop").addEventListener("click", () => ann.recorder?.state === "recording" && ann.recorder.stop());
+  document.getElementById("annRecCancel").addEventListener("click", () => {
+    if (ann.recorder?.state !== "recording") return;
+    ann.discardRec = true;
+    ann.recorder.stop();
+  });
   document.getElementById("annAddOption").addEventListener("click", () => annAddPollOption());
   document.getElementById("annImage").addEventListener("change", async (e) => {
     const f = e.target.files?.[0];
@@ -9726,6 +9773,7 @@ function annBind() {
       like.setAttribute("aria-pressed", data.liked ? "true" : "false");
       like.querySelector("span").textContent = data.liked ? "❤️" : "🤍";
       like.querySelector("b").textContent = data.count;
+      if (data.liked) annHeartBurst(like);
       return;
     }
     const rb = e.target.closest("[data-replies]");
@@ -9761,6 +9809,7 @@ function annBind() {
 
 async function enterAnnouncementsView() {
   document.body.classList.add("ann-open");
+  document.documentElement.classList.add("ann-open");
   myProfile = myProfile || (await getMyProfile());
   ann.isAdmin = myProfile?.role === "admin";
   if (!ann.uid) ann.uid = (await sb.auth.getUser()).data.user?.id || null;
@@ -9779,4 +9828,8 @@ document.getElementById("menuNotifBtn")?.addEventListener("click", (e) => {
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) refreshAnnouncementBadge();
 });
-window.addEventListener("hashchange", () => document.body.classList.toggle("ann-open", location.hash.startsWith("#/announcements"))); 
+window.addEventListener("hashchange", () => {
+  const on = location.hash.startsWith("#/announcements");
+  document.body.classList.toggle("ann-open", on);
+  document.documentElement.classList.toggle("ann-open", on);
+}); 

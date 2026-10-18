@@ -12448,6 +12448,7 @@ body.ins-open .palette-backdrop { display: none !important; }
 .ann-opt.is-mine i { background: rgba(245,158,11,.45); }
 .ann-opt-t, .ann-opt b { position: relative; }
 .ann-more-wrap { display: flex; justify-content: center; margin: 14px 0 6px; }
+.ann-more-wrap #annMore[hidden] { display: none; }
 
 
 /* =========================================================================
@@ -12514,4 +12515,195 @@ body.app-shell-on #view-announcements.active { display: flex; flex-direction: co
 [data-theme="dark"] .ann-bub-who b { color: #FFD08A; }
 .ann-bub-text { font-size: 14.5px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
 .ann-bub-meta { display: flex; align-items: center; justify-content: flex-end; gap: 6px; color: var(--muted); font-size: 11px; }
-.ann-bub-meta button { border: 0; background: transparent; cursor: pointer; font-size: 12px; opacity: .7; } 
+.ann-bub-meta button { border: 0; background: transparent; cursor: pointer; font-size: 12px; opacity: .7; }
+
+
+/* =========================================================================
+   ROUND 26 — announcements: back button, cancel buttons, desktop layout, slim scrollbars
+   ========================================================================= */
+html.ann-open, body.ann-open { overflow: hidden; }
+.ann-page { max-width: 1400px; }
+.ann-head { display: flex; align-items: center; gap: 12px; padding: 10px 18px 6px; }
+.ann-back { display: none; align-items: center; gap: 6px; min-height: 40px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink); font-weight: 800; font-size: 14px; text-decoration: none; }
+.ann-back:hover { background: var(--surface-alt); text-decoration: none; }
+@media (max-width: 1023px) { .ann-back { display: inline-flex; } }
+
+/* slim themed scrollbars (no more wide white bars) */
+.ann-scroll, .ann-tray, .ann-input-wrap textarea { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+.ann-scroll::-webkit-scrollbar, .ann-tray::-webkit-scrollbar { width: 8px; height: 8px; }
+.ann-scroll::-webkit-scrollbar-track, .ann-tray::-webkit-scrollbar-track { background: transparent; }
+.ann-scroll::-webkit-scrollbar-thumb, .ann-tray::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 999px; }
+.ann-scroll::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+.ann-scroll::-webkit-scrollbar-button { display: none; }
+
+/* use the space on desktop: wider feed, two columns on large screens */
+.ann-scroll { padding: 10px 22px 22px; }
+.ann-feed { max-width: 860px; margin: 0 auto; }
+@media (min-width: 1280px) {
+  .ann-feed { max-width: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
+  .ann-feed > .empty-state, .ann-feed > .error-box { grid-column: 1 / -1; }
+}
+.ann-img { max-height: 460px; }
+.ann-bar { padding-left: 18px; padding-right: 18px; }
+
+/* every optional part can be cancelled */
+.ann-x { flex: none; min-height: 34px; padding: 0 14px; border: 1px solid var(--border-strong); border-radius: 999px; background: transparent; color: var(--ink); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.ann-x:hover { background: rgba(220,38,38,.1); border-color: var(--danger); }
+.ann-x.is-primary { background: var(--brand); border-color: var(--brand); color: #211D17; }
+.ann-x.is-primary:hover { background: var(--brand); filter: brightness(1.05); }
+.ann-tray-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ann-linkrow { display: flex; align-items: center; gap: 8px; } .ann-linkrow[hidden] { display: none; } .ann-linkrow .ann-linkin { flex: 1; min-width: 0; }
+.ann-recinfo { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 12px; background: rgba(239,68,68,.1); border: 1px solid rgba(239,68,68,.4); font-weight: 700; font-size: 13.5px; }
+.ann-recinfo[hidden] { display: none; }
+.ann-recinfo #annRecTime { flex: 1; }
+.ann-recdot { width: 10px; height: 10px; border-radius: 50%; background: #EF4444; animation: annRec 1.2s infinite; }
+.ann-aud { align-items: center; }
+
+
+/* =========================================================================
+   ROUND 27 — slimmer announcements, one column, compact like/replies,
+   clean reply threads, professional Error Book toolbar
+   ========================================================================= */
+body.ann-open .theme-toggle { display: none !important; }
+
+/* one announcement after another, smaller type for a broader view */
+.ann-page { max-width: 780px; }
+.ann-head { padding: 8px 14px 2px; } .ann-head h1 { font-size: 17px; }
+.ann-scroll { padding: 6px 14px 14px; }
+.ann-feed, .ann-feed { display: flex; flex-direction: column; max-width: none; margin: 0; gap: 8px; }
+.ann-post { padding: 10px 12px; gap: 7px; border-radius: 12px; }
+.ann-avatar { width: 30px; height: 30px; font-size: 13px; }
+.ann-who b { font-size: 13.5px; } .ann-who small { font-size: 11px; }
+.ann-tag { font-size: 10px; padding: 1px 7px; }
+.ann-text { font-size: 14px; line-height: 1.5; }
+.ann-img { max-height: 320px; border-radius: 10px; }
+.ann-link { padding: 6px 11px; font-size: 12.5px; border-radius: 10px; }
+.ann-del { width: 28px; height: 28px; border-radius: 8px; font-size: 12px; }
+.ann-opt { min-height: 38px; font-size: 13.5px; border-radius: 10px; }
+.ann-poll-view small { font-size: 11.5px; }
+
+/* like + replies: small, count right next to the icon */
+.ann-act-row { gap: 6px; padding-top: 6px; }
+.ann-like, .ann-replies-btn { position: relative; overflow: visible; min-height: 28px; padding: 0 10px; gap: 4px; font-size: 12px; font-weight: 700; }
+.ann-like span { font-size: 14px; line-height: 1; } .ann-like b { font-size: 12px; font-weight: 700; }
+.ann-like.pop span { animation: annPop .5s ease; }
+.ann-heart { position: absolute; left: 50%; top: 0; font-size: 12px; font-style: normal; pointer-events: none; opacity: 0; animation: annFloat .85s ease-out forwards; }
+@keyframes annFloat { 0% { opacity: 1; transform: translate(-50%, 0) scale(.6); } 100% { opacity: 0; transform: translate(calc(-50% + var(--dx)), -38px) scale(1.25); } }
+
+/* replies thread */
+.ann-thread { gap: 8px; padding: 8px 10px; border-radius: 12px; max-height: 340px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+.ann-th-head { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; } .ann-th-head b { font-weight: 800; }
+.ann-th-head span { padding: 1px 8px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); font-weight: 800; }
+.ann-thread-empty { font-size: 12.5px; }
+.ann-bubs { display: flex; flex-direction: column; gap: 5px; }
+.ann-tgroup { padding: 8px; border-radius: 10px; gap: 8px; }
+.ann-tg-head { gap: 9px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+.ann-tg-av { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--brand-tint); color: var(--brand-dark); font-size: 12px; font-weight: 800; }
+[data-theme="dark"] .ann-tg-av { background: rgba(245,158,11,.2); color: #FFD08A; }
+.ann-tg-who { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; } .ann-tg-who b { font-size: 13px; }
+.ann-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.ann-chips i { font-style: normal; font-size: 10.5px; font-weight: 700; padding: 1px 8px; border-radius: 999px; background: var(--not-visited-tint); color: var(--muted); }
+.ann-reply-btn { flex: none; min-height: 28px; padding: 0 11px; border: 1px solid var(--border-strong); border-radius: 999px; background: transparent; color: var(--ink); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.ann-reply-btn:hover { background: var(--brand); border-color: var(--brand); color: #211D17; }
+.ann-bub { max-width: 82%; padding: 5px 10px 3px; border-radius: 12px; gap: 1px; }
+.ann-bub-who { font-size: 11px; font-weight: 800; color: var(--brand-dark); } [data-theme="dark"] .ann-bub-who { color: #FFD08A; }
+.ann-bub-text { font-size: 13px; line-height: 1.4; }
+.ann-bub-meta { font-size: 10.5px; gap: 5px; } .ann-bub-meta button { font-size: 11px; }
+
+/* message bar: slim like WhatsApp */
+.ann-bar { padding: 6px 10px calc(6px + env(safe-area-inset-bottom, 0px)); gap: 5px; }
+.ann-row { gap: 6px; }
+.ann-ico { width: 38px; height: 38px; }
+.ann-input-wrap { border-radius: 20px; padding: 1px 14px; }
+.ann-input-wrap textarea { font-size: 14.5px; line-height: 1.35; padding: 8px 0; }
+.ann-send { width: 40px; height: 40px; box-shadow: none; }
+.ann-aud-pill { margin: 0 0 0 2px; padding: 3px 11px; font-size: 11.5px; }
+.ann-target { padding: 5px 10px; border-radius: 10px; } .ann-target-text b { font-size: 12px; } .ann-target-text small { font-size: 12px; }
+
+/* Error Book: tidy toolbar */
+.eb-toolbar { gap: 8px; padding: 6px 0 8px; margin: 4px 0 8px; }
+.eb-subject-tabs { gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 0; }
+.eb-subject-tabs::-webkit-scrollbar { display: none; }
+.eb-subj-tab { min-height: 34px; padding: 0 13px; font-size: 13px; }
+.eb-filters { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.eb-filters .pr-search { grid-column: 1 / -1; min-height: 40px; font-size: 14px; }
+.eb-filters select { min-height: 40px; font-size: 13.5px; padding: 0 34px 0 12px; border-radius: 12px; }
+@media (min-width: 720px) { .eb-filters { grid-template-columns: minmax(0, 1fr) 170px 190px; } .eb-filters .pr-search { grid-column: auto; } }
+#errorBookSummary { gap: 8px; margin-bottom: 4px; }
+#errorBookSummary .home-stat-card { padding: 10px 12px; } #errorBookSummary .home-stat-val { font-size: 20px; } #errorBookSummary .home-stat-lbl { font-size: 11.5px; }
+.eb-item { margin-bottom: 7px; border-radius: 12px; } .eb-item-head { min-height: 50px; padding: 9px 12px; } .eb-item-title { font-size: 14px; }
+.eb-group { font-size: 14px; margin: 12px 2px 6px; }
+
+
+/* =========================================================================
+   ROUND 28 — desktop: full-width, very slim message bar (like WhatsApp Web)
+   ========================================================================= */
+.ann-page { max-width: none; }
+.ann-head { width: 100%; max-width: 780px; margin: 0 auto; box-sizing: border-box; }
+.ann-feed { width: 100%; max-width: 780px; margin: 0 auto; }
+
+.ann-bar { padding: 4px 12px calc(4px + env(safe-area-inset-bottom, 0px)); gap: 4px; border-top: 1px solid var(--border); }
+.ann-row { align-items: center; gap: 6px; flex-wrap: nowrap; }
+.ann-ico { width: 36px; height: 36px; }
+.ann-input-wrap { border-radius: 20px; padding: 0 14px; }
+.ann-input-wrap textarea { padding: 9px 0; line-height: 20px; font-size: 14.5px; min-height: 38px; box-sizing: border-box; }
+.ann-send { width: 38px; height: 38px; }
+.ann-aud-pill { flex: none; align-self: center; height: 32px; margin: 0; padding: 0 12px; font-size: 12px; white-space: nowrap; max-width: 190px; overflow: hidden; text-overflow: ellipsis; }
+
+/* on phones the audience pill sits on its own line above the input */
+@media (max-width: 719px) {
+  .ann-row { flex-wrap: wrap; }
+  .ann-aud-pill { order: -1; flex: 0 0 auto; height: 28px; font-size: 11.5px; }
+}
+
+
+/* =========================================================================
+   ROUND 29 — message bar redesigned (rounded box: + | text | mic | send)
+   and wider announcements on desktop
+   ========================================================================= */
+/* feed: ample width, cards stretch the full column */
+.ann-feed { display: flex !important; flex-direction: column !important; align-items: stretch !important; width: min(1000px, 100%) !important; max-width: none !important; margin: 0 auto !important; gap: 8px; }
+.ann-post { width: 100%; box-sizing: border-box; align-self: stretch; }
+.ann-head { width: min(1000px, 100%); max-width: none; margin: 0 auto; box-sizing: border-box; }
+.ann-scroll { padding-left: 18px; padding-right: 18px; }
+
+/* bar: a single slim rounded box, like the reference */
+.ann-bar { background: transparent; border-top: 0; padding: 6px 18px calc(8px + env(safe-area-inset-bottom, 0px)); gap: 6px; }
+.ann-bar > * { width: min(1000px, 100%); margin-left: auto; margin-right: auto; box-sizing: border-box; }
+.ann-row { display: flex; align-items: center; gap: 2px; padding: 3px 6px; border: 1px solid var(--border-strong); border-radius: 16px; background: var(--surface); box-shadow: 0 2px 10px rgba(0,0,0,.12); transition: border-color .15s, box-shadow .15s; }
+.ann-row:focus-within { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(245,158,11,.2); }
+.ann-input-wrap { flex: 1; min-width: 0; background: transparent !important; border-radius: 0; padding: 0 8px; box-shadow: none !important; }
+.ann-input-wrap textarea { font-size: 14.5px; line-height: 20px; padding: 8px 0; min-height: 36px; }
+.ann-ico { width: 34px; height: 34px; border-radius: 50%; color: var(--muted); }
+.ann-ico:hover { background: var(--surface-alt); color: var(--ink); }
+.ann-mic.is-on, .ann-bar.is-recording .ann-mic { color: #EF4444; animation: annRec 1.2s infinite; }
+.ann-send { width: 34px; height: 34px; box-shadow: none; transition: opacity .15s, background .15s; }
+.ann-send .ic-send { display: block !important; }
+.ann-send:disabled { opacity: 1; background: var(--not-visited-tint); color: var(--muted); }
+.ann-bar.is-recording .ann-send { background: var(--not-visited-tint); color: var(--muted); animation: none; }
+.ann-aud-pill { height: 30px; margin: 0 2px; padding: 0 10px; font-size: 12px; border-radius: 999px; }
+.ann-menu { left: max(18px, calc(50% - 500px)); }
+@media (max-width: 719px) {
+  .ann-bar { padding: 6px 10px calc(8px + env(safe-area-inset-bottom, 0px)); }
+  .ann-bar > * { width: 100%; }
+  .ann-row { flex-wrap: wrap; }
+  .ann-aud-pill { order: -1; flex: 0 0 100%; text-align: left; height: 26px; margin: 2px 4px 0; }
+  .ann-menu { left: 10px; }
+}
+
+.ann-bar > .ann-menu { width: auto; min-width: 190px; margin: 0; }
+.ann-bar > .ann-aud-pill { width: fit-content; max-width: 100%; flex: 0 0 auto; height: 30px; margin: 0; align-self: flex-start; white-space: nowrap; }
+.ann-bar > .ann-target, .ann-bar > .ann-tray { margin-bottom: 0; }
+
+
+/* =========================================================================
+   ROUND 30 — landing hero on tablets: centred with proper side space
+   (it used to sit against the left edge between 521px and 879px)
+   ========================================================================= */
+@media (min-width: 521px) and (max-width: 879px) {
+  .landing-page .landing-hero { padding: clamp(76px, 12vw, 130px) clamp(28px, 7vw, 64px); justify-content: center; }
+  .landing-page .landing-hero-inner { width: 100%; margin: 0 auto; }
+  .landing-page .landing-hero-text { margin: 0 auto; max-width: 640px; padding-left: 0; text-align: center; }
+  .landing-page .landing-hero-actions { justify-content: center; }
+  .landing-page .landing-subline { margin-left: auto; margin-right: auto; }
+} 
