@@ -66,6 +66,16 @@
      Hidden by default; shown (via body.app-shell-on) only for signed-in
      app views. Hidden again during the exam view on purpose.
      ===================================================================== -->
+  <div class="drawer-backdrop" id="drawerBackdrop" hidden></div>
+  <aside class="drawer" id="appDrawer" aria-label="Menu" aria-hidden="true">
+    <div class="drawer-head">
+      <div class="drawer-user"><span class="topbar-avatar" id="drawerAvatar">S</span><div><b id="drawerName">Student</b><small id="drawerRole">Student</small></div></div>
+      <button type="button" class="drawer-close" id="drawerClose" aria-label="Close menu">✕</button>
+    </div>
+    <nav class="drawer-nav" id="drawerNav" aria-label="Main menu"></nav>
+    <div class="drawer-foot"><button type="button" class="drawer-item js-logout">🚪 <span class="app-nav-label">Sign out</span></button></div>
+  </aside>
+
   <aside class="app-sidebar" id="appSidebar">
     <div>
       <a href="#/dashboard" class="app-sidebar-logo" title="Examle"><span class="logo-mark"><img src="assets/examle-head.png" alt=""></span><span class="logo-text">EXAM<span>LE</span></span></a>
@@ -81,6 +91,7 @@
         <a href="#/bulk-import" class="app-nav-item" data-nav="bulk-import" title="Bulk import" id="appNavBulkImport" style="display:none;"><span class="app-nav-icon">📥</span><span class="app-nav-label">Bulk import</span></a>
       <a href="#/admin-reports" class="app-nav-item" data-nav="admin-reports" title="Reported questions" id="appNavReports" style="display:none;"><span class="app-nav-icon">🚩</span><span class="app-nav-label">Reports</span></a>
         <a href="#/admin-labels" class="app-nav-item" data-nav="admin-labels" title="Practice labels" id="appNavLabels" style="display:none;"><span class="app-nav-icon">🏷️</span><span class="app-nav-label">Labels</span></a>
+        <a href="#/admin-bank" class="app-nav-item" data-nav="admin-bank" title="Question bank" id="appNavBank" style="display:none;"><span class="app-nav-icon">🗄️</span><span class="app-nav-label">Question bank</span></a>
       </nav>
     </div>
   </aside>
@@ -96,6 +107,7 @@
 
   <header class="app-topbar" id="appTopbar">
     <div class="topbar-left">
+      <button type="button" class="topbar-icon-btn drawer-btn" id="drawerBtn" aria-label="Open menu" aria-controls="appDrawer" aria-expanded="false"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
       <button type="button" class="topbar-icon-btn topbar-collapse" id="sidebarToggle" aria-label="Collapse sidebar" aria-expanded="true" title="Collapse sidebar"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
       <a href="#/dashboard" class="topbar-brand"><img class="brand-head" src="assets/examle-head.png" alt="">EXAM<span>LE</span></a>
       <div class="topbar-title">
@@ -634,10 +646,13 @@
       </div>
       <div id="practiceOverallStrip" class="pr-strip"></div>
 
-      <div id="practiceUpdates"></div>
-      <h2 class="pr-h2">Choose what to practise</h2>
-      <div id="practiceCategories" class="pr-cats"></div>
-      <p class="pr-foot"><a href="#/practice-library?category=custom">Need a test? Request one</a></p>
+      <a href="#/practice-create" class="pb-cta">
+        <span class="pb-cta-ic">✨</span>
+        <span class="pb-cta-t"><b>Create your own test</b><small>Pick subject, chapters, topics and difficulty</small></span>
+        <span class="pb-cta-go">Create →</span>
+      </a>
+      <h2 class="pr-h2">Or start with a subject</h2>
+      <div id="practiceSubjects" class="pb-subjects pb-subjects-home"><div class="empty-state">Loading…</div></div>
     </div></div>
   </section>
 
@@ -759,7 +774,7 @@
               <button type="button" data-filter="main">🔴 Live</button>
               <button type="button" data-filter="infinite">♾️ Infinite</button>
               <button type="button" data-filter="reattempt">🔁 Re-attempts</button>
-              <button type="button" data-filter="new">Not attempted</button>
+              
             </div>
             <label class="past-sort">
               <span>Sort</span>
@@ -855,10 +870,10 @@
                 <div class="mode-picker" role="radiogroup" aria-label="Test type">
                   <label class="mode-card"><input type="radio" name="testMode" value="live" checked>
                     <span class="mode-card-body"><b>🔴 Live Test</b><small>Opens and closes at set times. Ranked, with leaderboard and result release.</small></span></label>
-                  <label class="mode-card"><input type="radio" name="testMode" value="practice">
+                  <label class="mode-card" id="modePracticeCard"><input type="radio" name="testMode" value="practice">
                     <span class="mode-card-body"><b>♾️ Infinite Practice</b><small>Always open. Unlimited attempts. Personal reports only. No rank or leaderboard.</small></span></label>
                 </div>
-                <div class="hint">Live and Practice tests are kept completely separate for students.</div>
+                <div class="hint">New Infinite Practice questions go to the <a href="#/admin-bank">Question bank</a>. Tests created here are live tests.</div>
               </div>
               <div class="field">
                 <label for="titleInput">Title</label>
@@ -1174,6 +1189,45 @@
     </div></div>
   </section>
 
+  <section id="view-practice-create" class="view">
+    <div class="page-body"><div class="container pb-page">
+      <a class="practice-back-link" href="#/practice">← Practice</a>
+      <div class="pr-head"><div><span class="eyebrow-label">♾️ Create your test</span><h1>Build your own test</h1><p class="text-muted">Pick what you want to practise. It takes under a minute.</p></div></div>
+      <div id="pbBody"><div class="empty-state">Loading…</div></div>
+    </div></div>
+    <div class="pb-bar" id="pbBar" hidden>
+      <div class="pb-bar-text"><b id="pbBarTitle"></b><small id="pbBarSub"></small></div>
+      <button type="button" class="btn btn-primary" id="pbStart" disabled>Start test</button>
+    </div>
+  </section>
+
+  <section id="view-admin-bank" class="view">
+    <div class="page-body"><div class="container admin-page-container">
+      <div id="abNotAdmin" class="error-box" style="display:none;">Only admin accounts can manage the question bank.</div>
+      <div id="abContent">
+        <div class="pr-head"><div><span class="eyebrow-label">Admin</span><h1>Question bank</h1><p class="text-muted" id="abSummary">Loading…</p></div>
+          <div class="ab-head-btns"><a class="btn" href="#/bulk-import">Bulk import</a><button type="button" class="btn btn-primary" id="abAdd">＋ Add question</button></div></div>
+        <div class="ab-filters">
+          <select id="abSubject" class="ui-select" aria-label="Subject"><option value="">All subjects</option><option>Physics</option><option>Chemistry</option><option>Mathematics</option><option>Biology</option></select>
+          <select id="abChapter" class="ui-select" aria-label="Chapter"><option value="">All chapters</option></select>
+          <input type="search" id="abTopic" placeholder="Topic" aria-label="Topic">
+          <select id="abDifficulty" class="ui-select" aria-label="Difficulty"><option value="">Any difficulty</option><option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option></select>
+          <input type="search" id="abSearch" placeholder="Search question text" aria-label="Search">
+          <label class="ab-check"><input type="checkbox" id="abReview"> Needs tagging</label>
+        </div>
+        <div id="abBulkBar" class="ab-bulkbar" hidden>
+          <b id="abSelCount">0 selected</b>
+          <span class="ab-bulk-set">Difficulty: <button type="button" data-ab-diff="easy">Easy</button><button type="button" data-ab-diff="medium">Medium</button><button type="button" data-ab-diff="hard">Hard</button></span>
+          <button type="button" id="abSetTopic">Set topic</button>
+          <button type="button" id="abDeleteSel" class="is-danger">Delete</button>
+          <button type="button" id="abClearSel">Clear</button>
+        </div>
+        <div id="abList"><div class="empty-state">Loading…</div></div>
+        <div class="ann-more-wrap"><button type="button" class="btn" id="abMore" hidden>Load more</button></div>
+      </div>
+    </div></div>
+  </section>
+
   <section id="view-admin-reports" class="view">
     <div class="page-body"><div class="container admin-page-container">
       <div id="arNotAdmin" class="error-box" style="display:none;">Only admin accounts can see reported questions.</div>
@@ -1231,7 +1285,7 @@
             </div>
             <textarea id="bulkPromptText" class="bulk-code" readonly rows="10" spellcheck="false"></textarea>
             <div class="bulk-rules">
-              <span>All 7 fields are required in every question</span>
+              <span>Every field is required in every question</span>
               <span>Integer questions have no options</span>
               <span>Subject: Physics, Chemistry, Mathematics or Biology</span>
               <span>Chapter: exact name from the syllabus list</span>
@@ -1246,9 +1300,13 @@
 
           <div class="card bulk-import-input-card">
             <div class="form-row">
-              <div class="field">
-                <label for="bulkTestSelect">Import into test</label>
-                <select id="bulkTestSelect" required><option value="">Loading tests…</option></select>
+              <div class="field bulk-dest-field">
+                <label>Import into</label>
+                <div class="bulk-dest" role="radiogroup" aria-label="Import destination">
+                  <label><input type="radio" name="bulkDest" value="bank" checked><span><b>🗄️ Question bank</b><small>For Infinite Practice. Students build tests from it.</small></span></label>
+                  <label><input type="radio" name="bulkDest" value="test"><span><b>🔴 A live test</b><small>Add to one existing test.</small></span></label>
+                </div>
+                <select id="bulkTestSelect" hidden><option value="">Loading tests…</option></select>
               </div>
               <div class="field bulk-import-file-field">
                 <label for="bulkImportFile">Or load a text file</label>
