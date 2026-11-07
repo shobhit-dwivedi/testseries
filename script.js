@@ -1,3 +1,5 @@
+let pendingMode = null;
+let pendingFeedback = false;
 /* =========================================================================
    0. CONFIG — fill these in with your own Supabase project's values.
    Find them in: Supabase Dashboard → Project Settings → API
@@ -16,17 +18,35 @@ async function getMyProfile() {
   const {
     data: { session },
   } = await sb.auth.getSession();
-  if (!session) return null;
+  if (!session?.user) return null;
+
   const { data, error } = await sb
     .from("profiles")
     .select("*")
     .eq("id", session.user.id)
-    .single();
+    .maybeSingle();
+
   if (error) {
-    console.error(error);
-    return null;
+    console.error("Profile fetch error:", error);
   }
-  return data;
+  if (data) return data;
+
+  const fallbackProfile = {
+    id: session.user.id,
+    full_name:
+      session.user.user_metadata?.full_name ||
+      session.user.email?.split("@")[0] ||
+      "Student",
+    email: session.user.email || "",
+    role: "student",
+  };
+  const { data: inserted } = await sb
+    .from("profiles")
+    .upsert(fallbackProfile, { onConflict: "id" })
+    .select("*")
+    .maybeSingle();
+
+  return inserted || fallbackProfile;
 }
 
 async function logout() {
@@ -224,6 +244,7 @@ const VIEWS = [
   "announcements",
   "admin-bank",
   "practice-create",
+  "admin-feedback",
   "practice-report",
   "practice-stats",
   "test-details",
@@ -252,6 +273,7 @@ const APP_SHELL_VIEWS = new Set([
   "announcements",
   "admin-bank",
   "practice-create",
+  "admin-feedback",
   "practice-report",
   "practice-stats",
   "test-details",
@@ -291,9 +313,10 @@ function qs(name) {
 }
 
 function showView(name) {
-  VIEWS.forEach((v) =>
-    document.getElementById("view-" + v).classList.toggle("active", v === name),
-  );
+  VIEWS.forEach((v) => {
+    const view = document.getElementById("view-" + v);
+    if (view) view.classList.toggle("active", v === name);
+  });
 }
 
 
@@ -404,29 +427,30 @@ async function routerCore() {
       showView("practice");
       await enterPracticeView();
       break;
+    case "/admin-feedback":
+      showView("admin-feedback");
+      await enterAdminFeedbackView();
+      break;
     case "/admin-bank":
       showView("admin-bank");
       await enterAdminBankView();
       break;
     case "/practice-create":
-      showView("practice-create");
-      await enterPracticeCreateView();
+      navigate("/practice");
       break;
     case "/announcements":
       showView("announcements");
       await enterAnnouncementsView();
       break;
     case "/admin-labels":
-      showView("admin-labels");
-      await enterAdminLabelsView();
+      navigate("/dashboard");
       break;
     case "/admin-reports":
       showView("admin-reports");
       await enterAdminReportsView();
       break;
     case "/practice-list":
-      showView("practice-category");
-      await enterPracticeCategoryView();
+      navigate("/practice");
       break;
     case "/practice-report":
       showView("practice-report");
@@ -437,8 +461,7 @@ async function routerCore() {
       await enterPracticeStatsView();
       break;
     case "/practice-library":
-      showView("practice-library");
-      await enterPracticeLibraryView();
+      navigate("/practice");
       break;
     case "/test-details":
       showView("test-details");
@@ -596,6 +619,7 @@ const PAGE_TITLES = {
   announcements: "Announcements",
   "admin-bank": "Question bank",
   "practice-create": "Create your test",
+  "admin-feedback": "Student feedback",
   practice: "Practice",
   "practice-report": "Practice report",
   "practice-stats": "My practice progress",
@@ -709,6 +733,8 @@ async function syncAppShell(viewName, signedIn) {
   if (labelsNav) labelsNav.style.display = isAdmin ? "" : "none";
   const bankNav = document.getElementById("appNavBank");
   if (bankNav) bankNav.style.display = isAdmin ? "" : "none";
+  const feedbackNav = document.getElementById("appNavFeedback");
+  if (feedbackNav) feedbackNav.style.display = isAdmin ? "" : "none";
 }
 
 window.addEventListener("hashchange", router);
@@ -719,6 +745,20 @@ window.addEventListener("hashchange", router);
    cleared whenever a test is started or submitted, and on sign in / out.
    ========================================================================= */
 const rpcCache = new Map();
+const RPC_TIMEOUT_MS = 12000;
+
+function timeoutError(label) {
+  return new Error(`${label} timed out. Check your connection and Supabase project.`);
+}
+
+function withTimeout(promise, label, timeoutMs = RPC_TIMEOUT_MS) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(timeoutError(label)), timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 function invalidateRpcCache() {
   rpcCache.clear();
 }
@@ -729,19 +769,25 @@ function cachedRpc(name, args, ttl = 45000) {
     if (hit.p) return hit.p;
     if (Date.now() - hit.t < ttl) return Promise.resolve(hit.res);
   }
-  const p = (args === undefined ? sb.rpc(name) : sb.rpc(name, args)).then((res) => {
-    if (res.error) rpcCache.delete(key);
-    else rpcCache.set(key, { t: Date.now(), res });
-    return res;
-  });
+  const request = args === undefined ? sb.rpc(name) : sb.rpc(name, args);
+  const p = withTimeout(request, name)
+    .then((res) => {
+      if (res.error) rpcCache.delete(key);
+      else rpcCache.set(key, { t: Date.now(), res });
+      return res;
+    })
+    .catch((error) => {
+      rpcCache.delete(key);
+      return { data: null, error };
+    });
   rpcCache.set(key, { p });
   return p;
 }
 
-sb.auth.onAuthStateChange(async (event, session) => {
+sb.auth.onAuthStateChange((event) => {
   invalidateRpcCache();
-  router();
-
+  if (event === "INITIAL_SESSION") return;
+  setTimeout(() => router(), 0);
 });
 /* =========================================================================
    3. AUTH VIEW
@@ -952,13 +998,16 @@ function setupAuthListeners() {
 let myProfile = null;
 
 function setupDashboardListeners() {
-  document.getElementById("segStudent").addEventListener("click", () => {
+  const segStudent = document.getElementById("segStudent");
+  const segAdmin = document.getElementById("segAdmin");
+  if (!segStudent || !segAdmin) return;
+  segStudent.addEventListener("click", () => {
     document.getElementById("segStudent").classList.add("active");
     document.getElementById("segAdmin").classList.remove("active");
     document.getElementById("studentSection").style.display = "block";
     document.getElementById("adminSection").style.display = "none";
   });
-  document.getElementById("segAdmin").addEventListener("click", () => {
+  segAdmin.addEventListener("click", () => {
     document.getElementById("segAdmin").classList.add("active");
     document.getElementById("segStudent").classList.remove("active");
     document.getElementById("studentSection").style.display = "none";
@@ -972,15 +1021,6 @@ function setupDashboardListeners() {
 async function enterTestsView() {
   myProfile = await getMyProfile();
 
-  // reset segmented state to a known default each time we arrive here
-  document.getElementById("segStudent").classList.add("active");
-  document.getElementById("segAdmin").classList.remove("active");
-  document.getElementById("studentSection").style.display = "block";
-  document.getElementById("adminSection").style.display = "none";
-
-  document.getElementById("adminSegmentWrap").style.display =
-    myProfile?.role === "admin" ? "block" : "none";
-
   // reset the tests list's search / filter / sort UI to a known default each time
   Object.assign(testsView, { q: "", kind: "all", sort: "newest" });
   const searchInput = document.getElementById("testsSearchInput");
@@ -992,7 +1032,6 @@ async function enterTestsView() {
     .forEach((b) => b.classList.toggle("active", b.dataset.filter === "all"));
 
   await loadTestsCatalog();
-  if (myProfile?.role === "admin") await loadAdminTests();
 }
 
 
@@ -1009,8 +1048,10 @@ function syncModeUI() {
   const cat = document.getElementById("practiceCategoryField");
   if (row) row.style.display = practice ? "none" : "";
   if (cat) cat.style.display = practice ? "" : "none";
-  document.getElementById("fromInput").required = !practice;
-  document.getElementById("untilInput").required = !practice;
+  const fromInput = document.getElementById("fromInput");
+  const untilInput = document.getElementById("untilInput");
+  if (fromInput) fromInput.required = !practice;
+  if (untilInput) untilInput.required = !practice;
 }
 
 function setTestMode(mode) {
@@ -1575,7 +1616,8 @@ async function openErrorBookModal(question, attemptId, onSaved, entry = null) {
       .eq("student_id", user.id).eq("attempt_id", attemptId).eq("question_id", question.id).maybeSingle();
     existing = found;
   }
-  const isManual = !question.id;
+  const isManual = !question.id && !question.question_text;
+  const canEditText = !question.id && !!question.question_text;
   const categories = document.getElementById("errorCategory")?.innerHTML || "<option>Other</option>";
 
   document.getElementById("ebModal")?.remove();
@@ -1586,7 +1628,7 @@ async function openErrorBookModal(question, attemptId, onSaved, entry = null) {
     <div class="eb-sheet" role="dialog" aria-modal="true" aria-labelledby="ebTitle">
       <div class="eb-head"><h2 id="ebTitle">${existing ? "📒 Error Book entry" : isManual ? "📒 Add a mistake" : "📒 Add to Error Book"}</h2><button type="button" class="eb-x" id="ebClose" aria-label="Close">✕</button></div>
       <div class="eb-body">
-        ${isManual ? `<label class="eb-field">Question or reminder<textarea id="ebQuestion" rows="3">${escapeHtml(question.question_text || "")}</textarea></label>` : `<div class="eb-q" id="ebQText">${escapeHtml(question.question_text || "")}</div>`}
+        ${isManual ? `<label class="eb-field">Question or reminder<textarea id="ebQuestion" rows="3">${escapeHtml(question.question_text || "")}</textarea></label>` : `<div class="eb-q" id="ebQText">${escapeHtml(question.question_text || "")}</div>${canEditText ? `<button type="button" class="eb-edit-text" id="ebEditText">✏️ Edit text</button><textarea id="ebQuestion" class="eb-qedit" rows="3" hidden>${escapeHtml(question.question_text || "")}</textarea>` : ""}`}
         <label class="eb-field">Why did this go wrong?<select id="ebCategory">${categories}</select></label>
         <div class="eb-two">
           <label class="eb-field">Subject<select id="ebSubject"><option value="">Not sure</option><option>Physics</option><option>Chemistry</option><option>Mathematics</option><option>Biology</option></select></label>
@@ -1595,7 +1637,7 @@ async function openErrorBookModal(question, attemptId, onSaved, entry = null) {
         <label class="eb-field">My note<textarea id="ebNote" rows="3" placeholder="What will you do differently next time?"></textarea></label>
         <div class="eb-field">Photo
           <div class="eb-row"><label class="btn btn-sm eb-file">🖼️ Gallery<input type="file" id="ebImage" accept="image/*" hidden></label><label class="btn btn-sm eb-file eb-cam-phone">📷 Camera<input type="file" id="ebImageCam" accept="image/*" capture="environment" hidden></label><button type="button" class="btn btn-sm eb-cam-desktop" id="ebCamBtn">📷 Camera</button><button type="button" class="btn btn-sm" id="ebImageEdit" hidden>✂️ Rotate / crop</button><span id="ebImageName" class="text-muted"></span></div>
-          <img id="ebImagePreview" class="eb-preview" hidden alt="Selected photo">
+          <img id="ebImagePreview" class="eb-preview" hidden alt="">
         </div>
         <div class="eb-field">Voice note
           <div class="eb-row"><button type="button" class="btn btn-sm" id="ebRec">🎙️ Record</button><button type="button" class="btn btn-sm" id="ebStop" disabled>⏹ Stop</button><button type="button" class="btn btn-sm" id="ebDel" disabled>🗑 Delete</button></div>
@@ -1610,6 +1652,11 @@ async function openErrorBookModal(question, attemptId, onSaved, entry = null) {
   document.body.classList.add("eb-open");
   const $ = (id) => wrap.querySelector("#" + id);
   renderMath($("ebQText"));
+  $("ebEditText")?.addEventListener("click", () => {
+    $("ebQuestion").hidden = false;
+    $("ebQText").hidden = true;
+    $("ebEditText").hidden = true;
+  });
   initSubjectChapter($("ebSubject"), $("ebChapter"), canonicalSubject(question.subject || existing?.subject), question.chapter || existing?.chapter || "");
   if (existing?.image_path) {
     sb.storage.from("error-book").createSignedUrl(existing.image_path, 3600).then(({ data: u }) => {
@@ -1729,7 +1776,7 @@ async function openErrorBookModal(question, attemptId, onSaved, entry = null) {
     btn.disabled = true; btn.textContent = "Saving…"; msg.textContent = "";
     const payload = {
       student_id: user.id, attempt_id: attemptId, question_id: question.id,
-      question_text: isManual ? $("ebQuestion").value.trim() : question.question_text, category: $("ebCategory").value,
+      question_text: $("ebQuestion") && !$("ebQuestion").hidden ? $("ebQuestion").value.trim() : question.question_text, category: $("ebCategory").value,
       subject: $("ebSubject").value || null, chapter: $("ebChapter").value || null,
       comment: $("ebNote").value.trim() || null, updated_at: new Date().toISOString(),
     };
@@ -1775,10 +1822,6 @@ function renderPracticeOverallStrip(strip, data, error) {
     return;
   }
   const t = data?.totals || {};
-  if (!t.attempts) {
-    strip.innerHTML = `<div class="pr-welcome"><b>Pick a category to start</b></div>`;
-    return;
-  }
   strip.innerHTML = `<div class="pr-stat-row">
     ${prStat(t.attempts, "Attempts")}
     ${prStat(t.questions_attempted, "Questions solved")}
@@ -2037,25 +2080,6 @@ async function renderPracticeUpdates() {
     .join("");
 }
 
-async function enterPracticeView() {
-  const box = document.getElementById("practiceSubjects");
-  if (!box) return;
-  box.innerHTML = `<div class="empty-state">Loading…</div>`;
-  const [bank, overall] = await Promise.all([cachedRpc("get_bank_catalog"), cachedRpc("get_practice_overall_report")]);
-  renderPracticeOverallStrip(document.getElementById("practiceOverallStrip"), overall.data, overall.error);
-  if (bank.error) {
-    box.innerHTML = `<div class="error-box">${escapeHtml(/get_bank_catalog|schema cache|does not exist/i.test(bank.error.message || "") ? "The question bank is not set up yet. Run migration_question_bank.sql." : friendlyError(bank.error))}</div>`;
-    return;
-  }
-  const totals = {};
-  (bank.data || []).forEach((r) => (totals[r.subject] = (totals[r.subject] || 0) + Number(r.n)));
-  box.innerHTML = PB_SUBJECTS.map(([name, icon, label]) => {
-    const n = totals[name] || 0;
-    return n
-      ? `<a class="pb-subj" href="#/practice-create?subject=${name}"><span class="pb-subj-ic">${icon}</span><b>${label}</b><small>${n} questions</small></a>`
-      : `<div class="pb-subj is-soon"><span class="pb-subj-ic">${icon}</span><b>${label}</b><small>Coming soon</small></div>`;
-  }).join("");
-}
 
 async function enterPracticeCategoryView() {
   const cat = qs("cat") || "all";
@@ -2307,57 +2331,42 @@ function fetchTestsCatalog() {
   }));
 }
 
-function fetchPracticeCatalog() {
-  return cachedRpc("get_student_practice_catalog").then(async ({ data, error }) => {
-    if (!error) {
-      return {
-        data: (data || []).map((entry) => ({
-          ...entry,
-          windowState: "ongoing",
-          practice_available: true,
-        })),
-        error: null,
-      };
-    }
-    // Keep the catalog usable while an older Supabase project is waiting for
-    // the additive migration. The fallback retains the existing behavior;
-    // lifetime practice becomes available after the migration is applied.
-    if (!/get_student_practice_catalog|schema cache|does not exist/i.test(error.message || "")) {
-      return { data: [], error };
-    }
-    const fallback = await cachedRpc("get_student_test_catalog");
-    return {
-      data: (fallback.data || [])
-        .filter((entry) => entry.is_practice)
-        .map((entry) => ({ ...entry, windowState: "ongoing", practice_available: true })),
-      error: fallback.error || null,
-    };
-  });
-}
-
 async function loadCatalogMerged() {
-  const [
-    { data: catalog, error: catErr },
-    { data: practiceCatalog, error: practiceErr },
-    { data: attempts, error: attErr },
-  ] =
-    await Promise.all([
-      fetchTestsCatalog(),
-      fetchPracticeCatalog(),
-      sb
-        .from("test_attempts")
-        .select(
-          "id, test_id, status, total_score, started_at, submitted_at, is_practice, disqualified_at",
-        )
-        .eq("user_id", myProfile.id),
-    ]);
-  if (catErr || practiceErr || attErr) return { error: catErr || practiceErr || attErr };
-  const byTestId = new Map();
-  [...(catalog || []), ...(practiceCatalog || [])].forEach((entry) => {
-    const key = String(entry.id);
-    if (!byTestId.has(key) || entry.is_practice) byTestId.set(key, entry);
-  });
-  const merged = mergeCatalogWithAttempts([...byTestId.values()], attempts);
+  let session;
+  try {
+    const result = await withTimeout(sb.auth.getSession(), "Session lookup");
+    session = result.data.session;
+  } catch (error) {
+    return { error };
+  }
+
+  const userId = myProfile?.id || session?.user?.id;
+  if (!userId) return { merged: [], attempts: [] };
+
+  let catalogResult;
+  let attemptsResult;
+  try {
+    [catalogResult, attemptsResult] = await withTimeout(
+      Promise.all([
+        fetchTestsCatalog(),
+        sb
+          .from("test_attempts")
+          .select(
+            "id, test_id, status, total_score, started_at, submitted_at, is_practice, disqualified_at",
+          )
+          .eq("user_id", userId),
+      ]),
+      "Dashboard data",
+    );
+  } catch (error) {
+    return { error };
+  }
+
+  const { data: catalog, error: catErr } = catalogResult;
+  const { data: attempts, error: attErr } = attemptsResult;
+  if (catErr || attErr) return { error: catErr || attErr };
+
+  const merged = mergeCatalogWithAttempts(catalog || [], attempts || []);
   testsCatalogCache = merged;
   return { merged, attempts: attempts || [] };
 }
@@ -2577,7 +2586,7 @@ function pastRowHtml(row) {
     id
       ? `<button type="button" class="btn btn-sm btn-print" data-print-attempt="${id}"><span>📄</span> PDF</button>`
       : `<span class="btn btn-sm is-off" title="Finish an attempt first"><span>📄</span> PDF</span>`;
-  const resume = (practice) => `<a class="btn btn-primary btn-sm" href="#/exam?test=${tid}${practice ? "&practice=1" : ""}">Resume</a>`;
+  const resume = (practice) => `<a class="btn btn-primary btn-sm" href="#/exam?test=${tid}${practice ? "&practice=1&mode=keep" : ""}">Resume</a>`;
   let status = "";
   let buttons = "";
   if (row.kind === "infinite") {
@@ -3104,15 +3113,11 @@ function updateQuestionPreview() {
     </div>
     <div class="question-text">${questionText ? escapeHtml(questionText) : `<span class="preview-empty-inline">Question text will appear here…</span>`}</div>
     ${bodyHtml}
-    ${explanation ? `<div class="explanation-box mt-8"><strong>Explanation:</strong> ${escapeHtml(explanation)}</div>` : ""}
   `;
   renderMath(preview);
 }
 
 function setupAdminTestListeners() {
-  document.getElementById("practiceCategoryInput").addEventListener("change", () => refreshLabelSelect(""));
-  document.getElementById("newLabelBtn").addEventListener("click", createLabelFromForm);
-  fillChapterSelect(document.getElementById("practiceChapterInput"), "Not set");
   document.querySelectorAll('input[name="testMode"]').forEach((r) =>
     r.addEventListener("change", syncModeUI),
   );
@@ -3177,12 +3182,7 @@ function setupAdminTestListeners() {
         instructions:
           document.getElementById("instructionsInput").value.trim() || null,
         category: document.getElementById("categoryInput").value,
-        practice_category: document.getElementById("practiceCategoryInput").value,
-        practice_subject: document.getElementById("practiceSubjectInput").value || null,
-        practice_chapter: document.getElementById("practiceChapterInput").value || null,
-        practice_label_id: getTestMode() === "practice" ? document.getElementById("practiceLabelInput").value || null : null,
         test_mode: getTestMode(),
-        practice_only: getTestMode() === "practice",
         duration_minutes: parseInt(
           document.getElementById("durationInput").value,
           10,
@@ -3387,14 +3387,13 @@ async function enterAdminTestView() {
   document.getElementById("reportsCard").style.display = "none";
   document.getElementById("adminSummary").style.display = "none";
   document.getElementById("adminJump").style.display = "none";
+  document.getElementById("adminHomePanel").style.display = "none";
   adminReports = [];
   adminResultsRows = [];
   document.getElementById("mcqFields").style.display = "block";
   document.getElementById("integerFields").style.display = "none";
   document.getElementById("typeInput").value = "mcq";
   syncModeUI();
-  document.getElementById("modePracticeCard").style.display = "none";
-  refreshLabelSelect("");
 
   if (!myProfile || myProfile.role !== "admin") {
     document.getElementById("notAdminNotice").style.display = "block";
@@ -3403,9 +3402,15 @@ async function enterAdminTestView() {
   }
   document.getElementById("notAdminNotice").style.display = "none";
   document.getElementById("adminMainContent").style.display = "block";
-  await loadAdminTestRequests();
 
   const testId = qs("test");
+  const creating = qs("create") === "1";
+  if (!testId && !creating) {
+    document.getElementById("adminHomePanel").style.display = "block";
+    await loadAdminTests();
+    return;
+  }
+  document.getElementById("detailsCard").style.display = "block";
   if (testId) {
     await loadExistingTest(testId);
     if (qs("edit")) setTimeout(() => openTestPreview(qs("edit")), 350);
@@ -3417,6 +3422,7 @@ async function enterAdminTestView() {
   }
 
   async function loadAdminTestRequests() {
+    return;
     const target = document.getElementById("studentRequestsAdminList");
     if (!target) return;
     const { data, error } = await sb.from("test_requests")
@@ -3490,13 +3496,7 @@ async function loadExistingTest(testId) {
   document.getElementById("descInput").value = data.description || "";
   document.getElementById("instructionsInput").value = data.instructions || "";
   document.getElementById("categoryInput").value = data.category || "JEE Main";
-  document.getElementById("practiceCategoryInput").value = data.practice_category || "all";
-  document.getElementById("practiceSubjectInput").value = data.practice_subject || "";
-  fillChapterSelect(document.getElementById("practiceChapterInput"), "Not set");
-  document.getElementById("practiceChapterInput").value = data.practice_chapter || "";
-  await refreshLabelSelect(data.practice_label_id || "");
   setTestMode(data.test_mode || "live");
-  document.getElementById("modePracticeCard").style.display = data.test_mode === "practice" ? "" : "none";
   document.getElementById("durationInput").value = data.duration_minutes;
   document.getElementById("fromInput").value = toLocalInputValue(
     data.available_from,
@@ -4019,7 +4019,6 @@ function pvRenderQuestion() {
     ${questionImageHtml(q.image_url)}
     <div class="question-text">${escapeHtml(q.question_text)}</div>
     ${bodyHtml}
-    ${show && q.explanation ? `<div class="pv-explanation"><strong>Explanation</strong><div>${escapeHtml(q.explanation)}</div></div>` : ""}
     <div class="exam-actions">
       <div class="exam-actions-left">
         <button class="btn js-pv-edit">✏️ Edit</button>
@@ -5464,6 +5463,8 @@ async function renderBeginInstructions() {
     sb.from("tests").select("test_mode, custom_mode, owner_id").eq("id", pendingTestId).maybeSingle(),
   ]);
   const kind = pendingIsPractice ? (modeRow.data?.test_mode === "practice" ? "infinite" : "reattempt") : "live";
+  const practiceFree = pendingIsPractice && (pendingMode ? pendingMode === "practice" : modeRow.data?.custom_mode === "practice");
+  pendingFeedback = practiceFree;
   const kindLabel = { live: "🔴 Live test", infinite: "♾️ Infinite Practice", reattempt: "🔁 Re-attempt" }[kind];
   const qCount = info?.question_count ?? "—";
   const totalMarks = info?.total_marks ?? "—";
@@ -5510,11 +5511,11 @@ async function renderBeginInstructions() {
       "Every attempt gets its own full report, and you can save mistakes to your Error Book.",
     ],
   }[kind];
-  if (modeRow.data?.owner_id) {
+  if (pendingIsPractice && (modeRow.data?.owner_id || pendingMode)) {
     attemptRules.push(
-      modeRow.data.custom_mode === "practice"
-        ? "<strong>Practice mode:</strong> as soon as you choose an answer you see if it is right, with the explanation. An answer is locked once it is checked."
-        : "<strong>Quiz mode:</strong> answers are not shown during the test. Your report and explanations come after you submit.",
+      practiceFree
+        ? "<strong>Practice mode:</strong> as soon as you choose an answer you see if it is right and what the correct answer is. An answer is locked once it is checked."
+        : "<strong>Quiz mode:</strong> answers are not shown during the test. Your report comes after you submit.",
     );
   }
 
@@ -5569,7 +5570,7 @@ async function renderBeginInstructions() {
           <li>Numerical questions: type the value, for example <code>5</code> or <code>-2.5</code>.</li>
         </ul></section>
 
-        <section class="ins-card ins-warn span-2">
+        ${practiceFree ? `<section class="ins-card span-2"><h4>🔓 No restrictions</h4><ul><li>Practice mode has no warnings and no full-screen rule.</li><li>You can switch tabs or apps freely, for example to open an explanation.</li><li>Leaving the page never submits your test. Only the Submit button or the time limit ends it.</li></ul></section>` : `<section class="ins-card ins-warn span-2">
           <h4>🚨 Warning system</h4>
           <ul>
             <li>The test runs in <strong>full screen</strong>. Keep it that way until you submit.</li>
@@ -5578,7 +5579,7 @@ async function renderBeginInstructions() {
             <li><strong>Second violation:</strong> your test is submitted automatically and cannot be restarted.</li>
             <li>Keep browser notifications enabled and do not refresh or close this page during the test.</li>
           </ul>
-        </section>
+        </section>`}
 
         <section class="ins-card span-2">
           <h4>✅ After you submit</h4>
@@ -5640,6 +5641,8 @@ async function enterExamView() {
   }
   pendingTestId = selectedTestId;
   pendingIsPractice = qs("practice") === "1";
+  pendingMode = ["quiz", "practice"].includes(qs("mode")) ? qs("mode") : null;
+  pendingFeedback = false;
 
   // Look up the test and any existing attempt WITHOUT starting the exam —
   // start_attempt_by_test (which stamps the server-side started_at the countdown
@@ -5893,6 +5896,39 @@ function currentQuestion() {
    appear right after the student answers (the server only allows this for
    attempts started in practice mode).
    ========================================================================= */
+/* =========================================================================
+   VIEW EXPLANATION — no explanations are stored in the platform. The student
+   opens ChatGPT, Claude or Google in a new tab with the question, options
+   and the correct answer already filled in.
+   ========================================================================= */
+function explainPrompt(q) {
+  const lines = [
+    "Explain this question step by step in simple language. Show why the correct answer is right and why the other options are wrong.",
+    "",
+  ];
+  const meta = [q.subject, q.chapter].filter(Boolean).join(" | ");
+  if (meta) lines.push(meta);
+  lines.push(`Question: ${String(q.question_text || "").trim()}`);
+  if (q.image_url) lines.push(`(The question also has an image: ${q.image_url})`);
+  (q.options || []).forEach((o) => lines.push(`${o.id}) ${o.text}`));
+  const answer = q.correct_option != null && q.correct_option !== "" ? q.correct_option : q.correct_integer_value;
+  if (answer != null && answer !== "") lines.push("", `Correct answer: ${answer}`);
+  return lines.join("\n").slice(0, 3200);
+}
+
+function explainMenuHtml(q) {
+  const text = explainPrompt(q);
+  const short = `${String(q.question_text || "").replace(/\s+/g, " ").trim().slice(0, 280)} solution explanation`;
+  const links = [
+    ["ChatGPT", `https://chatgpt.com/?q=${encodeURIComponent(text)}`],
+    ["Claude", `https://claude.ai/new?q=${encodeURIComponent(text)}`],
+    ["Google", `https://www.google.com/search?q=${encodeURIComponent(short)}`],
+  ];
+  return `<details class="explain-menu"><summary>💡 View explanation</summary><div class="explain-pop"><span>Open the question in</span>${links
+    .map(([name, href]) => `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${name}</a>`)
+    .join("")}</div></details>`;
+}
+
 function fbOptionClass(q, id) {
   const f = q.feedback;
   if (!f) return "";
@@ -5908,7 +5944,7 @@ function fbBoxHtml(q) {
   return `<div class="fb-box ${f.is_correct ? "ok" : "bad"}">
     <div class="fb-head">${f.is_correct ? "✅ Correct!" : "❌ Not quite"}</div>
     <div class="fb-ans">Correct answer: <b>${escapeHtml(String(answer ?? ""))}</b></div>
-    ${f.explanation ? `<div class="fb-exp"><b>Explanation</b><div>${escapeHtml(f.explanation)}</div></div>` : `<div class="fb-exp muted">No explanation has been added for this question.</div>`}
+    ${explainMenuHtml({ ...q, correct_option: f.correct_option, correct_integer_value: f.correct_integer_value })}
   </div>`;
 }
 
@@ -6221,6 +6257,7 @@ async function onBegin() {
   // considers it part of the user gesture and silently refuses it.
   try {
     if (
+      !pendingFeedback &&
       !document.fullscreenElement &&
       document.documentElement.requestFullscreen
     ) {
@@ -6242,7 +6279,7 @@ async function onBegin() {
   // This is the moment the exam clock actually starts — start_attempt
   // stamps started_at server-side right now, not back when the page loaded.
   const { data, error } = pendingIsPractice
-    ? (invalidateRpcCache(), await sb.rpc("start_practice_attempt", { p_test_id: pendingTestId }))
+    ? (invalidateRpcCache(), await sb.rpc("start_practice_attempt", { p_test_id: pendingTestId, p_feedback: pendingMode ? pendingMode === "practice" : null }))
     : (invalidateRpcCache(), await sb.rpc("start_attempt_by_test", { p_test_id: pendingTestId }));
 
   if (error) {
@@ -6323,7 +6360,7 @@ async function onBegin() {
   clearInterval(timeSyncInterval);
   timeSyncInterval = setInterval(() => flushTimeDeltas(), 45000);
 
-  addAntiCheatListeners();
+  if (!feedbackMode) addAntiCheatListeners();
   renderSubjectTabs();
   renderPalette();
   renderQuestion();
@@ -6857,9 +6894,9 @@ function renderReviewQuestionCard() {
     question.correct_integer_value == null
       ? "—"
       : question.correct_integer_value;
-  card.innerHTML = `<div class="review-question-heading"><div class="question-number-badge">${subjectDot(question.subject)}${escapeHtml(question.subject)} · Question ${reviewQuestions.indexOf(question) + 1}</div><span class="review-result-pill ${reviewState(question) === "correct" ? "review-result-correct" : reviewState(question) === "wrong" ? "review-result-wrong" : "review-result-skipped"}">${reviewState(question)} · ${question.marks_obtained || 0} marks</span></div>${questionImageHtml(question.image_url)}<div class="question-text">${escapeHtml(question.question_text)}</div>${question.question_type === "mcq" ? `<div class="option-list">${options}</div>` : `<div class="review-integer-answer"><span class="${question.is_correct ? "answer-good" : "answer-bad"}">Your answer: ${escapeHtml(String(integerAnswer))}</span><span class="answer-good">Correct answer: ${escapeHtml(String(correctInteger))}</span></div>`}${question.explanation ? `<div class="explanation-box mt-8">${escapeHtml(question.explanation)}</div>` : ""}<div class="review-error-action"><button type="button" class="btn btn-sm" id="addReviewErrorBtn">Add to Error Book</button><span id="reviewErrorStatus" class="text-muted"></span></div>`;
+  card.innerHTML = `<div class="review-question-heading"><div class="question-number-badge">${subjectDot(question.subject)}${escapeHtml(question.subject)} · Question ${reviewQuestions.indexOf(question) + 1}</div><span class="review-result-pill ${reviewState(question) === "correct" ? "review-result-correct" : reviewState(question) === "wrong" ? "review-result-wrong" : "review-result-skipped"}">${reviewState(question)} · ${question.marks_obtained || 0} marks</span></div>${questionImageHtml(question.image_url)}<div class="question-text">${escapeHtml(question.question_text)}</div>${question.question_type === "mcq" ? `<div class="option-list">${options}</div>` : `<div class="review-integer-answer"><span class="${question.is_correct ? "answer-good" : "answer-bad"}">Your answer: ${escapeHtml(String(integerAnswer))}</span><span class="answer-good">Correct answer: ${escapeHtml(String(correctInteger))}</span></div>`}${explainMenuHtml(question)}<div class="review-error-action"><button type="button" class="btn btn-sm" id="addReviewErrorBtn">Add to Error Book</button><span id="reviewErrorStatus" class="text-muted"></span></div>`;
   document.getElementById("addReviewErrorBtn").addEventListener("click", () =>
-    openErrorBookModal({ ...question, chapter: question.chapter || null }, qs("attempt"), () => {
+    openErrorBookModal({ ...question, id: question.id || question.question_id, chapter: question.chapter || null }, qs("attempt"), () => {
       document.getElementById("reviewErrorStatus").textContent = "Saved in your Error Book.";
     }),
   );
@@ -7128,7 +7165,7 @@ ${isPractice ? `<div class="stat-card"><div class="val">${practiceAccuracyLabel(
       </div>
     </div>
 
-    ${report.is_owner || report.is_public_top3 ? `<div class="card report-review-cta"><div><span class="eyebrow-label">Detailed review</span><h2>Review every answer</h2><p class="text-muted">Open the exam-style review to see selected answers, correct answers, explanations, and question status.</p></div><a class="btn btn-primary" href="#/review?attempt=${encodeURIComponent(attemptIdParam)}">Review answers</a></div>` : ""}
+    ${report.is_owner || report.is_public_top3 ? `<div class="card report-review-cta"><div><span class="eyebrow-label">Detailed review</span><h2>Review every answer</h2><p class="text-muted">Open the exam-style review to see selected answers, correct answers and question status.</p></div><a class="btn btn-primary" href="#/review?attempt=${encodeURIComponent(attemptIdParam)}">Review answers</a></div>` : ""}
 
     ${isPractice ? "" : `<div class="card">
       <h2 style="font-size:16px;">Top 10</h2>
@@ -7271,8 +7308,13 @@ const bulkDiff = (v) => {
 function snapBulkChapter(value) {
   const v = String(value || "").trim();
   if (!v) return "";
+  const loose = (t) => String(t).toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, " ").replace(/\b(the|of)\b/g, " ").replace(/\s+/g, " ").trim();
   const all = CHAPTER_GROUPS.flatMap((g) => g.chapters);
-  return all.find((c) => c.toLowerCase() === v.toLowerCase()) || v;
+  const key = loose(v);
+  const exact = all.find((c) => loose(c) === key);
+  if (exact) return exact;
+  const near = all.filter((c) => key.includes(loose(c)) || loose(c).includes(key));
+  return near.length === 1 ? near[0] : v;
 }
 
 function bulkChapterListText() {
@@ -7287,7 +7329,7 @@ Output ONLY the formatted questions. No introduction, no commentary, no markdown
 FORMAT (repeat for every question, numbered from 1):
 [QUESTION 1]
 SUBJECT: <Physics | Chemistry | Mathematics | Biology>
-CHAPTER: <one chapter name copied exactly from the CHAPTER LIST below>
+CHAPTER: <the standard chapter name>
 TOPIC: <a short, specific topic inside that chapter>
 DIFFICULTY: <Easy | Medium | Hard>
 TYPE: <MCQ | Integer>
@@ -7303,23 +7345,20 @@ OPTION_D:
 <option text>
 ANSWER:
 <MCQ: exactly one letter A, B, C or D | Integer: a number such as 5 or -2.5>
-EXPLANATION:
-<clear step-by-step solution>
 
 RULES
-1. Every field is REQUIRED for every question: SUBJECT, CHAPTER, TOPIC, DIFFICULTY, TYPE, QUESTION, ANSWER and EXPLANATION always, plus OPTION_A to OPTION_D for MCQ. Never leave a field empty or skip it.
-2. For TYPE: Integer questions, leave out the four OPTION lines (options do not apply). Every other field is still required.
-3. Each question starts with [QUESTION n] alone on its own line, with a blank line between questions.
-4. SUBJECT must be exactly one of: Physics, Chemistry, Mathematics, Biology.
-5. CHAPTER must be copied exactly from the CHAPTER LIST for that subject. Pick the closest match.
-6. TOPIC is 2 to 5 words and specific, for example "Projectile motion" inside Kinematics, or "Mole fraction" inside Solutions. Use the SAME spelling every time for the same topic so that questions group together. Do not just repeat the chapter name.
-7. DIFFICULTY must be exactly Easy, Medium or Hard. Easy = direct formula or concept, one step (NCERT level). Medium = standard JEE Main level, two or three steps. Hard = JEE Advanced level, multi-concept or long. Judge honestly and use all three levels.
-8. Write all maths and chemistry in LaTeX: $...$ for inline and $$...$$ for display (for example $x^2$, $\\frac{a}{b}$, $\\mathrm{H_2O}$).
-9. If the correct answer or the solution is not given to me, work it out yourself and double-check it.
-10. Do not use bold, tables, bullet symbols or any other markdown.
-
-CHAPTER LIST
-${bulkChapterListText()}
+1. Every field is REQUIRED for every question: SUBJECT, CHAPTER, TOPIC, DIFFICULTY, TYPE, QUESTION and ANSWER always, plus OPTION_A to OPTION_D for MCQ. Never leave a field empty or skip it.
+2. Do NOT write an explanation or solution. The format has no explanation field.
+3. For TYPE: Integer questions, leave out the four OPTION lines (options do not apply). Every other field is still required.
+4. Each question starts with [QUESTION n] alone on its own line, with a blank line between questions.
+5. SUBJECT must be exactly one of: Physics, Chemistry, Mathematics, Biology.
+6. CHAPTER is the standard chapter name from the JEE Main, JEE Advanced or NEET syllabus, for example "Kinematics", "Laws of Motion", "Chemical Thermodynamics", "Quadratic Equations". Use the same spelling every time for the same chapter.
+7. TOPIC is 2 to 5 words and specific, for example "Projectile motion" inside Kinematics, or "Mole fraction" inside Solutions. Use the SAME spelling every time for the same topic so that questions group together. Do not just repeat the chapter name.
+8. DIFFICULTY must be exactly Easy, Medium or Hard. Easy = direct formula or concept, one step (NCERT level). Medium = standard JEE Main level, two or three steps. Hard = JEE Advanced level, multi-concept or long. Judge honestly and use all three levels.
+9. Write all maths and chemistry in LaTeX: $...$ for inline and $$...$$ for display (for example $x^2$, $\\frac{a}{b}$, $\\mathrm{H_2O}$).
+10. If the correct answer is not given to me, work it out yourself and double-check it. ANSWER must be correct.
+11. Do not select or create any question that requires a figure, diagram, graph, image, circuit, geometric drawing, molecular structure, or any other visual to understand or solve. Use only fully self-contained text-based questions; if a supplied question needs a figure, skip it.
+12. Do not use bold, tables, bullet symbols or any other markdown.
 
 MY QUESTIONS:
 [paste your questions here]`;
@@ -7344,8 +7383,6 @@ OPTION_D:
 24 m/s²
 ANSWER:
 B
-EXPLANATION:
-$a = \\frac{dv}{dt} = 6t$, so at $t = 2$ s, $a = 12$ m/s².
 
 [QUESTION 2]
 SUBJECT: Mathematics
@@ -7356,9 +7393,7 @@ TYPE: Integer
 QUESTION:
 If $\\alpha$ and $\\beta$ are the roots of $x^2 - 7x + 12 = 0$, find $\\alpha + \\beta$.
 ANSWER:
-7
-EXPLANATION:
-The sum of the roots is $-\\frac{b}{a} = 7$.`;
+7`;
 }
 
 async function copyBulkText(text, button) {
@@ -7412,7 +7447,6 @@ function validateBulkQuestion(question) {
   if (!canonicalSubject(question.subject)) fail("subject", "Subject must be Physics, Chemistry, Mathematics or Biology.");
   if (!question.chapter.trim()) fail("chapter", "Chapter is missing.");
   if (!type) fail("type", "TYPE must be MCQ or Integer.");
-  if (!question.explanation.trim()) fail("explanation", "Explanation is missing.");
   if (type === "mcq") {
     ["A", "B", "C", "D"].forEach((letter) => {
       if (!question[`option${letter}`].trim()) fail(`option${letter}`, `OPTION_${letter} is missing.`);
@@ -7452,7 +7486,7 @@ function bulkRenderedHtml(question) {
           .map((l) => `<div class="bulk-render-option ${ans === l ? "is-correct" : ""}"><strong>${l}</strong><span>${escapeHtml(question[`option${l}`])}</span></div>`)
           .join("")
       : `<div class="bulk-render-answer">Correct numerical answer: <strong>${escapeHtml(question.answer)}</strong></div>`;
-  return `<div class="question-text">${escapeHtml(question.question)}</div>${body}${question.explanation.trim() ? `<div class="bq-expl"><b>Explanation</b><div>${escapeHtml(question.explanation)}</div></div>` : ""}`;
+  return `<div class="question-text">${escapeHtml(question.question)}</div>${body}`;
 }
 
 function bulkCardHtml(question, index) {
@@ -7500,7 +7534,7 @@ function bulkCardHtml(question, index) {
     </div>` : ""}
     <label class="bq-f" data-bq-wrap="question">Question<textarea rows="4" data-bulk-field="question">${e(question.question)}</textarea></label>
     ${options}
-    <label class="bq-f" data-bq-wrap="explanation">Explanation<textarea rows="3" data-bulk-field="explanation">${e(question.explanation)}</textarea></label>
+
     <details class="bq-preview"><summary>Rendered preview</summary><div data-bq-rendered>${bulkRenderedHtml(question)}</div></details>
   </article>`;
 }
@@ -7580,6 +7614,19 @@ function bindBulkPreviewEvents() {
     } else refreshBulkCard(index);
   });
   preview.addEventListener("click", (event) => {
+    const filter = event.target.closest("[data-bq-filter]");
+    if (filter) {
+      bulkFilter = filter.dataset.bqFilter;
+      renderBulkImportPreview();
+      return;
+    }
+    const edit = event.target.closest("[data-bq-edit]");
+    if (edit) {
+      const question = bulkQuestions[Number(edit.dataset.bqEdit)];
+      question.editing = !question.editing;
+      rerenderBulkCard(Number(edit.dataset.bqEdit));
+      return;
+    }
     const remove = event.target.closest("[data-bulk-remove]");
     if (remove) {
       bulkQuestions[Number(remove.dataset.bulkRemove)].removed = true;
@@ -7656,14 +7703,14 @@ async function importBulkQuestions() {
         options: isMcq ? ["A", "B", "C", "D"].map((id) => ({ id, text: question[`option${id}`].trim() })) : null,
         correct_option: isMcq ? question.answer.trim().toUpperCase() : null,
         correct_integer_value: isMcq ? null : Number(question.answer.trim()),
-        explanation: question.explanation.trim(),
+        explanation: null,
         positive_marks: 4,
         negative_marks: isMcq ? 1 : 0,
       };
     });
     let failed = null;
     for (let i = 0; i < bankRows.length; i += 200) {
-      const { error } = await sb.from("question_bank").insert(bankRows.slice(i, i + 200));
+      const { error } = await sb.from("questions").insert(bankRows.slice(i, i + 200));
       if (error) { failed = error; break; }
     }
     button.disabled = false;
@@ -7715,7 +7762,7 @@ async function importBulkQuestions() {
         : null,
       correct_option: isMcq ? question.answer.trim().toUpperCase() : null,
       correct_integer_value: isMcq ? null : Number(question.answer.trim()),
-      explanation: question.explanation.trim(),
+      explanation: null,
       positive_marks: 4,
       negative_marks: 1,
       chapter: question.chapter.trim() || null,
@@ -7829,142 +7876,6 @@ async function loadAdminReportsInbox() {
   renderMath(list);
 }
 
-/* =========================================================================
-   PRACTICE LABELS — group tests under a category (for example PYQ -> "JEE Main 2025")
-   ========================================================================= */
-async function refreshLabelSelect(selectedId = "") {
-  const sel = document.getElementById("practiceLabelInput");
-  if (!sel) return;
-  const cat = document.getElementById("practiceCategoryInput").value;
-  sel.innerHTML = `<option value="">No label</option>`;
-  const add = document.getElementById("newLabelBtn");
-  const none = cat === "all"; // "General practice" has no labels
-  sel.disabled = none;
-  if (add) add.disabled = none;
-  if (none) return;
-  const { data } = await sb.from("practice_labels").select("id, name").eq("category", cat).order("sort_order").order("name");
-  (data || []).forEach((l) => sel.insertAdjacentHTML("beforeend", `<option value="${l.id}">${escapeHtml(l.name)}</option>`));
-  sel.value = selectedId && (data || []).some((l) => l.id === selectedId) ? selectedId : "";
-}
-
-async function createLabelFromForm() {
-  const cat = document.getElementById("practiceCategoryInput").value;
-  if (cat === "all") return;
-  const name = (prompt("Label name, for example: JEE Main 2025") || "").trim();
-  if (!name) return;
-  const { data, error } = await sb.from("practice_labels").insert({ category: cat, name }).select("id").single();
-  if (error) {
-    toast(/duplicate|unique/i.test(error.message || "") ? "That label already exists in this category." : friendlyError(error), "error");
-    return;
-  }
-  await refreshLabelSelect(data.id);
-  toast("Label created", "success");
-}
-
-let alBound = false;
-
-async function enterAdminLabelsView() {
-  myProfile = myProfile || (await getMyProfile());
-  const ok = myProfile?.role === "admin";
-  document.getElementById("alNotAdmin").style.display = ok ? "none" : "block";
-  document.getElementById("alContent").style.display = ok ? "block" : "none";
-  if (!ok) return;
-  if (!alBound) {
-    alBound = true;
-    document.getElementById("alCategory").addEventListener("change", loadAdminLabels);
-    const add = async () => {
-      const input = document.getElementById("alNewName");
-      const name = input.value.trim();
-      if (!name) return;
-      const { error } = await sb.from("practice_labels").insert({ category: document.getElementById("alCategory").value, name });
-      if (error) {
-        toast(/duplicate|unique/i.test(error.message || "") ? "That label already exists here." : friendlyError(error), "error");
-        return;
-      }
-      input.value = "";
-      await loadAdminLabels();
-    };
-    document.getElementById("alAddBtn").addEventListener("click", add);
-    document.getElementById("alNewName").addEventListener("keydown", (e) => { if (e.key === "Enter") add(); });
-    document.getElementById("alContent").addEventListener("click", async (e) => {
-      const act = e.target.closest("[data-al]");
-      if (act) {
-        const id = act.dataset.id;
-        if (act.dataset.al === "rename") {
-          const name = (prompt("New label name", act.dataset.name || "") || "").trim();
-          if (!name) return;
-          const { error } = await sb.from("practice_labels").update({ name }).eq("id", id);
-          if (error) toast(friendlyError(error), "error");
-          else await loadAdminLabels();
-        } else if (act.dataset.al === "delete") {
-          if (!confirm("Delete this label? Its tests stay in the category, just without a label.")) return;
-          const { error } = await sb.from("practice_labels").delete().eq("id", id);
-          if (error) toast(friendlyError(error), "error");
-          else await loadAdminLabels();
-        }
-        return;
-      }
-      if (e.target.id === "alMoveBtn") {
-        const ids = [...document.querySelectorAll("[data-al-test]:checked")].map((c) => c.dataset.alTest);
-        if (!ids.length) {
-          toast("Select at least one test.", "error");
-          return;
-        }
-        const label = document.getElementById("alMoveTo").value || null;
-        const { error } = await sb.from("tests").update({ practice_label_id: label }).in("id", ids);
-        if (error) toast(friendlyError(error), "error");
-        else {
-          toast(label ? `${ids.length} test${ids.length === 1 ? "" : "s"} moved` : "Label removed", "success");
-          await loadAdminLabels();
-        }
-      }
-    });
-    document.getElementById("alContent").addEventListener("change", (e) => {
-      if (e.target.id === "alSelectAll") document.querySelectorAll("[data-al-test]").forEach((c) => (c.checked = e.target.checked));
-    });
-  }
-  await loadAdminLabels();
-}
-
-async function loadAdminLabels() {
-  const cat = document.getElementById("alCategory").value;
-  const labelsBox = document.getElementById("alLabels");
-  const testsBox = document.getElementById("alTests");
-  testsBox.innerHTML = `<div class="empty-state">Loading…</div>`;
-  const [lab, tst] = await Promise.all([
-    sb.from("practice_labels").select("id, name, sort_order").eq("category", cat).order("sort_order").order("name"),
-    sb.from("tests").select("id, title, is_published, practice_label_id, created_at").eq("test_mode", "practice").eq("practice_category", cat).order("created_at", { ascending: false }),
-  ]);
-  const err = lab.error || tst.error;
-  if (err) {
-    const msg = /practice_labels|practice_label_id/.test(err.message || "") ? "Run migration_labels.sql to enable labels." : friendlyError(err);
-    labelsBox.innerHTML = "";
-    testsBox.innerHTML = `<div class="error-box">${escapeHtml(msg)}</div>`;
-    return;
-  }
-  const labels = lab.data || [];
-  const tests = tst.data || [];
-  const count = (id) => tests.filter((t) => t.practice_label_id === id).length;
-  labelsBox.innerHTML = labels.length
-    ? `<div class="al-labels">${labels
-        .map((l) => `<div class="al-label"><span><b>${escapeHtml(l.name)}</b><small>${count(l.id)} test${count(l.id) === 1 ? "" : "s"}</small></span><button type="button" class="btn btn-sm" data-al="rename" data-id="${l.id}" data-name="${escapeHtml(l.name)}" aria-label="Rename">✏️</button><button type="button" class="btn btn-sm" data-al="delete" data-id="${l.id}" aria-label="Delete">🗑</button></div>`)
-        .join("")}</div>`
-    : `<p class="text-muted">No labels in this category yet. Students see a normal list of tests.</p>`;
-  if (!tests.length) {
-    testsBox.innerHTML = `<div class="empty-state">No Infinite Practice tests in this category yet.</div>`;
-    return;
-  }
-  const nameOf = (id) => labels.find((l) => l.id === id)?.name;
-  testsBox.innerHTML = `
-    <div class="al-move">
-      <label class="al-all"><input type="checkbox" id="alSelectAll"> Select all</label>
-      <select id="alMoveTo" class="ui-select" aria-label="Move to label"><option value="">Remove label</option>${labels.map((l) => `<option value="${l.id}">${escapeHtml(l.name)}</option>`).join("")}</select>
-      <button type="button" class="btn btn-primary" id="alMoveBtn">Move selected</button>
-    </div>
-    <div class="al-tests">${tests
-      .map((t) => `<label class="al-test"><input type="checkbox" data-al-test="${t.id}"><span class="al-test-title">${escapeHtml(t.title)}${t.is_published ? "" : " <em>(draft)</em>"}</span><span class="al-test-label ${nameOf(t.practice_label_id) ? "has" : ""}">${escapeHtml(nameOf(t.practice_label_id) || "No label")}</span></label>`)
-      .join("")}</div>`;
-}
 
 async function enterBulkImportView() {
   myProfile = myProfile || (await getMyProfile());
@@ -10054,16 +9965,18 @@ function openDrawer() {
   const nav = document.getElementById("drawerNav");
   nav.innerHTML = "";
   document.querySelectorAll("#appSidebar .app-nav-item").forEach((item) => {
+    if (getComputedStyle(item).display === "none") return;
     const copy = item.cloneNode(true);
     copy.removeAttribute("id");
     copy.removeAttribute("title");
+    copy.style.display = "";
     copy.classList.remove("app-nav-item", "nav-hl");
     copy.classList.add("drawer-item");
     nav.appendChild(copy);
     if (item.dataset.nav === "leaderboard") {
       const unread = document.getElementById("annBadge");
       const count = unread && !unread.hidden ? unread.textContent : "";
-      nav.insertAdjacentHTML("beforeend", `<a href="#/announcements" class="drawer-item" data-nav="announcements"><span class="app-nav-icon">🔔</span><span class="app-nav-label">Announcements</span>${count ? `<b class="drawer-badge">${escapeHtml(count)}</b>` : ""}</a>`);
+      nav.insertAdjacentHTML("beforeend", `<a href="#/announcements" class="drawer-item" data-nav="announcements"><span class="app-nav-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></span><span class="app-nav-label">Announcements</span>${count ? `<b class="drawer-badge">${escapeHtml(count)}</b>` : ""}</a>`);
     }
   });
   document.getElementById("drawerName").textContent = document.getElementById("topbarUserName")?.textContent || "Student";
@@ -10088,6 +10001,10 @@ function closeDrawer() {
 }
 
 document.getElementById("drawerBtn")?.addEventListener("click", openDrawer);
+document.getElementById("appNavAdmin")?.addEventListener("click", (event) => {
+  event.preventDefault();
+  navigate("/admin-test");
+});
 document.getElementById("drawerClose")?.addEventListener("click", closeDrawer);
 document.getElementById("drawerBackdrop")?.addEventListener("click", closeDrawer);
 document.getElementById("drawerNav")?.addEventListener("click", (e) => { if (e.target.closest("a")) closeDrawer(); });
@@ -10095,13 +10012,15 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawe
 window.addEventListener("hashchange", closeDrawer);
 
 /* =========================================================================
-   CREATE YOUR OWN TEST — students build a test from the question bank:
-   subjects > chapters > topics, number of questions, difficulty, mode.
+   INFINITE PRACTICE — build your own test, one step at a time:
+   1 Subjects  2 Chapters and topics  3 Questions and difficulty  4 Time  5 Mode
    ========================================================================= */
 const PB_SUBJECTS = [["Physics", "🧲", "Physics"], ["Chemistry", "🧪", "Chemistry"], ["Mathematics", "📐", "Maths"], ["Biology", "🧬", "Biology"]];
 const PB_COUNTS = [10, 20, 30, 50, 75];
 const PB_DIFFS = [["easy", "Easy", "🟢"], ["medium", "Medium", "🟡"], ["hard", "Hard", "🔴"], ["mixed", "Mixed", "🎲"]];
-const pb = { bank: {}, subjects: new Set(), chapters: new Map(), open: new Set(), count: 20, custom: false, customValue: "", difficulty: "mixed", mode: "quiz", search: "", showEmpty: false, bound: false, busy: false };
+const PB_STEPS = ["Subjects", "Chapters", "Questions", "Time", "Mode"];
+const PB_DIFF_FACTOR = { easy: 0.75, medium: 1, hard: 1.3, mixed: 1 };
+const pb = { bank: {}, step: 1, subjects: new Set(), chapters: new Map(), open: new Set(), count: 20, custom: false, customValue: "", difficulty: "mixed", minutes: null, mode: "quiz", search: "", showEmpty: false, bound: false, busy: false };
 
 function pbIndexCatalog(rows) {
   const bank = {};
@@ -10113,10 +10032,11 @@ function pbIndexCatalog(rows) {
   });
   pb.bank = bank;
 }
-const pbKey = (s, c) => `${s}|${c}`;
+const pbKey = (s2, c) => `${s2}|${c}`;
 const pbTopicSum = (t, diff) => (diff === "mixed" ? t.easy + t.medium + t.hard : t[diff]);
-const pbChapterTotal = (s, c) => Object.values(pb.bank[s]?.[c]?.topics || {}).reduce((n, t) => n + pbTopicSum(t, "mixed"), 0);
-const pbSubjectTotal = (s) => Object.keys(pb.bank[s] || {}).reduce((n, c) => n + pbChapterTotal(s, c), 0);
+const pbChapterTotal = (s2, c) => Object.values(pb.bank[s2]?.[c]?.topics || {}).reduce((n, t) => n + pbTopicSum(t, "mixed"), 0);
+const pbSubjectTotal = (s2) => Object.keys(pb.bank[s2] || {}).reduce((n, c) => n + pbChapterTotal(s2, c), 0);
+const pbCountValue = () => (pb.custom ? Math.round(Number(pb.customValue)) : pb.count);
 
 function pbAvailable(diff) {
   let n = 0;
@@ -10135,21 +10055,19 @@ function pbChapterGroups(subject) {
   return groups;
 }
 
-function pbCountValue() {
-  return pb.custom ? Math.round(Number(pb.customValue)) : pb.count;
+// recommended time: 2 min per Physics/Chemistry/Maths question, 1 min per Biology question, adjusted for difficulty
+function pbRecommended() {
+  const chapters = [...pb.chapters.values()];
+  if (!chapters.length) return 5;
+  const perQuestion = chapters.reduce((n, c) => n + (c.subject === "Biology" ? 1 : 2), 0) / chapters.length;
+  const questions = Math.max(1, Math.min(pbCountValue() || 0, pbAvailable(pb.difficulty)));
+  return Math.min(600, Math.max(5, Math.round((questions * perQuestion * PB_DIFF_FACTOR[pb.difficulty]) / 5) * 5));
 }
+const pbMinutes = () => (pb.minutes == null ? pbRecommended() : pb.minutes);
 
-function pbRenderSubjects() {
-  document.getElementById("pbSubjects").innerHTML = `<div class="pb-subjects">${PB_SUBJECTS.map(([name, icon, label]) => {
-    const n = pbSubjectTotal(name);
-    return `<button type="button" class="pb-subj ${pb.subjects.has(name) ? "on" : ""}" data-pb-subj="${name}" ${n ? "" : "disabled"}><span class="pb-subj-ic">${icon}</span><b>${label}</b><small>${n ? n + " questions" : "Coming soon"}</small></button>`;
-  }).join("")}</div>`;
-}
+const pbGroupLabel = (group, label) => (group && group !== label && group !== "Physics" && group !== "Mathematics" ? `<div class="pb-group-label">${escapeHtml(group)}</div>` : "");
 
-function pbRenderChapters() {
-  const card = document.getElementById("pbChaptersCard");
-  card.hidden = pb.subjects.size === 0;
-  if (!pb.subjects.size) return;
+function pbChaptersHtml() {
   const q = pb.search.trim().toLowerCase();
   let hiddenEmpty = 0;
   const html = PB_SUBJECTS.filter(([name]) => pb.subjects.has(name)).map(([name, icon, label]) => {
@@ -10169,60 +10087,85 @@ function pbRenderChapters() {
             ${sel && open ? `<div class="pb-topics">${topics.map(([t, d]) => `<label class="pb-topic"><input type="checkbox" data-pb-topic="${escapeHtml(key)}" value="${escapeHtml(t)}" ${sel.topics.has(t) ? "checked" : ""}><span>${escapeHtml(t)}</span><em>${pbTopicSum(d, "mixed")}</em></label>`).join("")}</div>` : ""}
           </div>`;
         }).join("");
-      return rows ? `<div class="pb-group">${groups_label(g.group, label)}${rows}</div>` : "";
+      return rows ? `<div class="pb-group">${pbGroupLabel(g.group, label)}${rows}</div>` : "";
     }).join("");
     return `<div class="pb-subject-block"><div class="pb-subject-head"><h3>${icon} ${label}</h3><span><button type="button" data-pb-selall="${name}">Select all</button><button type="button" data-pb-clear="${name}">Clear</button></span></div>${groups || `<p class="pb-none">No chapters match.</p>`}</div>`;
   }).join("");
-  document.getElementById("pbChapters").innerHTML = html;
-  const note = document.getElementById("pbEmptyNote");
-  note.textContent = hiddenEmpty && !pb.showEmpty ? `${hiddenEmpty} chapter${hiddenEmpty === 1 ? " has" : "s have"} no questions yet and ${hiddenEmpty === 1 ? "is" : "are"} hidden.` : "";
-}
-const groups_label = (group, subjectLabel) => (group && group !== subjectLabel && group !== "Physics" && group !== "Mathematics" ? `<div class="pb-group-label">${escapeHtml(group)}</div>` : "");
-
-function pbRenderOptions() {
-  const card = document.getElementById("pbOptionsCard");
-  card.hidden = pb.chapters.size === 0;
-  if (!pb.chapters.size) return;
-  const avail = (d) => pbAvailable(d);
-  const requested = pbCountValue();
-  const total = avail(pb.difficulty);
-  const warn = requested > total && total > 0 ? `<p class="pb-warn">Only ${total} question${total === 1 ? "" : "s"} match. Your test will have ${total}.</p>` : total === 0 ? `<p class="pb-warn">No questions match this difficulty. Try another one.</p>` : "";
-  document.getElementById("pbOptions").innerHTML = `
-    <h4 class="pb-h">How many questions?</h4>
-    <div class="pb-chips">${PB_COUNTS.map((n) => `<button type="button" class="pb-chip ${!pb.custom && pb.count === n ? "on" : ""}" data-pb-count="${n}">${n}</button>`).join("")}
-      <button type="button" class="pb-chip ${pb.custom ? "on" : ""}" data-pb-count="custom">Custom</button>
-      ${pb.custom ? `<input type="number" class="pb-custom" id="pbCustom" min="1" max="100" inputmode="numeric" placeholder="1 to 100" value="${escapeHtml(pb.customValue)}">` : ""}</div>
-    <h4 class="pb-h">Difficulty</h4>
-    <div class="pb-diffs">${PB_DIFFS.map(([k, label, icon]) => `<button type="button" class="pb-diff ${pb.difficulty === k ? "on" : ""}" data-pb-diff="${k}"><span>${icon}</span><b>${label}</b><small>${avail(k)} available</small></button>`).join("")}</div>
-    ${warn}`;
-  document.getElementById("pbModeCard").hidden = false;
-  document.getElementById("pbModes").innerHTML = `
-    <button type="button" class="pb-mode ${pb.mode === "quiz" ? "on" : ""}" data-pb-mode="quiz"><span>🎯</span><b>Quiz mode</b><small>Timed, like a real test. Results and answers come at the end.</small></button>
-    <button type="button" class="pb-mode ${pb.mode === "practice" ? "on" : ""}" data-pb-mode="practice"><span>📖</span><b>Practice mode</b><small>See if you are right, plus the explanation, right after each answer.</small></button>`;
+  const note = hiddenEmpty && !pb.showEmpty ? `<p class="pb-hint">${hiddenEmpty} chapter${hiddenEmpty === 1 ? " has" : "s have"} no questions yet and ${hiddenEmpty === 1 ? "is" : "are"} hidden.</p>` : "";
+  return html + note;
 }
 
-function pbRenderBar() {
+function pbStepHtml() {
+  const e = escapeHtml;
+  if (pb.step === 1) {
+    return `<p class="pb-hint">Choose one or more subjects.</p><div class="pb-subjects">${PB_SUBJECTS.map(([name, icon, label]) => {
+      const n = pbSubjectTotal(name);
+      return `<button type="button" class="pb-subj ${pb.subjects.has(name) ? "on" : ""}" data-pb-subj="${name}" ${n ? "" : "disabled"}><span class="pb-subj-ic">${icon}</span><b>${label}</b><small>${n ? n + " questions" : "Coming soon"}</small></button>`;
+    }).join("")}</div>`;
+  }
+  if (pb.step === 2) {
+    return `<p class="pb-hint">Every topic of a chapter is included. Tap <b>Topics</b> to leave some out.</p>
+      <div class="pb-chap-tools"><input type="search" id="pbSearch" placeholder="Search chapters" value="${e(pb.search)}"><label class="pb-empty-toggle"><input type="checkbox" id="pbShowEmpty" ${pb.showEmpty ? "checked" : ""}> Show chapters without questions</label></div>
+      <div id="pbChapters">${pbChaptersHtml()}</div>`;
+  }
+  if (pb.step === 3) {
+    const requested = pbCountValue();
+    const total = pbAvailable(pb.difficulty);
+    const warn = total === 0 ? `<p class="pb-warn">No questions match this difficulty. Try another one.</p>` : requested > total ? `<p class="pb-warn">Only ${total} question${total === 1 ? "" : "s"} match. Your test will have ${total}.</p>` : "";
+    return `<h4 class="pb-h">How many questions?</h4>
+      <div class="pb-chips">${PB_COUNTS.map((n) => `<button type="button" class="pb-chip ${!pb.custom && pb.count === n ? "on" : ""}" data-pb-count="${n}">${n}</button>`).join("")}
+        <button type="button" class="pb-chip ${pb.custom ? "on" : ""}" data-pb-count="custom">Custom</button>
+        ${pb.custom ? `<input type="number" class="pb-custom" id="pbCustom" min="1" max="100" inputmode="numeric" placeholder="1 to 100" value="${e(pb.customValue)}">` : ""}</div>
+      <h4 class="pb-h">Level of the questions</h4>
+      <div class="pb-diffs">${PB_DIFFS.map(([k, label, icon]) => `<button type="button" class="pb-diff ${pb.difficulty === k ? "on" : ""}" data-pb-diff="${k}"><span>${icon}</span><b>${label}</b><small>${pbAvailable(k)} available</small></button>`).join("")}</div>
+      <div id="pbWarn">${warn}</div>`;
+  }
+  if (pb.step === 4) {
+    const rec = pbRecommended();
+    const per = [...pb.chapters.values()].some((c) => c.subject !== "Biology") ? "about 2 minutes per Physics, Chemistry or Maths question and 1 minute per Biology question" : "about 1 minute per Biology question";
+    return `<div class="pb-time-rec"><span>⏱</span><div><b>Recommended: ${rec} minutes</b><small>For ${Math.min(pbCountValue() || 0, pbAvailable(pb.difficulty))} questions, ${PB_DIFFS.find((d) => d[0] === pb.difficulty)[1].toLowerCase()} level: ${per}.</small></div></div>
+      <h4 class="pb-h">Time limit for the whole test</h4>
+      <div class="pb-time"><button type="button" class="pb-step-btn" data-pb-min="-5" aria-label="5 minutes less">−</button><input type="number" id="pbMinutes" min="5" max="600" inputmode="numeric" value="${pbMinutes()}"><span>minutes</span><button type="button" class="pb-step-btn" data-pb-min="5" aria-label="5 minutes more">+</button></div>
+      <div class="pb-chips pb-time-chips"><button type="button" class="pb-chip ${pb.minutes == null ? "on" : ""}" data-pb-rec="1">Recommended</button>${[30, 60, 90, 120, 180].map((m) => `<button type="button" class="pb-chip ${pb.minutes === m ? "on" : ""}" data-pb-setmin="${m}">${m}</button>`).join("")}</div>`;
+  }
+  return `<p class="pb-hint">How do you want to take this test?</p><div class="pb-modes">
+    <button type="button" class="pb-mode ${pb.mode === "quiz" ? "on" : ""}" data-pb-mode="quiz"><span>🎯</span><b>Quiz mode</b><small>Like a real test. Answers and your report come at the end.</small></button>
+    <button type="button" class="pb-mode ${pb.mode === "practice" ? "on" : ""}" data-pb-mode="practice"><span>📖</span><b>Practice mode</b><small>See right or wrong after every answer. No restrictions: you can switch tabs freely to look things up.</small></button></div>`;
+}
+
+function pbStepValid() {
+  if (pb.step === 1) return pb.subjects.size > 0;
+  if (pb.step === 2) return pb.chapters.size > 0;
+  if (pb.step === 3) { const c = pbCountValue(); return c >= 1 && c <= 100 && pbAvailable(pb.difficulty) > 0; }
+  if (pb.step === 4) { const m = pbMinutes(); return m >= 5 && m <= 600; }
+  return true;
+}
+
+function pbRender() {
+  const last = PB_STEPS.length;
+  const titles = ["Choose subjects", "Choose chapters", "Questions and level", "Time limit", "Choose a mode"];
+  document.getElementById("pbWizard").innerHTML = `
+    <div class="pb-progress" aria-label="Step ${pb.step} of ${last}">${PB_STEPS.map((name, i) => `<span class="${i + 1 === pb.step ? "now" : i + 1 < pb.step ? "done" : ""}"><i>${i + 1 < pb.step ? "✓" : i + 1}</i><em>${name}</em></span>`).join("")}</div>
+    <section class="card pb-card pb-window"><h2><span class="pb-n">${pb.step}</span> ${titles[pb.step - 1]}</h2>${pbStepHtml()}</section>`;
   const bar = document.getElementById("pbBar");
+  bar.hidden = false;
+  const prev = document.getElementById("pbPrev");
+  prev.hidden = pb.step === 1;
+  prev.style.visibility = "visible";
+  const next = document.getElementById("pbNext");
+  next.textContent = pb.step === last ? (pb.busy ? "Creating your test…" : "Begin test") : "Next →";
+  next.disabled = !pbStepValid() || pb.busy;
   const n = pb.chapters.size;
-  bar.hidden = n === 0;
-  if (!n) return;
-  const total = pbAvailable(pb.difficulty);
-  const count = pbCountValue();
-  const diffLabel = PB_DIFFS.find((d) => d[0] === pb.difficulty)[1];
-  const valid = total > 0 && count >= 1 && count <= 100;
-  document.getElementById("pbBarTitle").textContent = `${valid ? Math.min(count, total) : "—"} questions · ${n} chapter${n === 1 ? "" : "s"}`;
-  const subjects = [...new Set([...pb.chapters.values()].map((c) => c.subject))];
-  const perQuestion = subjects.reduce((n, sub) => n + (sub === "Biology" ? 1 : 2), 0) / (subjects.length || 1);
-  const minutes = Math.max(5, Math.round(Math.min(count, total) * perQuestion));
-  document.getElementById("pbBarSub").textContent = `${diffLabel} · ${pb.mode === "quiz" ? "Quiz mode" : "Practice mode"} · about ${minutes} min`;
-  document.getElementById("pbStart").disabled = !valid || pb.busy;
+  document.getElementById("pbBarTitle").textContent = `Step ${pb.step} of ${last}`;
+  document.getElementById("pbBarSub").textContent = n ? `${n} chapter${n === 1 ? "" : "s"} · ${Math.min(pbCountValue() || 0, pbAvailable(pb.difficulty))} questions · ${pbMinutes()} min` : "Pick a subject to begin";
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
-function pbRenderAll() {
-  pbRenderSubjects();
-  pbRenderChapters();
-  pbRenderOptions();
-  pbRenderBar();
+function pbRefreshBar() {
+  const next = document.getElementById("pbNext");
+  next.disabled = !pbStepValid() || pb.busy;
+  const n = pb.chapters.size;
+  document.getElementById("pbBarSub").textContent = n ? `${n} chapter${n === 1 ? "" : "s"} · ${Math.min(pbCountValue() || 0, pbAvailable(pb.difficulty))} questions · ${pbMinutes()} min` : "Pick a subject to begin";
 }
 
 function pbToggleChapter(key, on) {
@@ -10233,51 +10176,64 @@ function pbToggleChapter(key, on) {
   pb.chapters.set(key, { subject, chapter, topics: new Set(topics) }); // every topic is selected by default
 }
 
+function pbPartial(fn) {
+  // re-draw only the changing part of the window so typing and scrolling are not interrupted
+  fn();
+  pbRefreshBar();
+}
+
 function pbBind() {
   if (pb.bound) return;
   pb.bound = true;
-  const body = document.getElementById("pbBody");
-  body.addEventListener("click", (e) => {
+  const wiz = document.getElementById("pbWizard");
+  wiz.addEventListener("click", (e) => {
     const t = e.target.closest("button");
     if (!t) return;
-    if (t.dataset.pbSubj) {
-      const s2 = t.dataset.pbSubj;
-      if (pb.subjects.has(s2)) {
-        pb.subjects.delete(s2);
-        [...pb.chapters.keys()].filter((k) => k.startsWith(s2 + "|")).forEach((k) => pb.chapters.delete(k));
-      } else pb.subjects.add(s2);
-      pbRenderAll();
-    } else if (t.dataset.pbOpen) {
-      pb.open.has(t.dataset.pbOpen) ? pb.open.delete(t.dataset.pbOpen) : pb.open.add(t.dataset.pbOpen);
-      pbRenderChapters();
-    } else if (t.dataset.pbSelall) {
-      const s2 = t.dataset.pbSelall;
-      Object.keys(pb.bank[s2] || {}).forEach((c) => pbToggleChapter(pbKey(s2, c), true));
-      pbRenderAll();
-    } else if (t.dataset.pbClear) {
-      [...pb.chapters.keys()].filter((k) => k.startsWith(t.dataset.pbClear + "|")).forEach((k) => { pb.chapters.delete(k); pb.open.delete(k); });
-      pbRenderAll();
-    } else if (t.dataset.pbCount) {
-      if (t.dataset.pbCount === "custom") pb.custom = true;
-      else { pb.custom = false; pb.count = Number(t.dataset.pbCount); }
-      pbRenderOptions();
-      pbRenderBar();
+    const d = t.dataset;
+    if (d.pbSubj) {
+      if (pb.subjects.has(d.pbSubj)) {
+        pb.subjects.delete(d.pbSubj);
+        [...pb.chapters.keys()].filter((k) => k.startsWith(d.pbSubj + "|")).forEach((k) => pb.chapters.delete(k));
+      } else pb.subjects.add(d.pbSubj);
+      pbRender();
+    } else if (d.pbOpen) {
+      pb.open.has(d.pbOpen) ? pb.open.delete(d.pbOpen) : pb.open.add(d.pbOpen);
+      pbPartial(() => (document.getElementById("pbChapters").innerHTML = pbChaptersHtml()));
+    } else if (d.pbSelall) {
+      Object.keys(pb.bank[d.pbSelall] || {}).forEach((c) => pbToggleChapter(pbKey(d.pbSelall, c), true));
+      pbPartial(() => (document.getElementById("pbChapters").innerHTML = pbChaptersHtml()));
+    } else if (d.pbClear) {
+      [...pb.chapters.keys()].filter((k) => k.startsWith(d.pbClear + "|")).forEach((k) => { pb.chapters.delete(k); pb.open.delete(k); });
+      pbPartial(() => (document.getElementById("pbChapters").innerHTML = pbChaptersHtml()));
+    } else if (d.pbCount) {
+      if (d.pbCount === "custom") pb.custom = true;
+      else { pb.custom = false; pb.count = Number(d.pbCount); }
+      pb.minutes = null;
+      pbRender();
       if (pb.custom) document.getElementById("pbCustom")?.focus();
-    } else if (t.dataset.pbDiff) {
-      pb.difficulty = t.dataset.pbDiff;
-      pbRenderOptions();
-      pbRenderBar();
-    } else if (t.dataset.pbMode) {
-      pb.mode = t.dataset.pbMode;
-      pbRenderOptions();
-      pbRenderBar();
+    } else if (d.pbDiff) {
+      pb.difficulty = d.pbDiff;
+      pb.minutes = null;
+      pbRender();
+    } else if (d.pbMode) {
+      pb.mode = d.pbMode;
+      pbRender();
+    } else if (d.pbMin) {
+      pb.minutes = Math.min(600, Math.max(5, pbMinutes() + Number(d.pbMin)));
+      pbRender();
+    } else if (d.pbSetmin) {
+      pb.minutes = Number(d.pbSetmin);
+      pbRender();
+    } else if (d.pbRec) {
+      pb.minutes = null;
+      pbRender();
     }
   });
-  body.addEventListener("change", (e) => {
+  wiz.addEventListener("change", (e) => {
     const chap = e.target.closest("[data-pb-chap]");
     if (chap) {
       pbToggleChapter(chap.dataset.pbChap, chap.checked);
-      pbRenderAll();
+      pbPartial(() => (document.getElementById("pbChapters").innerHTML = pbChaptersHtml()));
       return;
     }
     const topic = e.target.closest("[data-pb-topic]");
@@ -10285,90 +10241,78 @@ function pbBind() {
       const sel = pb.chapters.get(topic.dataset.pbTopic);
       if (!sel) return;
       topic.checked ? sel.topics.add(topic.value) : sel.topics.delete(topic.value);
-      if (!sel.topics.size) pb.chapters.delete(topic.dataset.pbTopic); // no topic left: chapter is dropped
-      pbRenderAll();
+      if (!sel.topics.size) pb.chapters.delete(topic.dataset.pbTopic);
+      pbPartial(() => (document.getElementById("pbChapters").innerHTML = pbChaptersHtml()));
       return;
     }
     if (e.target.id === "pbShowEmpty") {
       pb.showEmpty = e.target.checked;
-      pbRenderChapters();
+      pbPartial(() => (document.getElementById("pbChapters").innerHTML = pbChaptersHtml()));
     }
   });
-  body.addEventListener("input", (e) => {
+  wiz.addEventListener("input", (e) => {
     if (e.target.id === "pbSearch") {
       pb.search = e.target.value;
-      pbRenderChapters();
+      document.getElementById("pbChapters").innerHTML = pbChaptersHtml();
     } else if (e.target.id === "pbCustom") {
       pb.customValue = e.target.value;
-      pbRenderBar();
-      const warn = document.querySelector("#pbOptions .pb-warn");
-      if (warn) warn.remove();
+      pb.minutes = null;
+      pbRefreshBar();
+    } else if (e.target.id === "pbMinutes") {
+      const v = Math.round(Number(e.target.value));
+      pb.minutes = v >= 1 ? v : null;
+      pbRefreshBar();
     }
   });
-  document.getElementById("pbStart").addEventListener("click", pbStart);
+  document.getElementById("pbPrev").addEventListener("click", () => { if (pb.step > 1) { pb.step -= 1; pbRender(); } });
+  document.getElementById("pbNext").addEventListener("click", () => {
+    if (!pbStepValid()) return;
+    if (pb.step < PB_STEPS.length) { pb.step += 1; pbRender(); } else pbStart();
+  });
 }
 
 async function pbStart() {
   if (pb.busy) return;
   const count = pbCountValue();
-  if (!(count >= 1 && count <= 100)) {
-    toast("Choose between 1 and 100 questions.", "error");
-    return;
-  }
   const selection = [...pb.chapters.values()].map((sel) => {
     const all = Object.keys(pb.bank[sel.subject]?.[sel.chapter]?.topics || {});
     return { subject: sel.subject, chapter: sel.chapter, topics: sel.topics.size === all.length ? null : [...sel.topics] };
   });
-  const btn = document.getElementById("pbStart");
   pb.busy = true;
-  btn.disabled = true;
-  btn.textContent = "Creating your test…";
-  const { data, error } = await sb.rpc("create_custom_test", { p_selection: selection, p_difficulty: pb.difficulty, p_count: count, p_mode: pb.mode });
+  pbRefreshBar();
+  document.getElementById("pbNext").textContent = "Creating your test…";
+  const { data, error } = await sb.rpc("create_custom_test", { p_selection: selection, p_difficulty: pb.difficulty, p_count: count, p_mode: pb.mode, p_minutes: pbMinutes() });
   pb.busy = false;
-  btn.textContent = "Start test";
+  document.getElementById("pbNext").textContent = "Begin test";
   if (error) {
-    btn.disabled = false;
+    pbRefreshBar();
     toast(friendlyError(error), "error");
     return;
   }
   invalidateRpcCache();
   if (data.question_count < count) toast(`Only ${data.question_count} questions matched, so your test has ${data.question_count}.`, "success");
-  navigate(`/exam?test=${data.test_id}&practice=1`);
+  navigate(`/exam?test=${data.test_id}&practice=1&mode=${pb.mode}`);
 }
 
-async function enterPracticeCreateView() {
-  const body = document.getElementById("pbBody");
+async function enterPracticeView() {
+  const wiz = document.getElementById("pbWizard");
   document.getElementById("pbBar").hidden = true;
-  body.innerHTML = `<div class="empty-state">Loading…</div>`;
-  const { data, error } = await sb.rpc("get_bank_catalog");
-  if (error) {
-    body.innerHTML = `<div class="error-box">${escapeHtml(/get_bank_catalog|schema cache|does not exist/i.test(error.message || "") ? "The question bank is not set up yet. Run migration_question_bank.sql." : friendlyError(error))}</div>`;
+  wiz.innerHTML = `<div class="empty-state">Loading…</div>`;
+  const [bank, overall] = await Promise.all([cachedRpc("get_bank_catalog"), cachedRpc("get_practice_overall_report")]);
+  renderPracticeOverallStrip(document.getElementById("practiceOverallStrip"), overall.data, overall.error);
+  if (bank.error) {
+    wiz.innerHTML = `<div class="error-box">${escapeHtml(/get_bank_catalog|schema cache|does not exist/i.test(bank.error.message || "") ? "Practice is not set up yet. Run migration_cleanup.sql." : friendlyError(bank.error))}</div>`;
     return;
   }
-  pbIndexCatalog(data || []);
-  if (!(data || []).length) {
-    body.innerHTML = `<div class="empty-state pr-empty">No questions are available yet.<br><small>Please check back soon.</small></div>`;
+  pbIndexCatalog(bank.data || []);
+  if (!(bank.data || []).length) {
+    wiz.innerHTML = `<div class="empty-state pr-empty">No questions are available yet.<br><small>Please check back soon.</small></div>`;
     return;
   }
-  // forget choices that no longer exist
   [...pb.chapters.keys()].forEach((k) => { const [s2, c] = k.split("|"); if (!pbChapterTotal(s2, c)) pb.chapters.delete(k); });
-  body.innerHTML = `
-    <section class="card pb-card"><h2><span class="pb-n">1</span> Choose subjects</h2><div id="pbSubjects"></div></section>
-    <section class="card pb-card" id="pbChaptersCard" hidden>
-      <h2><span class="pb-n">2</span> Choose chapters</h2>
-      <p class="pb-hint">Every topic of a chapter is included. Tap <b>Topics</b> to leave some out.</p>
-      <div class="pb-chap-tools"><input type="search" id="pbSearch" placeholder="Search chapters" value="${escapeHtml(pb.search)}"><label class="pb-empty-toggle"><input type="checkbox" id="pbShowEmpty" ${pb.showEmpty ? "checked" : ""}> Show chapters without questions</label></div>
-      <div id="pbChapters"></div><p class="pb-hint" id="pbEmptyNote"></p>
-    </section>
-    <section class="card pb-card" id="pbOptionsCard" hidden><h2><span class="pb-n">3</span> Questions and difficulty</h2><div id="pbOptions"></div></section>
-    <section class="card pb-card" id="pbModeCard" hidden><h2><span class="pb-n">4</span> Choose a mode</h2><div class="pb-modes" id="pbModes"></div></section>`;
+  pb.step = 1;
   pbBind();
-  const wanted = qs("subject");
-  if (wanted && pb.bank[wanted]) pb.subjects.add(wanted);
-  pbRenderAll();
-  if (wanted && pb.bank[wanted]) {
-    setTimeout(() => document.getElementById("pbChaptersCard")?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
-  }
+  pbRender();
 }
 
 /* =========================================================================
@@ -10442,7 +10386,7 @@ async function abLoad(reset) {
     abSyncBulk();
     list.innerHTML = `<div class="empty-state">Loading…</div>`;
   }
-  let q = sb.from("question_bank").select("id, subject, chapter, topic, difficulty, question_type, question_text, needs_review", { count: "exact" }).order("created_at", { ascending: false });
+  let q = sb.from("questions").select("id, subject, chapter, topic, difficulty, question_type, question_text, needs_review", { count: "exact" }).is("test_id", null).order("created_at", { ascending: false });
   const val = (id) => document.getElementById(id).value;
   if (val("abSubject")) q = q.eq("subject", val("abSubject"));
   if (val("abChapter")) q = q.eq("chapter", val("abChapter"));
@@ -10468,8 +10412,8 @@ async function abLoad(reset) {
   document.getElementById("abMore").hidden = from + data.length >= (count || 0);
   if (reset) {
     const [all, review] = await Promise.all([
-      sb.from("question_bank").select("id", { count: "exact", head: true }),
-      sb.from("question_bank").select("id", { count: "exact", head: true }).eq("needs_review", true),
+      sb.from("questions").select("id", { count: "exact", head: true }).is("test_id", null),
+      sb.from("questions").select("id", { count: "exact", head: true }).is("test_id", null).eq("needs_review", true),
     ]);
     document.getElementById("abSummary").textContent = `${all.count ?? 0} questions in the bank${review.count ? ` · ${review.count} need tagging` : ""} · showing ${count ?? 0} match${count === 1 ? "" : "es"}`;
   }
@@ -10478,7 +10422,7 @@ async function abLoad(reset) {
 async function abBulkUpdate(patch) {
   const ids = [...ab.selected];
   if (!ids.length) return;
-  const { error } = await sb.from("question_bank").update({ ...patch, needs_review: false, updated_at: new Date().toISOString() }).in("id", ids);
+  const { error } = await sb.from("questions").update({ ...patch, needs_review: false, updated_at: new Date().toISOString() }).in("id", ids);
   if (error) { toast(friendlyError(error), "error"); return; }
   invalidateRpcCache();
   toast(`${ids.length} question${ids.length === 1 ? "" : "s"} updated`, "success");
@@ -10487,7 +10431,7 @@ async function abBulkUpdate(patch) {
 
 async function abDelete(ids) {
   if (!ids.length || !confirm(`Delete ${ids.length} question${ids.length === 1 ? "" : "s"} from the bank? Tests students already made keep their own copy.`)) return;
-  const { error } = await sb.from("question_bank").delete().in("id", ids);
+  const { error } = await sb.from("questions").delete().in("id", ids);
   if (error) { toast(friendlyError(error), "error"); return; }
   invalidateRpcCache();
   toast("Deleted", "success");
@@ -10497,7 +10441,7 @@ async function abDelete(ids) {
 async function abOpenEditor(id) {
   let row = { subject: "Physics", chapter: "", topic: "", difficulty: "medium", question_type: "mcq", question_text: "", options: null, correct_option: "A", correct_integer_value: null, explanation: "", positive_marks: 4, negative_marks: 1 };
   if (id) {
-    const { data, error } = await sb.from("question_bank").select("*").eq("id", id).single();
+    const { data, error } = await sb.from("questions").select("*").eq("id", id).single();
     if (error) { toast(friendlyError(error), "error"); return; }
     row = data;
   }
@@ -10523,7 +10467,7 @@ async function abOpenEditor(id) {
         <label class="bq-f">Correct option<select class="ui-select" id="abmAnswer">${["A", "B", "C", "D"].map((l) => `<option ${row.correct_option === l ? "selected" : ""}>${l}</option>`).join("")}</select></label>
       </div>
       <label class="bq-f" id="abmIntWrap">Correct number<input type="text" inputmode="decimal" id="abmInt" value="${row.correct_integer_value ?? ""}" placeholder="e.g. 7 or -2.5"></label>
-      <label class="bq-f">Explanation<textarea id="abmExpl" rows="3">${e(row.explanation || "")}</textarea></label>
+
       <div class="ab-grid ab-grid-2"><label class="bq-f">Marks for correct<input type="number" id="abmPos" step="any" value="${row.positive_marks}"></label><label class="bq-f">Marks lost if wrong<input type="number" id="abmNeg" step="any" value="${row.negative_marks}"></label></div>
       <div class="ab-msg" id="abmMsg" aria-live="polite"></div>
     </div>
@@ -10566,7 +10510,7 @@ async function abOpenEditor(id) {
       difficulty: wrap.querySelector('input[name="abmDiff"]:checked')?.value || "medium",
       question_type: type,
       question_text: $("abmQ").value.trim(),
-      explanation: $("abmExpl").value.trim() || null,
+      explanation: null,
       positive_marks: Number($("abmPos").value) || 0,
       negative_marks: Number($("abmNeg").value) || 0,
       needs_review: false,
@@ -10589,7 +10533,7 @@ async function abOpenEditor(id) {
     }
     msg.textContent = "";
     $("abmSave").disabled = true;
-    const res = id ? await sb.from("question_bank").update(payload).eq("id", id) : await sb.from("question_bank").insert(payload);
+    const res = id ? await sb.from("questions").update(payload).eq("id", id) : await sb.from("questions").insert(payload);
     $("abmSave").disabled = false;
     if (res.error) { msg.textContent = friendlyError(res.error); return; }
     invalidateRpcCache();
@@ -10597,4 +10541,564 @@ async function abOpenEditor(id) {
     toast(id ? "Question updated" : "Question added", "success");
     await abLoad(true);
   });
+}
+
+
+/* =========================================================================
+   RE-ATTEMPT MODE CHOOSER — every re-attempt asks: Quiz mode or Practice mode
+   ========================================================================= */
+function openModeChooser(testId) {
+  document.getElementById("modeModal")?.remove();
+  const wrap = document.createElement("div");
+  wrap.id = "modeModal";
+  wrap.className = "syl-overlay";
+  wrap.innerHTML = `<div class="syl-sheet" role="dialog" aria-modal="true" aria-label="Choose a mode">
+    <div class="syl-head"><h3>How do you want to attempt?</h3><button type="button" class="syl-x" aria-label="Close">✕</button></div>
+    <div class="syl-body"><div class="pb-modes">
+      <button type="button" class="pb-mode" data-mode="quiz"><span>🎯</span><b>Quiz mode</b><small>Like a real test. Answers and your report come at the end.</small></button>
+      <button type="button" class="pb-mode" data-mode="practice"><span>📖</span><b>Practice mode</b><small>See right or wrong after every answer. No restrictions: you can switch tabs freely.</small></button>
+    </div></div></div>`;
+  document.body.appendChild(wrap);
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+  const close = () => { wrap.remove(); document.removeEventListener("keydown", onKey); };
+  document.addEventListener("keydown", onKey);
+  wrap.addEventListener("click", (e) => {
+    if (e.target === wrap || e.target.closest(".syl-x")) return close();
+    const b = e.target.closest("[data-mode]");
+    if (b) {
+      close();
+      navigate(`/exam?test=${encodeURIComponent(testId)}&practice=1&mode=${b.dataset.mode}`);
+    }
+  });
+}
+
+document.addEventListener("click", (e) => {
+  const a = e.target.closest('a[href^="#/exam?test="]');
+  if (!a) return;
+  const href = a.getAttribute("href");
+  if (!href.includes("practice=1") || href.includes("mode=")) return;
+  e.preventDefault();
+  openModeChooser(new URLSearchParams(href.split("?")[1]).get("test"));
+});
+
+/* =========================================================================
+   HOME — hide the live-test cards when there is no live test
+   ========================================================================= */
+function syncHomeLive() {
+  const view = document.getElementById("view-dashboard");
+  if (!view) return;
+  const EMPTY = /no live test right now/i;
+  view.querySelectorAll("[data-live-hidden]").forEach((el) => {
+    if (!EMPTY.test(el.textContent)) {
+      el.removeAttribute("data-live-hidden");
+      el.previousElementSibling?.removeAttribute("data-live-hidden-head");
+    }
+  });
+  const withText = [...view.querySelectorAll("[id]")].filter((el) => el.id !== "view-dashboard" && EMPTY.test(el.textContent));
+  const deepest = withText.filter((el) => !withText.some((o) => o !== el && el.contains(o)));
+  deepest.forEach((el) => {
+    el.setAttribute("data-live-hidden", "");
+    const head = el.previousElementSibling;
+    if (head && head.querySelector("h2") && /live tests/i.test(head.textContent)) head.setAttribute("data-live-hidden-head", "");
+  });
+}
+(() => {
+  const view = document.getElementById("view-dashboard");
+  if (!view) return;
+  let queued = false;
+  new MutationObserver(() => {
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(() => { queued = false; syncHomeLive(); });
+  }).observe(view, { childList: true, subtree: true, characterData: true });
+})();
+
+/* =========================================================================
+   ANALYTICS — one merged page (live and practice together)
+   ========================================================================= */
+function anTrendHtml(trend) {
+  const rows = (trend || []).filter((r) => r.at);
+  if (!rows.length) return "";
+  const avg = rows.reduce((n, r) => n + Number(r.pct || 0), 0) / rows.length;
+  const last = rows[rows.length - 1];
+  const prev = rows[rows.length - 2];
+  const delta = prev ? Number(last.pct) - Number(prev.pct) : null;
+  const badge = delta == null ? "" : `<span class="an-delta ${delta >= 0 ? "up" : "down"}">${delta >= 0 ? "▲" : "▼"} ${Math.abs(delta).toFixed(1)} pts vs previous</span>`;
+  const bars = rows.map((r, i) => {
+    const pct = Math.max(0, Math.min(100, Number(r.pct) || 0));
+    return `<div class="an-col"><b>${Math.round(pct)}%</b><i class="${r.practice ? "is-practice" : "is-live"} ${i === rows.length - 1 ? "is-last" : ""}" style="height:${Math.max(pct, 1)}%"></i></div>`;
+  }).join("");
+  const labels = rows.map((r) => { const d = new Date(r.at); return `<span>${d.getDate()}<small>${d.toLocaleString([], { month: "short" })}</small></span>`; }).join("");
+  return `<section class="card pr-section an-card"><div class="an-head"><div><h2>Score trend</h2><small>Last ${rows.length} attempt${rows.length === 1 ? "" : "s"} · live and practice together</small></div>${badge}</div>
+    <div class="an-plot"><div class="an-yaxis"><span>100%</span><span>75%</span><span>50%</span><span>25%</span><span>0%</span></div>
+      <div class="an-area"><div class="an-avg" style="bottom:${avg}%"></div><div class="an-cols" style="--n:${rows.length}">${bars}</div></div>
+      <div class="an-xrow" style="--n:${rows.length}">${labels}</div></div>
+    <div class="an-legend"><span><i class="lg-live"></i>Live test</span><span><i class="lg-practice"></i>Practice</span><span><i class="lg-avg"></i>Average ${avg.toFixed(1)}%</span></div></section>`;
+}
+
+function anOutcomesHtml(t) {
+  const c = Number(t.correct || 0), w = Number(t.wrong || 0), u = Number(t.unanswered || 0);
+  const total = c + w + u;
+  if (!total) return "";
+  const a = (c / total) * 100;
+  const b = a + (w / total) * 100;
+  return `<section class="card pr-section an-card"><div class="an-head"><h2>Question outcomes</h2><small>${total} questions</small></div>
+    <div class="an-out"><div class="an-donut" style="background:conic-gradient(#22C55E 0 ${a}%, #F43F5E ${a}% ${b}%, #6B7280 ${b}% 100%)"><div><b>${Math.round(Number(t.accuracy || 0))}%</b><small>ACCURACY</small></div></div>
+    <ul class="an-out-list"><li><i style="background:#22C55E"></i>Correct <b>${c}</b></li><li><i style="background:#F43F5E"></i>Wrong <b>${w}</b></li><li><i style="background:#6B7280"></i>Unattempted <b>${u}</b></li></ul></div></section>`;
+}
+
+function anDifficultyHtml(diff) {
+  const order = ["easy", "medium", "hard"];
+  const label = { easy: "Easy", medium: "Medium", hard: "Hard" };
+  const by = Object.fromEntries((diff || []).map((d) => [d.difficulty, d]));
+  const have = order.some((k) => by[k] && Number(by[k].attempted) > 0);
+  const cards = order.map((k) => {
+    const d = by[k] || { attempted: 0, correct: 0 };
+    const att = Number(d.attempted), cor = Number(d.correct);
+    const acc = att ? Math.round((cor / att) * 100) : 0;
+    return `<div class="an-diff d-${k}"><div class="an-ring" style="--p:${acc}"><b>${att ? acc + "%" : "—"}</b></div><div class="an-diff-t"><b>${label[k]}</b><small>${cor} of ${att} correct</small></div></div>`;
+  }).join("");
+  const rated = order.filter((k) => by[k] && Number(by[k].attempted) >= 5).map((k) => ({ k, acc: Number(by[k].correct) / Number(by[k].attempted) * 100 }));
+  let insight = "";
+  if (rated.length >= 2) {
+    const best = rated.reduce((a, b) => (b.acc > a.acc ? b : a));
+    const worst = rated.reduce((a, b) => (b.acc < a.acc ? b : a));
+    if (best.k !== worst.k) insight = `<p class="an-insight">You are strongest on <b>${label[best.k]}</b> questions (${Math.round(best.acc)}%). Practise more <b>${label[worst.k]}</b> questions (${Math.round(worst.acc)}%).</p>`;
+  }
+  return `<section class="card pr-section an-card"><div class="an-head"><h2>Question difficulty</h2><small>How you do on Easy, Medium and Hard</small></div><div class="an-diffs">${cards}</div>${insight}${have ? "" : `<p class="text-muted pr-note">Build tests in Infinite Practice to see how you do at each level.</p>`}</section>`;
+}
+
+function analyticsMergedHtml(o) {
+  const t = o?.totals || {};
+  if (!t.attempts) {
+    return `<div class="card analytics-empty-card"><span class="analytics-empty-icon">📊</span><h2>No analytics yet</h2><p class="text-muted">Attempt a test to see your analytics.</p><a href="#/practice" class="btn btn-primary">Start practising</a></div>`;
+  }
+  const secs = Number(t.total_time_seconds || 0);
+  const timeLabel = secs >= 3600 ? `${(secs / 3600).toFixed(1)}h` : `${Math.round(secs / 60)}m`;
+  const subjects = (o.subjects || []).map((x) => prBar(x.subject, x.accuracy, `${x.correct} right · ${x.wrong} wrong`)).join("");
+  const chap = (list) => (list || []).map((x) => prBar(x.chapter, x.accuracy, x.subject)).join("");
+  return `
+    <div class="pr-stat-row">${prStat(t.questions_attempted, "Questions attempted")}${prStat(t.tests_attempted, "Tests attempted")}${prStat(prPct(t.accuracy), "Accuracy")}${prStat(`🔥 ${o.streak_days || 0}`, "Day streak")}</div>
+    <div class="pr-stat-row">${prStat(t.live_attempts, "Live attempts")}${prStat(t.practice_attempts, "Practice attempts")}${prStat(timeLabel, "Total study time")}${prStat(`${t.sec_per_question || 0}s`, "Time per question")}</div>
+    <div class="pr-stat-row">${prStat(prPct(t.live_avg_pct), "Live avg score")}${prStat(prPct(t.practice_avg_pct), "Practice avg score")}${prStat(prPct(t.best_pct), "Best score")}${prStat(t.correct, "Correct answers")}</div>
+    <div class="pr-two">
+      <section class="card pr-section"><h2>Subjects (all tests)</h2>${subjects || `<p class="text-muted">No data.</p>`}</section>
+      <section class="card pr-section"><h2>Revise these first</h2>${chap(o.weak_chapters) || `<p class="text-muted">Answer at least 5 questions in a chapter to see it here.</p>`}</section>
+    </div>
+    <section class="card pr-section"><h2>Strongest chapters</h2>${chap(o.strong_chapters) || `<p class="text-muted">Not enough data yet.</p>`}</section>
+    ${anTrendHtml(o.trend)}
+    ${anOutcomesHtml(t)}
+    ${anDifficultyHtml(o.difficulty)}
+    ${activityHtml(o.daily)}`;
+}
+
+async function enterAnalyticsView() {
+  const content = document.getElementById("analyticsContent");
+  const hist = document.getElementById("analysisHistory");
+  if (hist) { hist.innerHTML = ""; hist.style.display = "none"; }
+  content.innerHTML = `<div class="empty-state">Loading analytics…</div>`;
+  const { data, error } = await cachedRpc("get_combined_overview");
+  content.innerHTML = error
+    ? `<div class="error-box">${escapeHtml(/get_combined_overview|schema cache|does not exist/i.test(error.message || "") ? "Analytics are not set up yet. Run migration_cleanup.sql." : friendlyError(error))}</div>`
+    : analyticsMergedHtml(data);
+}
+
+/* =========================================================================
+   ANNOUNCEMENTS — "last read" time is kept on the device (no extra table)
+   ========================================================================= */
+const annReadKey = () => `ann_read_at_${myProfile?.id || "guest"}`;
+const annSince = () => {
+  try { return localStorage.getItem(annReadKey()) || new Date(Date.now() - 7 * 86400000).toISOString(); } catch (_) { return new Date(Date.now() - 7 * 86400000).toISOString(); }
+};
+const annMarkRead = () => { try { localStorage.setItem(annReadKey(), new Date().toISOString()); } catch (_) { /* private mode */ } };
+
+async function refreshAnnouncementBadge(force = false) {
+  const badge = document.getElementById("annBadge");
+  if (!badge || !document.body.classList.contains("app-shell-on")) return;
+  if (!force && Date.now() - annBadgeAt < 60000) return;
+  annBadgeAt = Date.now();
+  const { data, error } = await sb.rpc("get_announcement_unread_count", { p_since: annSince() });
+  if (error) return;
+  const n = Number(data) || 0;
+  badge.hidden = n < 1;
+  badge.textContent = n > 99 ? "99+" : String(n);
+  document.getElementById("annBtn")?.setAttribute("aria-label", n ? `Announcements, ${n} unread` : "Announcements");
+}
+
+async function loadAnnouncements(append = false) {
+  const feed = document.getElementById("annFeed");
+  if (!append) {
+    feed.innerHTML = `<div class="empty-state">Loading…</div>`;
+    ann.before = null;
+  }
+  const { data, error } = await sb.rpc("get_announcements", { p_before: ann.before, p_limit: 20, p_since: annSince() });
+  if (error) {
+    feed.innerHTML = `<div class="error-box">${escapeHtml(/get_announcements|schema cache|does not exist/i.test(error.message || "") ? "Announcements need the latest database update. Run migration_cleanup.sql." : friendlyError(error))}</div>`;
+    return;
+  }
+  const posts = data || [];
+  if (!append) feed.innerHTML = "";
+  if (!append && !posts.length) feed.innerHTML = `<div class="empty-state">No announcements yet.</div>`;
+  feed.insertAdjacentHTML("beforeend", posts.map(annPostHtml).join(""));
+  ann.before = posts.length ? posts[posts.length - 1].created_at : ann.before;
+  document.getElementById("annMore").hidden = posts.length < 20;
+  renderMath(feed);
+  if (!append) {
+    annMarkRead();
+    annBadgeAt = Date.now();
+    const badge = document.getElementById("annBadge");
+    if (badge) badge.hidden = true;
+  }
+}
+
+/* =========================================================================
+   ADMIN — reported questions: Check (opens an AI page), resolve, reopen, delete
+   ========================================================================= */
+function reportCheckPrompt(q) {
+  const lines = [
+    "Please check this question carefully for any error: a wrong or missing correct answer, a wrong or duplicate option, a typo, unclear wording or missing data.",
+    "If the question is fine, reply 'No error found'. If there is an error, explain what is wrong and what the correct answer should be.",
+    "",
+  ];
+  const meta = [q.subject, q.chapter].filter(Boolean).join(" | ");
+  if (meta) lines.push(meta);
+  lines.push(`Question: ${String(q.question_text || "").trim()}`);
+  (q.options || []).forEach((o) => lines.push(`${o.id}) ${o.text}`));
+  const answer = q.correct_option != null && q.correct_option !== "" ? q.correct_option : q.correct_integer_value;
+  if (answer != null && answer !== "") lines.push("", `Correct option marked in the platform: ${answer}`);
+  return lines.join("\n").slice(0, 3200);
+}
+
+function reportCheckMenuHtml(q) {
+  if (!q) return "";
+  const text = reportCheckPrompt(q);
+  const short = `${String(q.question_text || "").replace(/\s+/g, " ").trim().slice(0, 260)} check answer`;
+  const links = [
+    ["ChatGPT", `https://chatgpt.com/?q=${encodeURIComponent(text)}`],
+    ["Claude", `https://claude.ai/new?q=${encodeURIComponent(text)}`],
+    ["Google", `https://www.google.com/search?q=${encodeURIComponent(short)}`],
+  ];
+  return `<details class="explain-menu report-check"><summary>🔍 Check</summary><div class="explain-pop"><span>Open the question in</span>${links.map(([name, href]) => `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${name}</a>`).join("")}</div></details>`;
+}
+
+async function enterAdminReportsView() {
+  myProfile = myProfile || (await getMyProfile());
+  const ok = myProfile?.role === "admin";
+  document.getElementById("arNotAdmin").style.display = ok ? "none" : "block";
+  document.getElementById("arContent").style.display = ok ? "block" : "none";
+  if (!ok) return;
+  if (!arBound) {
+    arBound = true;
+    document.querySelector("#arContent .an-tabs").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-ar]");
+      if (!b) return;
+      arTab = b.dataset.ar;
+      document.querySelectorAll("#arContent .an-tab").forEach((x) => x.classList.toggle("active", x === b));
+      loadAdminReportsInbox();
+    });
+    document.getElementById("arList").addEventListener("click", async (e) => {
+      const btn = e.target.closest("[data-ar-act]");
+      if (!btn) return;
+      const act = btn.dataset.arAct;
+      if (act === "delete" && !confirm("Delete these resolved reports? This cannot be undone.")) return;
+      btn.disabled = true;
+      const fn = { resolve: "admin_resolve_question_reports", reopen: "admin_reopen_question_reports", delete: "admin_delete_resolved_reports" }[act];
+      const { error } = await sb.rpc(fn, { p_question_id: btn.dataset.q });
+      if (error) {
+        toast(friendlyError(error), "error");
+        btn.disabled = false;
+        return;
+      }
+      toast({ resolve: "Marked as resolved", reopen: "Reopened", delete: "Deleted" }[act], "success");
+      await loadAdminReportsInbox();
+    });
+  }
+  arTab = "open";
+  document.querySelectorAll("#arContent .an-tab").forEach((x) => x.classList.toggle("active", x.dataset.ar === "open"));
+  await loadAdminReportsInbox();
+}
+
+async function loadAdminReportsInbox() {
+  const list = document.getElementById("arList");
+  list.innerHTML = `<div class="empty-state">Loading…</div>`;
+  const { data, error } = await sb
+    .from("question_reports")
+    .select("id, test_id, question_id, reason, details, created_at, resolved_at, questions(question_text, subject, chapter, question_type, options, correct_option, correct_integer_value), profiles(full_name)")
+    .order("created_at", { ascending: false });
+  if (error) {
+    list.innerHTML = `<div class="error-box">${escapeHtml(/resolved_at/.test(error.message || "") ? "Run the latest migration to enable resolved reports." : friendlyError(error))}</div>`;
+    return;
+  }
+  const wantResolved = arTab === "resolved";
+  const rows = (data || []).filter((r) => (wantResolved ? !!r.resolved_at : !r.resolved_at));
+  const groups = new Map();
+  rows.forEach((r) => {
+    if (!groups.has(r.question_id)) groups.set(r.question_id, { q: r.question_id, test: r.test_id, question: r.questions, items: [] });
+    groups.get(r.question_id).items.push(r);
+  });
+  const testIds = [...new Set(rows.map((r) => r.test_id).filter(Boolean))];
+  const titles = new Map();
+  if (testIds.length) {
+    const { data: tests } = await sb.from("tests").select("id, title, test_mode").in("id", testIds);
+    (tests || []).forEach((t) => titles.set(t.id, t));
+  }
+  if (!groups.size) {
+    list.innerHTML = `<div class="empty-state">${wantResolved ? "Nothing resolved yet." : "No open reports. Nice and clean ✓"}</div>`;
+    return;
+  }
+  list.innerHTML = [...groups.values()].map((g) => {
+    const t = titles.get(g.test);
+    const reasons = g.items.map((r) => `<li><b>${escapeHtml(r.reason)}</b>${r.details ? ` · ${escapeHtml(r.details)}` : ""} <small>${escapeHtml(r.profiles?.full_name || "Student")} · ${formatDateTime(r.created_at)}</small></li>`).join("");
+    return `<article class="report-card">
+      <div class="report-card-head"><strong>${escapeHtml(t?.title || "Test")}</strong><span class="status-tag dq-tag">${g.items.length} report${g.items.length === 1 ? "" : "s"}</span></div>
+      <div class="text-muted">${escapeHtml(g.question?.subject || "")}</div>
+      <div class="question-text report-question-text">${escapeHtml(g.question?.question_text || "This question has been removed.")}</div>
+      <ul class="report-reasons">${reasons}</ul>
+      <div class="report-actions">
+        ${g.question ? `<a class="btn btn-sm btn-primary" href="#/admin-test?test=${encodeURIComponent(g.test)}&edit=${encodeURIComponent(g.q)}">✏️ Edit question</a>` : ""}
+        ${reportCheckMenuHtml(g.question)}
+        ${wantResolved
+          ? `<button type="button" class="btn btn-sm" data-ar-act="reopen" data-q="${g.q}">↩ Reopen</button><button type="button" class="btn btn-sm btn-danger" data-ar-act="delete" data-q="${g.q}">🗑 Delete</button>`
+          : `<button type="button" class="btn btn-sm btn-success" data-ar-act="resolve" data-q="${g.q}">✓ Mark resolved</button>`}
+      </div></article>`;
+  }).join("");
+  renderMath(list);
+}
+
+/* =========================================================================
+   ADMIN — student feedback (read and delete)
+   ========================================================================= */
+async function enterAdminFeedbackView() {
+  myProfile = myProfile || (await getMyProfile());
+  const ok = myProfile?.role === "admin";
+  document.getElementById("afNotAdmin").style.display = ok ? "none" : "block";
+  document.getElementById("afContent").style.display = ok ? "block" : "none";
+  if (!ok) return;
+  const list = document.getElementById("afList");
+  if (!list.dataset.bound) {
+    list.dataset.bound = "1";
+    list.addEventListener("click", async (e) => {
+      const del = e.target.closest("[data-af-del]");
+      if (!del || !confirm("Delete this feedback?")) return;
+      const { error } = await sb.from("test_feedback").delete().eq("id", del.dataset.afDel);
+      if (error) { toast(friendlyError(error), "error"); return; }
+      del.closest(".af-item").remove();
+      toast("Feedback deleted", "success");
+    });
+  }
+  list.innerHTML = `<div class="empty-state">Loading…</div>`;
+  let res = await sb.from("test_feedback").select("*").order("created_at", { ascending: false }).limit(300);
+  if (res.error) res = await sb.from("test_feedback").select("*").limit(300);
+  if (res.error) {
+    list.innerHTML = `<div class="error-box">${escapeHtml(friendlyError(res.error))}</div>`;
+    return;
+  }
+  const rows = res.data || [];
+  document.getElementById("afSummary").textContent = `${rows.length} feedback ${rows.length === 1 ? "message" : "messages"}`;
+  if (!rows.length) {
+    list.innerHTML = `<div class="empty-state">No feedback yet.</div>`;
+    return;
+  }
+  const uid = (r) => r.user_id || r.student_id;
+  const userIds = [...new Set(rows.map(uid).filter(Boolean))];
+  const testIds = [...new Set(rows.map((r) => r.test_id).filter(Boolean))];
+  const [pr, ts] = await Promise.all([
+    userIds.length ? sb.from("profiles").select("id, full_name, class_grade, target_exam").in("id", userIds) : { data: [] },
+    testIds.length ? sb.from("tests").select("id, title").in("id", testIds) : { data: [] },
+  ]);
+  const people = new Map((pr.data || []).map((p) => [p.id, p]));
+  const tests = new Map((ts.data || []).map((t) => [t.id, t]));
+  list.innerHTML = rows.map((r) => {
+    const p = people.get(uid(r));
+    const stars = Number(r.rating) ? "★".repeat(Number(r.rating)) + "☆".repeat(Math.max(0, 5 - Number(r.rating))) : "";
+    const text = r.comment ?? r.message ?? r.feedback ?? r.text ?? "";
+    const chips = [p?.class_grade, p?.target_exam ? examOptionFor(p.target_exam) : ""].filter(Boolean).map((c) => `<i>${escapeHtml(c)}</i>`).join("");
+    return `<article class="af-item">
+      <div class="af-head"><span class="af-av">${escapeHtml((p?.full_name || "S").slice(0, 1).toUpperCase())}</span>
+        <div class="af-who"><b>${escapeHtml(p?.full_name || "Student")}</b><span class="ann-chips">${chips}</span></div>
+        <button type="button" class="ann-del" data-af-del="${r.id}" aria-label="Delete feedback">🗑</button></div>
+      ${stars ? `<div class="af-stars" aria-label="${Number(r.rating)} out of 5">${stars}</div>` : ""}
+      ${text ? `<div class="af-text">${escapeHtml(String(text))}</div>` : `<div class="af-text muted">No written comment.</div>`}
+      <div class="af-meta">${tests.get(r.test_id)?.title ? escapeHtml(tests.get(r.test_id).title) + " · " : ""}${r.created_at ? formatDateTime(r.created_at) : ""}</div>
+    </article>`;
+  }).join("");
+}
+
+/* =========================================================================
+   PROFILE POPUP — shown on the home page until every detail is filled in
+   ========================================================================= */
+let ppOpen = false;
+const ppField = (field, control) => `<label class="pp-field">${field.label} <span class="pp-star">*</span>${control}</label>`;
+
+function ppMissing(profile) {
+  return PROFILE_FIELDS.filter((f) => !f.valid(storedProfileValue(profile, f)));
+}
+
+function maybeShowProfilePrompt() {
+  if (ppOpen || !myProfile || myProfile.role === "admin") return;
+  if (!ppMissing(myProfile).length) return;
+  ppOpen = true;
+  const [name, email, mobile, dob, gender, klass, exam, board] = PROFILE_FIELDS;
+  const val = (f) => escapeHtml(storedProfileValue(myProfile, f));
+  const sel = (f, ph, values, current) => ppField(f, `<select class="ui-select" id="pp_${f.id}"><option value="">${ph}</option>${profileOptions(values, current)}</select>`);
+  const overlay = document.getElementById("profilePrompt");
+  document.getElementById("ppBody").innerHTML = [
+    ppField(name, `<input type="text" id="pp_${name.id}" value="${val(name)}" maxlength="120" autocomplete="name">`),
+    ppField(email, `<input type="email" id="pp_${email.id}" value="${val(email)}" autocomplete="email">`),
+    ppField(mobile, `<input type="tel" id="pp_${mobile.id}" value="${escapeHtml(mobileDigits(myProfile.mobile_number))}" inputmode="numeric" maxlength="14" placeholder="10-digit mobile number" autocomplete="tel-national">`),
+    ppField(dob, `<input type="date" id="pp_${dob.id}" value="${val(dob)}" min="1970-01-01" max="${isoToday()}">`),
+    sel(gender, "Select gender", GENDER_OPTIONS, storedProfileValue(myProfile, gender)),
+    sel(klass, "Select class", CLASS_OPTIONS, storedProfileValue(myProfile, klass)),
+    sel(exam, "Select target exam", EXAM_OPTIONS, examOptionFor(storedProfileValue(myProfile, exam))),
+    sel(board, "Select board", BOARD_OPTIONS, storedProfileValue(myProfile, board)),
+  ].join("");
+  overlay.hidden = false;
+  document.body.classList.add("eb-open");
+  const read = () => Object.fromEntries(PROFILE_FIELDS.map((f) => [f.key, document.getElementById("pp_" + f.id).value]));
+  const done = document.getElementById("ppDone");
+  const refresh = () => {
+    const v = read();
+    done.disabled = !PROFILE_FIELDS.every((f) => f.valid(v[f.key]));
+  };
+  const close = () => {
+    overlay.hidden = true;
+    document.body.classList.remove("eb-open");
+    ppOpen = false;
+  };
+  document.getElementById("ppBody").oninput = refresh;
+  document.getElementById("ppBody").onchange = refresh;
+  document.getElementById("ppSkip").onclick = close;
+  done.onclick = async () => {
+    const v = read();
+    if (!PROFILE_FIELDS.every((f) => f.valid(v[f.key]))) return;
+    done.disabled = true;
+    done.textContent = "Saving…";
+    const { data, error } = await sb
+      .from("profiles")
+      .update({
+        full_name: v.full_name.trim(),
+        email: v.email.trim(),
+        mobile_number: mobileDigits(v.mobile_number),
+        date_of_birth: v.date_of_birth,
+        gender: v.gender,
+        class_grade: v.class_grade,
+        target_exam: v.target_exam,
+        board: v.board,
+      })
+      .eq("id", myProfile.id)
+      .select()
+      .single();
+    done.textContent = "Done";
+    if (error) {
+      done.disabled = false;
+      toast(friendlyError(error), "error");
+      return;
+    }
+    myProfile = data;
+    close();
+    toast("Profile saved", "success");
+    try { await syncAppShell("dashboard", true); } catch (_) { /* shell refresh is optional */ }
+  };
+  refresh();
+}
+
+async function router() {
+  const timer = setTimeout(showBusy, 250);
+  try {
+    await routerCore();
+  } finally {
+    clearTimeout(timer);
+    hideBusy();
+  }
+  if (parseHash().path === "/dashboard") maybeShowProfilePrompt();
+}
+
+/* =========================================================================
+   BULK IMPORT — rendered preview first; Edit opens the fields; faulty filter
+   ========================================================================= */
+let bulkFilter = "all";
+
+function bulkCardHtml(question, index) {
+  validateBulkQuestion(question);
+  const type = bulkNormType(question.type);
+  const ans = question.answer.trim().toUpperCase();
+  const subj = canonicalSubject(question.subject);
+  const e = escapeHtml;
+  const bank = bulkDest() === "bank";
+  const diff = bulkDiff(question.difficulty);
+  const meta = [subj || question.subject || "No subject", question.chapter || "No chapter", bank ? question.topic || "No topic" : "", bank ? (diff ? diff[0].toUpperCase() + diff.slice(1) : "No difficulty") : ""].filter(Boolean).map(e).join(" · ");
+  const options =
+    type === "mcq"
+      ? `<div class="bq-options">${["A", "B", "C", "D"].map((l) => `<div class="bq-opt ${ans === l ? "is-correct" : ""}" data-bq-wrap="option${l}">
+            <span class="bq-letter">${l}</span>
+            <textarea rows="2" data-bulk-field="option${l}" placeholder="Option ${l}">${e(question[`option${l}`])}</textarea>
+            <button type="button" class="bq-mark" data-bq-answer="${l}" aria-label="Mark option ${l} as correct" title="Mark as the correct answer">${ans === l ? "✔" : ""}</button>
+          </div>`).join("")}</div><div class="bq-hint">Tap the circle next to the correct option.</div>`
+      : type === "integer"
+        ? `<label class="bq-f" data-bq-wrap="answer">Correct numerical answer<input type="text" inputmode="decimal" data-bulk-field="answer" value="${e(question.answer)}" placeholder="e.g. 7 or -2.5"></label>`
+        : `<div class="bq-hint">Choose the question type above to continue.</div>`;
+  return `<article class="bq-card ${question.errors.length ? "has-errors" : "is-valid"} ${question.editing ? "is-editing" : ""}" data-bulk-card="${index}">
+    <div class="bq-metaline">${meta}</div>
+    <header class="bq-head">
+      <span class="bq-num">Q${e(question.sourceNumber)}</span>
+      <span class="bq-status" data-bq-status>${question.errors.length ? `${question.errors.length} to fix` : "✓ Ready"}</span>
+      <button type="button" class="bq-remove" data-bulk-remove="${index}" aria-label="Remove question">🗑</button>
+    </header>
+    <div class="bq-errors" data-bq-errors ${question.errors.length ? "" : "hidden"}>${question.errors.map((m) => `<div>${e(m)}</div>`).join("")}</div>
+    <div class="bq-view" data-bq-rendered>${bulkRenderedHtml(question)}</div>
+    <div class="bq-edit" ${question.editing ? "" : "hidden"}>
+      <div class="bq-seg" role="group" aria-label="Question type">
+        <button type="button" data-bq-type="MCQ" class="${type === "mcq" ? "active" : ""}">MCQ</button>
+        <button type="button" data-bq-type="Integer" class="${type === "integer" ? "active" : ""}">Integer</button>
+      </div>
+      <div class="bq-meta">
+        <label class="bq-f" data-bq-wrap="subject">Subject
+          <select class="ui-select" data-bulk-field="subject"><option value="">Select subject</option>${BULK_SUBJECTS.map((s2) => `<option ${s2 === subj ? "selected" : ""}>${s2}</option>`).join("")}</select></label>
+        <label class="bq-f" data-bq-wrap="chapter">Chapter
+          <select class="ui-select" data-bulk-field="chapter">${bulkChapterOptions(question.subject, question.chapter.trim())}</select></label>
+      </div>
+      ${bank ? `<div class="bq-meta">
+        <label class="bq-f" data-bq-wrap="topic">Topic<input type="text" data-bulk-field="topic" value="${e(question.topic || "")}" placeholder="e.g. Projectile motion"></label>
+        <label class="bq-f" data-bq-wrap="difficulty">Difficulty
+          <select class="ui-select" data-bulk-field="difficulty"><option value="">Select</option>${["Easy", "Medium", "Hard"].map((d) => `<option ${diff === d.toLowerCase() ? "selected" : ""}>${d}</option>`).join("")}</select></label>
+      </div>` : ""}
+      <label class="bq-f" data-bq-wrap="question">Question<textarea rows="4" data-bulk-field="question">${e(question.question)}</textarea></label>
+      ${options}
+    </div>
+    <div class="bq-foot"><button type="button" class="btn btn-sm" data-bq-edit="${index}">${question.editing ? "✔ Done editing" : "✏️ Edit question"}</button></div>
+  </article>`;
+}
+
+function rerenderBulkCard(index) {
+  const old = document.querySelector(`[data-bulk-card="${index}"]`);
+  if (!old) return renderBulkImportPreview();
+  const holder = document.createElement("div");
+  holder.innerHTML = bulkCardHtml(bulkQuestions[index], index);
+  const fresh = holder.firstElementChild;
+  old.replaceWith(fresh);
+  fresh.querySelectorAll("[data-bq-wrap]").forEach((wrap) => wrap.classList.toggle("is-invalid", bulkQuestions[index].badFields.has(wrap.dataset.bqWrap)));
+  renderMath(fresh);
+  refreshBulkSummary();
+}
+   
+function renderBulkImportPreview() {
+  const preview = document.getElementById("bulkImportPreview");
+  const active = bulkQuestions.filter((q) => !q.removed);
+  active.forEach(validateBulkQuestion);
+  const faulty = active.filter((q) => q.errors.length);
+  if (bulkFilter === "faulty" && !faulty.length) bulkFilter = "all";
+  const shown = bulkFilter === "faulty" ? faulty : active;
+  const bar = `<div class="bq-filter" role="group" aria-label="Show questions">
+    <button type="button" class="${bulkFilter === "all" ? "active" : ""}" data-bq-filter="all">All <i>${active.length}</i></button>
+    <button type="button" class="${bulkFilter === "faulty" ? "active" : ""} ${faulty.length ? "has-faults" : ""}" data-bq-filter="faulty" ${faulty.length ? "" : "disabled"}>⚠ Faulty questions <i>${faulty.length}</i></button>
+  </div>`;
+  preview.innerHTML = active.length
+    ? bar + shown.map((q) => bulkCardHtml(q, bulkQuestions.indexOf(q))).join("")
+    : `<div class="empty-state">All parsed questions were removed.</div>`;
+  preview.querySelectorAll("[data-bulk-card]").forEach((card) => {
+    const question = bulkQuestions[Number(card.dataset.bulkCard)];
+    card.querySelectorAll("[data-bq-wrap]").forEach((wrap) => wrap.classList.toggle("is-invalid", question.badFields.has(wrap.dataset.bqWrap)));
+  });
+  refreshBulkSummary();
+  renderMath(preview);
 } 
