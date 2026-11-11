@@ -38,7 +38,7 @@
   --space-5: 24px;
   --space-6: 32px;
   /* ---- Layout ---- */
-  --sidebar-w: 252px;
+  --sidebar-w: 224px;
   --bottom-nav-h: 66px;
   --topbar-h: 64px;
   /* ---- Type ---- */
@@ -2004,6 +2004,535 @@ table.report-table .bar-track {
 @media (max-width: 420px) {
   .auth-brand {
     min-height: 165px;
+  }
+
+  /* Compact phone layout: keep the paper readable without forcing horizontal
+     scrolling or stacking several large fixed controls over the question. */
+  .question-meta-right {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .question-time {
+    color: var(--muted);
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 640px) {
+    body {
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    .container,
+    body.app-shell-on .container {
+      width: 100%;
+      max-width: 100%;
+      padding-left: 10px;
+      padding-right: 10px;
+    }
+
+    .page-body {
+      padding-top: 8px;
+      padding-bottom: 12px;
+    }
+
+    .card,
+    .pr-card,
+    .pr-section {
+      border-radius: 10px;
+      padding: 10px;
+    }
+
+    .section-title h1,
+    .pr-head h1 {
+      font-size: 19px;
+    }
+
+    .section-title h2,
+    .pr-section h2 {
+      font-size: 14px;
+    }
+
+    .btn {
+      min-height: 36px;
+      padding: 7px 10px;
+      font-size: 12px;
+    }
+
+    .pr-page {
+      padding-top: 2px;
+      padding-bottom: 18px;
+    }
+
+    .pr-head {
+      margin: 3px 0 9px;
+      gap: 8px;
+    }
+
+    .pr-head-btns {
+      display: flex;
+      width: 100%;
+      gap: 6px;
+    }
+
+    .pr-head-btns .btn {
+      flex: 1;
+      text-align: center;
+    }
+
+    .pr-stat-row {
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+
+    .pr-stat {
+      padding: 8px 5px;
+      border-radius: 8px;
+    }
+
+    .pr-stat b {
+      font-size: 17px;
+    }
+
+    .pr-stat span,
+    .pr-meta,
+    .pr-mini {
+      font-size: 10.5px;
+    }
+
+    .pr-filters {
+      gap: 6px;
+      margin: 6px 0 8px;
+    }
+
+    .pr-search,
+    .pr-select {
+      min-height: 36px;
+      height: 36px;
+      padding: 0 9px;
+      font-size: 12px;
+    }
+
+    .pr-card {
+      gap: 5px;
+      padding: 10px;
+    }
+
+    .pr-card h3 {
+      font-size: 14px;
+    }
+
+    .pr-actions .btn {
+      min-height: 36px;
+    }
+
+    .pr-vbars {
+      height: 130px;
+      gap: 5px;
+    }
+
+    .pr-row {
+      min-height: 44px;
+      padding: 8px 2px;
+    }
+
+    .pr-row b {
+      font-size: 12px;
+    }
+
+    .pr-row small {
+      font-size: 10px;
+    }
+
+    .pr-hbar-top {
+      font-size: 11.5px;
+    }
+
+    .pr-hq {
+      gap: 6px;
+      padding: 7px 0;
+      font-size: 11.5px;
+    }
+
+    .result-container {
+      padding-bottom: 12px;
+    }
+
+    .result-container .card,
+    .result-container .section-title {
+      margin-bottom: 8px;
+    }
+
+    #view-exam.active {
+      min-height: 100dvh;
+      overflow: visible;
+    }
+
+    .exam-body {
+      padding: 6px 7px calc(78px + env(safe-area-inset-bottom, 0px));
+      overflow: visible;
+    }
+
+    .exam-topbar {
+      position: sticky;
+      top: 0;
+    }
+
+    .exam-topbar-inner {
+      padding: 7px 8px;
+      gap: 6px;
+    }
+
+    .exam-title {
+      font-size: 12px;
+    }
+
+    .exam-candidate {
+      font-size: 10px;
+    }
+
+    .exam-timer {
+      font-size: 14px;
+      padding: 5px 7px;
+    }
+
+    .subject-tabs {
+      gap: 2px;
+      padding: 0 5px;
+    }
+
+    .subject-tabs button {
+      padding: 7px 9px;
+      font-size: 11px;
+    }
+
+    .question-card {
+      padding: 10px;
+      border-radius: 8px;
+    }
+
+    .question-meta {
+      gap: 5px;
+      margin-bottom: 9px;
+    }
+
+    .question-number-badge,
+    .question-marks,
+    .question-time {
+      font-size: 10.5px;
+    }
+
+    .question-meta-right {
+      gap: 4px;
+    }
+
+    .question-text {
+      font-size: 13px;
+      line-height: 1.45;
+      margin-bottom: 11px;
+    }
+
+    .question-image {
+      margin-bottom: 10px;
+    }
+
+    .option-list {
+      gap: 6px;
+    }
+
+    .option-item {
+      gap: 8px;
+      padding: 8px 9px;
+    }
+
+    .option-letter {
+      width: 21px;
+      height: 21px;
+      font-size: 11px;
+    }
+
+    .option-text {
+      font-size: 12px;
+    }
+
+    .exam-actions {
+      gap: 6px;
+      margin-top: 10px;
+      padding-top: 10px;
+    }
+
+    .exam-actions-left,
+    .exam-actions-right {
+      gap: 6px;
+    }
+
+    .mobile-exam-actions {
+      gap: 6px;
+      padding: 6px 7px calc(6px + env(safe-area-inset-bottom, 0px));
+    }
+
+    .mobile-exam-actions .btn {
+      min-height: 38px;
+      font-size: 12px;
+    }
+
+    .modal-backdrop {
+      padding: 8px;
+    }
+
+    .modal {
+      padding: 14px;
+      border-radius: 10px;
+    }
+
+    .rating-row {
+      gap: 5px;
+      margin: 10px 0;
+    }
+
+    .rating-row button {
+      width: 34px;
+      height: 34px;
+      font-size: 12px;
+    }
+
+    .ins-head {
+      padding: 9px 10px;
+    }
+
+    .ins-head h3 {
+      font-size: 15px;
+    }
+
+    .ins-body {
+      padding: 10px;
+    }
+
+    .ins-layout {
+      gap: 8px;
+    }
+
+    .ins-card {
+      padding: 10px;
+      border-radius: 10px;
+    }
+
+    .ins-card h4 {
+      font-size: 13px;
+      margin-bottom: 7px;
+    }
+
+    .ins-card ul,
+    .ins-notice,
+    .ins-teacher p {
+      font-size: 11.5px;
+    }
+
+    .ins-summary {
+      gap: 6px;
+    }
+
+    .ins-summary div {
+      padding: 8px;
+      border-radius: 9px;
+    }
+
+    .ins-summary strong {
+      font-size: 17px;
+    }
+
+    .ins-summary span,
+    .ins-muted {
+      font-size: 10.5px;
+    }
+
+    .ins-foot {
+      gap: 8px;
+      padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
+    }
+
+    .ins-declare {
+      font-size: 11.5px;
+    }
+
+    .ins-foot .btn {
+      min-height: 40px;
+      padding: 0 14px;
+    }
+
+    .review-body {
+      padding: 8px 7px 18px;
+    }
+
+    .review-question-card {
+      padding: 10px;
+    }
+  }
+
+  /* Reports use a denser information layout on phones so the score, analysis
+     and subject table remain visible without oversized empty cards. */
+  @media (max-width: 640px) {
+    #view-result .page-body {
+      padding-top: 6px;
+      padding-bottom: 12px;
+    }
+
+    #view-result .result-container {
+      padding-left: 7px;
+      padding-right: 7px;
+    }
+
+    #view-result .card {
+      padding: 10px;
+      margin-top: 8px;
+      border-radius: 9px;
+    }
+
+    #view-result .section-title {
+      margin-bottom: 6px;
+      gap: 5px;
+    }
+
+    #view-result .section-title h2,
+    #view-result .card > h2 {
+      font-size: 13px !important;
+    }
+
+    #view-result .text-muted,
+    #view-result p {
+      font-size: 10.5px !important;
+      line-height: 1.35;
+    }
+
+    #view-result .report-status-tags {
+      gap: 3px;
+    }
+
+    #view-result .status-tag {
+      padding: 2px 6px;
+      font-size: 9px;
+    }
+
+    #view-result .stat-grid {
+      gap: 5px;
+      margin: 8px 0;
+    }
+
+    #view-result .stat-card {
+      padding: 8px 4px;
+      border-radius: 8px;
+      border-top-width: 2px;
+    }
+
+    #view-result .stat-card .val {
+      font-size: 16px;
+      line-height: 1.15;
+    }
+
+    #view-result .stat-card .lbl {
+      margin-top: 2px;
+      font-size: 9px;
+    }
+
+    #view-result .report-charts {
+      gap: 6px;
+      margin: 8px 0;
+    }
+
+    #view-result .report-charts .card {
+      padding: 8px;
+    }
+
+    #view-result .report-table {
+      font-size: 10px;
+      min-width: 520px;
+    }
+
+    #view-result .report-table th,
+    #view-result .report-table td {
+      padding: 6px 7px;
+    }
+
+    #view-result .bar-track {
+      max-width: 70px;
+      height: 5px;
+    }
+
+    #view-result .report-actions-row {
+      gap: 5px;
+      margin-top: 7px;
+    }
+
+    #view-result .report-actions-row .btn,
+    #view-result .report-review-cta .btn {
+      min-height: 32px;
+      padding: 6px 8px;
+      font-size: 10.5px;
+    }
+
+    #view-result .report-review-cta {
+      gap: 8px;
+      margin: 8px 0;
+    }
+
+    #view-result .report-review-cta h2 {
+      font-size: 13px !important;
+    }
+  }
+
+  @media (max-width: 640px) {
+    #view-result .card {
+      padding: 10px;
+      margin-top: 8px;
+    }
+
+    #view-result .section-title h2,
+    #view-result .card > h2,
+    #view-result .report-review-cta h2 {
+      font-size: 13px !important;
+    }
+
+    #view-result .stat-grid {
+      gap: 5px;
+      margin: 8px 0;
+    }
+
+    #view-result .stat-card {
+      padding: 8px 4px;
+    }
+
+    #view-result .stat-card .val {
+      font-size: 16px;
+    }
+
+    #view-result .stat-card .lbl {
+      font-size: 9px;
+    }
+
+    #view-result .report-table {
+      font-size: 10px;
+      min-width: 520px;
+    }
+
+    #view-result .report-table th,
+    #view-result .report-table td {
+      padding: 6px 7px;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    body.app-shell-on .container {
+      max-width: 1280px;
+    }
+
+    body.app-shell-on .card {
+      padding: 18px 20px;
+    }
   }
 
   .brand-main h1 {
@@ -16783,7 +17312,7 @@ body.ann-open {
     bottom: 0;
     left: 0;
     z-index: 3500;
-    width: min(310px, 86vw);
+    width: min(260px, 78vw);
     background: var(--surface);
     color: var(--ink);
     box-shadow: 8px 0 40px rgba(0, 0, 0, 0.35);
@@ -17859,6 +18388,84 @@ body.drawer-open {
     font-size: 12px;
     padding: 0 4px;
     gap: 4px;
+  }
+}
+
+@media (max-width: 640px) {
+  #view-tests .page-body {
+    padding-top: 6px;
+  }
+
+  #view-tests .tests-page-head {
+    margin-bottom: 6px;
+  }
+
+  #view-tests .tests-page-head h2 {
+    font-size: 17px;
+  }
+
+  #view-tests .past-toolbar {
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+
+  #view-tests .tests-search input,
+  #view-tests .tests-status-tabs button,
+  #view-tests .tests-sort-control select {
+    min-height: 34px;
+    height: 34px;
+    font-size: 11px;
+  }
+
+  #view-tests .tests-status-tabs {
+    gap: 3px;
+  }
+
+  #view-tests .tests-status-tabs button {
+    padding: 0 8px;
+  }
+
+  #view-tests .past-list {
+    gap: 5px;
+  }
+
+  #view-tests .mt-card {
+    gap: 6px;
+    padding: 8px 9px;
+    border-radius: 9px;
+  }
+
+  #view-tests .mt-title {
+    margin-bottom: 3px;
+    font-size: 12.5px;
+    line-height: 1.25;
+  }
+
+  #view-tests .mt-sub {
+    gap: 5px;
+    font-size: 10px;
+    line-height: 1.2;
+  }
+
+  #view-tests .mt-tag {
+    padding: 2px 6px;
+    font-size: 9.5px;
+  }
+
+  #view-tests .mt-actions {
+    gap: 5px;
+  }
+
+  #view-tests .mt-actions .btn {
+    min-height: 34px;
+    padding: 0 5px;
+    gap: 3px;
+    font-size: 10.5px;
+    border-radius: 7px;
+  }
+
+  #view-tests .mt-actions .btn span {
+    font-size: 11px;
   }
 }
 
@@ -19222,5 +19829,297 @@ body.practice-wizard-open .pb-bar {
 
   .pb-bar-text small {
     font-size: 10px;
+  }
+}
+
+/* Final phone overrides stay last so they win over the desktop/admin
+   component rules above. */
+@media (max-width: 640px) {
+  .container,
+  body.app-shell-on .container {
+    max-width: 100%;
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  body {
+    font-size: 13px;
+    overflow-x: hidden;
+  }
+
+  .page-body {
+    padding-top: 8px;
+    padding-bottom: 12px;
+  }
+
+  .pr-page {
+    padding-top: 2px;
+    padding-bottom: 18px;
+  }
+
+  .pr-head h1,
+  .section-title h1 {
+    font-size: 19px;
+  }
+
+  .pr-head-btns {
+    display: flex;
+    width: 100%;
+    gap: 6px;
+  }
+
+  .pr-head-btns .btn,
+  .pr-actions .btn {
+    flex: 1;
+    min-height: 36px;
+    font-size: 12px;
+  }
+
+  .pr-stat-row {
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+
+  .pr-stat {
+    padding: 8px 5px;
+    border-radius: 8px;
+  }
+
+  .pr-stat b {
+    font-size: 17px;
+  }
+
+  .pr-stat span,
+  .pr-meta,
+  .pr-mini,
+  .pr-row small {
+    font-size: 10.5px;
+  }
+
+  .pr-card,
+  .pr-section,
+  .result-container .card {
+    border-radius: 10px;
+    padding: 10px;
+  }
+
+  .pr-card h3 {
+    font-size: 14px;
+  }
+
+  .pr-search,
+  .pr-select {
+    min-height: 36px;
+    height: 36px;
+    padding: 0 9px;
+    font-size: 12px;
+  }
+
+  .pr-row {
+    min-height: 44px;
+    padding: 8px 2px;
+  }
+
+  #view-exam.active {
+    min-height: 100dvh;
+    overflow: visible;
+  }
+
+  .exam-body {
+    padding: 6px 7px calc(78px + env(safe-area-inset-bottom, 0px));
+    overflow: visible;
+  }
+
+  .exam-topbar-inner {
+    padding: 7px 8px;
+    gap: 6px;
+  }
+
+  .exam-title {
+    font-size: 12px;
+  }
+
+  .exam-candidate {
+    font-size: 10px;
+  }
+
+  .exam-timer {
+    font-size: 14px;
+    padding: 5px 7px;
+  }
+
+  .subject-tabs {
+    gap: 2px;
+    padding: 0 5px;
+  }
+
+  .subject-tabs button {
+    padding: 7px 9px;
+    font-size: 11px;
+  }
+
+  .question-card {
+    padding: 10px;
+    border-radius: 8px;
+  }
+
+  .question-meta {
+    gap: 5px;
+    margin-bottom: 9px;
+  }
+
+  .question-number-badge,
+  .question-marks,
+  .question-time {
+    font-size: 10.5px;
+  }
+
+  .question-text {
+    font-size: 13px;
+    line-height: 1.45;
+    margin-bottom: 11px;
+  }
+
+  .option-list {
+    gap: 6px;
+  }
+
+  .option-item {
+    gap: 8px;
+    padding: 8px 9px;
+  }
+
+  .option-letter {
+    width: 21px;
+    height: 21px;
+    font-size: 11px;
+  }
+
+  .option-text {
+    font-size: 12px;
+  }
+
+  .exam-actions {
+    gap: 6px;
+    margin-top: 10px;
+    padding-top: 10px;
+  }
+
+  .mobile-exam-actions {
+    gap: 6px;
+    padding: 6px 7px calc(6px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .mobile-exam-actions .btn {
+    min-height: 38px;
+    font-size: 12px;
+  }
+
+  .modal-backdrop {
+    padding: 8px;
+  }
+
+  .modal {
+    padding: 14px;
+    border-radius: 10px;
+  }
+
+  .rating-row {
+    gap: 5px;
+    margin: 10px 0;
+  }
+
+  .rating-row button {
+    width: 34px;
+    height: 34px;
+    font-size: 12px;
+  }
+
+  .ins-head,
+  .ins-body {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .ins-card {
+    padding: 10px;
+    border-radius: 10px;
+  }
+
+  .ins-card h4 {
+    font-size: 13px;
+  }
+
+  .ins-card ul,
+  .ins-notice,
+  .ins-teacher p,
+  .ins-declare {
+    font-size: 11.5px;
+  }
+
+  .ins-summary {
+    gap: 6px;
+  }
+
+  .ins-summary div {
+    padding: 8px;
+    border-radius: 9px;
+  }
+
+  .ins-summary strong {
+    font-size: 17px;
+  }
+
+  .ins-foot {
+    padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .ins-foot .btn {
+    min-height: 40px;
+  }
+
+  .review-body {
+    padding: 8px 7px 18px;
+  }
+}
+
+/* Last-resort phone sizing overrides for the report view. */
+@media (max-width: 640px) {
+  #view-result .card {
+    padding: 10px;
+    margin-top: 8px;
+  }
+
+  #view-result .section-title h2,
+  #view-result .card > h2,
+  #view-result .report-review-cta h2 {
+    font-size: 13px !important;
+  }
+
+  #view-result .stat-grid {
+    gap: 5px;
+    margin: 8px 0;
+  }
+
+  #view-result .stat-card {
+    padding: 8px 4px;
+  }
+
+  #view-result .stat-card .val {
+    font-size: 16px;
+  }
+
+  #view-result .stat-card .lbl {
+    font-size: 9px;
+  }
+
+  #view-result .report-table {
+    min-width: 520px;
+    font-size: 10px;
+  }
+
+  #view-result .report-table th,
+  #view-result .report-table td {
+    padding: 6px 7px;
   }
 }

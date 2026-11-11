@@ -1906,7 +1906,7 @@ function renderPracticeCategories() {
   const card = (key, icon, title, sub, n) =>
     `<a class="pr-cat" href="#/practice-list?cat=${key}"><span class="pr-cat-icon">${icon}</span><span class="pr-cat-text"><b>${escapeHtml(title)}</b></span><span class="pr-cat-n">${n}</span></a>`;
   box.innerHTML =
-    card("all", "♾️", "All Practice", "Every test in one list", practiceHub.rows.length) +
+    card("all", "📚", "All Practice", "Every test in one list", practiceHub.rows.length) +
     PR_CATS.map((c) => card(c.key, c.icon, c.title, c.sub, count(c.key))).join("");
 }
 
@@ -2118,7 +2118,7 @@ async function enterPracticeCategoryView() {
   fillChapterSelect(document.getElementById("pcChapter"), "All chapters");
   document.getElementById("pcSort").value = "new";
   const meta = PR_CATS.find((c) => c.key === cat);
-  document.getElementById("pcTitle").textContent = meta ? `${meta.icon} ${meta.title}` : "♾️ All Practice";
+  document.getElementById("pcTitle").textContent = meta ? `${meta.icon} ${meta.title}` : "All Practice";
   document.getElementById("pcSub").textContent = "";
   document.getElementById("pcLabels").innerHTML = "";
   const extra = document.getElementById("pcExtra");
@@ -2471,7 +2471,7 @@ function testCardCta(entry) {
 
 function testCardMeta(entry) {
   if (entry.is_practice) {
-    return `${entry.duration_minutes} min · Practice only — not counted for rank`;
+    return `${entry.duration_minutes} min · Practice only`;
   }
   const parts = [`${entry.duration_minutes} min`];
   if (entry.windowState === "upcoming") {
@@ -2606,7 +2606,7 @@ function sortPastRows(rows, sort) {
 
 function pastRowHtml(row) {
   const tid = encodeURIComponent(row.entry.id);
-  const tags = { main: "🔴 Live", new: "🔴 Live", infinite: "♾️ Infinite", reattempt: "🔁 Re-attempt" };
+  const tags = { main: "🔴 Live", new: "🔴 Live", infinite: "Practice", reattempt: "🔁 Re-attempt" };
   const retry = (ok) =>
     ok
       ? `<a class="btn btn-sm mt-reatt" href="#/exam?test=${tid}&practice=1"><span>🔁</span> Re-attempt</a>`
@@ -5494,7 +5494,7 @@ async function renderBeginInstructions() {
   const kind = pendingIsPractice ? (modeRow.data?.test_mode === "practice" ? "infinite" : "reattempt") : "live";
   const practiceFree = pendingIsPractice && (pendingMode ? pendingMode === "practice" : modeRow.data?.custom_mode === "practice");
   pendingFeedback = practiceFree;
-  const kindLabel = { live: "🔴 Live test", infinite: "♾️ Infinite Practice", reattempt: "🔁 Re-attempt" }[kind];
+  const kindLabel = { live: "🔴 Live test", infinite: "Practice", reattempt: "🔁 Re-attempt" }[kind];
   const qCount = info?.question_count ?? "—";
   const totalMarks = info?.total_marks ?? "—";
   const e = escapeHtml;
@@ -5567,7 +5567,7 @@ async function renderBeginInstructions() {
           <div><strong>${durationMinutes}m</strong><span>Duration</span></div>
           <div><strong>${qCount}</strong><span>Questions</span></div>
           <div><strong>${totalMarks}</strong><span>Total marks</span></div>
-          <div><strong>${kind === "live" ? "1" : "∞"}</strong><span>${kind === "live" ? "Attempt" : "Attempts"}</span></div>
+          <div><strong>${kind === "live" ? "1" : "Many"}</strong><span>${kind === "live" ? "Attempt" : "Attempts"}</span></div>
         </div>
         ${resumeNote}${warnNote}${teacher}
         <section class="ins-card">
@@ -6030,7 +6030,7 @@ function renderQuestion() {
   card.innerHTML = `
     <div class="question-meta">
       <span class="question-number-badge">${subjectDot(q.subject)}${escapeHtml(q.subject)} · Question ${currentLocalIndex + 1}</span>
-      <span class="question-marks">+${q.positive_marks} / -${q.negative_marks}</span>
+      <span class="question-meta-right"><span class="question-time">Recommended: 3 min/q</span><span class="question-marks">+${q.positive_marks} / -${q.negative_marks}</span></span>
     </div>
     ${questionImageHtml(q.image_url)}
     <div class="question-text">${escapeHtml(q.question_text)}</div>
@@ -6274,36 +6274,8 @@ async function onBegin() {
 
   const beginBtn = document.getElementById("beginBtn");
   const originalBtnText = beginBtn.textContent;
-  const notificationState = await pushNotifications.state();
-  if (notificationState !== "granted") {
-    toast("Notifications are optional. You can enable them from your profile for test reminders.", "info");
-  }
   beginBtn.disabled = true;
   beginBtn.textContent = "Starting…";
-
-  // Enter full-screen mode FIRST, synchronously with the click — this has
-  // to happen before any await to a server, or the browser no longer
-  // considers it part of the user gesture and silently refuses it.
-  try {
-    if (
-      !pendingFeedback &&
-      !document.fullscreenElement &&
-      document.documentElement.requestFullscreen
-    ) {
-      try {
-        await document.documentElement.requestFullscreen({
-          navigationUI: "hide",
-        });
-      } catch (_) {
-        await document.documentElement.requestFullscreen();
-      }
-    }
-  } catch (_) {
-    toast(
-      "Full-screen mode was not allowed by this browser. Continue in the largest available window.",
-      "error",
-    );
-  }
 
   // This is the moment the exam clock actually starts — start_attempt
   // stamps started_at server-side right now, not back when the page loaded.
@@ -6502,31 +6474,13 @@ async function triggerViolation() {
   }
 
   document.getElementById("violationText").textContent =
-    `This is warning ${data.warning_count} of 2. Leaving the test window, exiting full-screen, or switching tabs again will automatically submit your test.`;
+    `This is warning ${data.warning_count} of 2. Leaving the test window or switching tabs again will automatically submit the test.`;
   openModal("violationModal");
 }
 
 async function onViolationAck() {
   closeModal("violationModal");
   violationModalOpen = false;
-
-  // Re-enter full-screen before   continuing
-  try {
-    if (
-      !document.fullscreenElement &&
-      document.documentElement.requestFullscreen
-    ) {
-      try {
-        await document.documentElement.requestFullscreen({
-          navigationUI: "hide",
-        });
-      } catch (_) {
-        await document.documentElement.requestFullscreen();
-      }
-    }
-  } catch (_) {
-    toast("Please enter full-screen mode to continue the test.", "error");
-  }
 }
 /* =========================================================================
    7. RESULT VIEW
@@ -7100,11 +7054,6 @@ async function enterResultView() {
       <p class="text-muted" style="font-size:13px;">
         ${viewingSomeoneElse ? `Top-3 public report · ${escapeHtml(report.full_name || "Student")} · ` : ""}Submitted ${formatDateTime(report.submitted_at)}
       </p>
-      ${
-        isPractice
-          ? `<div class="practice-notice" style="margin-top:10px;">${isInfinite ? "♾️ <strong>Infinite Practice attempt</strong>. No rank, percentile or leaderboard. Only you can see this." : "🔁 <strong>Live test re-attempt</strong> for revision. Your real attempt's rank and percentile are on that report."}</div>`
-          : ""
-      }
       ${
         report.is_owner &&
         ["submitted", "auto_submitted"].includes(report.status)
@@ -7697,7 +7646,7 @@ async function loadBulkImportTests() {
   select.innerHTML =
     `<option value="">Select an existing test…</option>` +
     (live.length ? `<optgroup label="🔴 Live tests">${live.map(opt).join("")}</optgroup>` : "") +
-    (practice.length ? `<optgroup label="♾️ Infinite Practice tests">${practice.map(opt).join("")}</optgroup>` : "");
+    (practice.length ? `<optgroup label="Practice tests">${practice.map(opt).join("")}</optgroup>` : "");
 }
 
 async function importBulkQuestions() {
@@ -8916,7 +8865,7 @@ document.querySelectorAll("#feedbackModal [data-rating]").forEach((btn) =>
       .forEach((b) =>
         b.classList.toggle(
           "selected",
-          Number(b.dataset.rating) === feedbackRating,
+          Number(b.dataset.rating) <= feedbackRating,
         ),
       );
   }),
