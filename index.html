@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Examle – Free JEE &amp; NEET Test Series, PYQs &amp; Chapter-wise Practice</title>
   <meta name="description" content="Examle is a free personalized practice platform for JEE Main, JEE Advanced and NEET. Unlimited PYQ and chapter-wise practice, live test series, analytics and an Error Book.">
   <meta name="keywords" content="JEE test series, JEE Main mock test, JEE Advanced practice, NEET test series, JEE PYQ, NEET PYQ, chapter-wise tests, free mock tests, Examle">
@@ -25,7 +25,8 @@
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "Organization", "@id": "https://jeehustlers.netlify.app/#org", "name": "Examle", "url": "https://jeehustlers.netlify.app/", "logo": "https://jeehustlers.netlify.app/assets/examle-emblem.png"}, {"@type": "WebSite", "@id": "https://jeehustlers.netlify.app/#site", "url": "https://jeehustlers.netlify.app/", "name": "Examle", "description": "Free personalized practice platform for JEE Main, JEE Advanced and NEET.", "publisher": {"@id": "https://jeehustlers.netlify.app/#org"}, "inLanguage": "en-IN"}, {"@type": "WebApplication", "name": "Examle", "url": "https://jeehustlers.netlify.app/", "applicationCategory": "EducationalApplication", "operatingSystem": "Any (web browser)", "description": "Unlimited JEE and NEET practice: PYQs, chapter-wise tests, live test series, analytics and an Error Book.", "offers": {"@type": "Offer", "price": "0", "priceCurrency": "INR"}, "audience": {"@type": "EducationalAudience", "educationalRole": "student"}}]}</script>
   <script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Is Examle really free?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Everything on Examle is free right now: practice tests, live tests, reports and the Error Book. No payment details are asked."}}, {"@type": "Question", "name": "What is Infinite Practice?", "acceptedAnswer": {"@type": "Answer", "text": "Tests you can attempt as many times as you like. Every attempt gets a full report, but there is no rank, percentile or leaderboard."}}, {"@type": "Question", "name": "How is a live test different?", "acceptedAnswer": {"@type": "Answer", "text": "A live test opens and closes at set times and is ranked. Results appear on the leaderboard once released. After it closes you can re-attempt it for revision."}}, {"@type": "Question", "name": "Which exams are covered?", "acceptedAnswer": {"@type": "Answer", "text": "JEE Main, JEE Advanced and NEET, plus Class 9 to 12. Practise by PYQ, chapter, subject, full paper or full syllabus test."}}, {"@type": "Question", "name": "What is the Error Book?", "acceptedAnswer": {"@type": "Answer", "text": "Your personal notebook of mistakes. Save any question from a report with a note, photo or voice note. It is sorted by subject and chapter."}}, {"@type": "Question", "name": "Do practice tests count on the leaderboard?", "acceptedAnswer": {"@type": "Answer", "text": "No. Only released live tests count. Each board follows the exam the test was made for, and it resets every month."}}, {"@type": "Question", "name": "Can I use it on my phone?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. It runs in any browser on phone, tablet and desktop, in light or dark mode. No app download is needed."}}]}</script>
-  <meta name="theme-color" content="#0E0E10">
+  <meta name="theme-color" content="#f1eee7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0E0E10" media="(prefers-color-scheme: dark)">
   <link rel="icon" type="image/png" sizes="32x32" href="assets/examle-favicon-32.png">
   <link rel="icon" type="image/png" sizes="64x64" href="assets/examle-favicon-64.png">
   <link rel="apple-touch-icon" href="assets/examle-apple-touch-icon.png">
@@ -52,7 +53,7 @@
       <p>Please turn on JavaScript to use the platform.</p>
     </div>
   </noscript>
-  <div id="appSplash" class="splash" role="status" aria-label="Loading Examle">
+  <div id="appSplash" class="splash" role="status" aria-label="Loading Examle" hidden>
     <div class="splash-inner">
       <div class="splash-bar"><i></i></div>
     </div>
@@ -137,7 +138,7 @@
   <!-- =====================================================================
      LANDING VIEW — public front page, shown to signed-out visitors
      ===================================================================== -->
-  <section id="view-landing" class="view landing-page">
+  <section id="view-landing" class="view active landing-page">
 
     <nav class="landing-navbar">
       <div class="landing-navbar-inner">
@@ -721,6 +722,9 @@
       <div class="eb-toolbar">
         <div class="eb-subject-tabs" id="ebSubjectTabs" role="tablist"></div>
         <div class="eb-filters">
+          <button type="button" class="icon-btn eb-search-toggle" id="ebSearchToggle" aria-label="Search mistakes" title="Search mistakes">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"></circle><path d="m16 16 5 5"></path></svg>
+          </button>
           <input type="search" id="ebSearch" class="pr-search" placeholder="Search your mistakes" aria-label="Search mistakes">
           <select id="ebStatus" class="pr-select ui-select" aria-label="Status"><option value="all">All</option><option value="open">Needs review</option><option value="done">Resolved</option></select>
           <select id="ebCategoryFilter" class="pr-select ui-select" aria-label="Reason"><option value="">All reasons</option></select>
@@ -744,7 +748,25 @@
             <div>
               <h2>My tests</h2>
             </div>
-            <a class="btn btn-sm" href="#/leaderboard">Leaderboard</a>
+            <button type="button" class="icon-btn tests-search-toggle" id="testsSearchToggle" aria-label="Search tests" title="Search tests">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"></circle><path d="m16 16 5 5"></path></svg>
+            </button>
+            <label class="past-sort tests-sort-control">
+              <span>Sort</span>
+              <svg class="sort-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M7 5v14"></path>
+                <path d="m4 8 3-3 3 3"></path>
+                <path d="M17 19V5"></path>
+                <path d="m14 16 3 3 3-3"></path>
+              </svg>
+              <select id="testsSortSelect" aria-label="Sort tests">
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+                <option value="score_desc">Score: high to low</option>
+                <option value="score_asc">Score: low to high</option>
+                <option value="name">Test name (A–Z)</option>
+              </select>
+            </label>
           </div>
           <div class="tests-toolbar past-toolbar">
             <div class="tests-search">
@@ -757,16 +779,6 @@
               <button type="button" data-filter="reattempt">🔁 Re-attempts</button>
               
             </div>
-            <label class="past-sort">
-              <span>Sort</span>
-              <select id="testsSortSelect" aria-label="Sort tests">
-                <option value="newest">Newest first</option>
-                <option value="oldest">Oldest first</option>
-                <option value="score_desc">Score: high to low</option>
-                <option value="score_asc">Score: low to high</option>
-                <option value="name">Test name (A–Z)</option>
-              </select>
-            </label>
           </div>
           <div id="testsCardGrid" class="past-list">
             <div class="empty-state">Loading…</div>
@@ -1521,7 +1533,7 @@
     </div>   
   </div> 
  
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
   <script>
     window.OneSignalDeferred = window.OneSignalDeferred || [];
@@ -1557,7 +1569,7 @@
     </div>
   </div>
 
-  <script src="script.js"></script>
+  <script defer src="script.js"></script>
 </body> 
 
 </html> 

@@ -74,6 +74,14 @@ body {
   overflow-x: hidden;
 }
 
+html {
+  color-scheme: light;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+}
+
 body {
   font-family: var(--font);
   background: var(--bg);
@@ -12459,6 +12467,10 @@ a.pr-cat {
   background: radial-gradient(circle at 50% 40%, #1d1308 0%, #0e0e10 70%);
   transition: opacity 0.3s ease;
 }
+
+#appSplash[hidden] {
+  display: none;
+}
 .splash.is-done {
   opacity: 0;
   pointer-events: none;
@@ -13320,6 +13332,252 @@ u.math {
 }
 .lp2-bg {
   display: none;
+}
+
+@media (max-width: 600px) {
+  .lp-chee {
+    display: none;
+  }
+
+  .lp2-showcase,
+  .lp2-device,
+  .landing-how,
+  .landing-community,
+  .lp-faq,
+  .landing-footer {
+    content-visibility: auto;
+    contain-intrinsic-size: 800px;
+  }
+}
+
+/* Compact mobile app chrome: keep the task controls visible without letting
+   headers, filters, and summary cards consume the working area. */
+@media (max-width: 600px) {
+  .page-body {
+    padding: 12px 0 78px;
+  }
+
+  .page-body > .container,
+  .page-body > .practice-container {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .section-title {
+    margin-bottom: 8px;
+    gap: 6px;
+  }
+
+  .section-title h1,
+  .section-title h2 {
+    line-height: 1.15;
+  }
+
+  /* My tests */
+  .tests-page-head {
+    align-items: center;
+    margin-bottom: 8px;
+  }
+
+  .tests-page-head h2 {
+    font-size: 20px;
+  }
+
+  .tests-page-head > a {
+    padding: 7px 10px;
+    font-size: 12px;
+  }
+
+  .past-toolbar {
+    gap: 7px;
+    margin: 8px 0 10px;
+  }
+
+  .tests-search input,
+  .past-sort select {
+    min-height: 38px;
+    font-size: 13px;
+  }
+
+  .tests-status-tabs {
+    width: 100%;
+    margin: 0;
+  }
+
+  .tests-status-tabs button {
+    flex: 1;
+    min-width: 0;
+    padding: 7px 6px;
+    font-size: 12px;
+  }
+
+  .past-sort {
+    min-height: 38px;
+    gap: 6px;
+    font-size: 11px;
+  }
+
+  .past-sort select {
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+
+  /* Error Book */
+  #view-errors .section-title {
+    margin-bottom: 8px;
+  }
+
+  #view-errors .section-title h1 {
+    font-size: 26px;
+  }
+
+  #view-errors .section-title p {
+    max-width: 310px;
+    margin: 3px 0 0;
+    font-size: 12.5px;
+    line-height: 1.35;
+  }
+
+  #view-errors .eyebrow-label {
+    font-size: 10px;
+  }
+
+  #ebAddManual {
+    min-height: 40px;
+    margin-bottom: 8px;
+    padding: 0 12px;
+    font-size: 13px;
+  }
+
+  #errorBookSummary {
+    gap: 6px;
+    margin-bottom: 2px;
+  }
+
+  #errorBookSummary .home-stat-card {
+    padding: 8px 5px;
+    border-radius: 12px;
+  }
+
+  #errorBookSummary .home-stat-val {
+    font-size: 18px;
+  }
+
+  #errorBookSummary .home-stat-lbl {
+    font-size: 10px;
+    line-height: 1.15;
+  }
+
+  .eb-toolbar {
+    position: static;
+    gap: 6px;
+    padding: 4px 0 6px;
+    margin: 2px 0 6px;
+  }
+
+  .eb-subj-tab {
+    min-height: 32px;
+    padding: 0 11px;
+    font-size: 12px;
+  }
+
+  .eb-filters {
+    gap: 6px;
+  }
+
+  .eb-filters .pr-search,
+  .eb-filters select {
+    min-height: 38px;
+    font-size: 13px;
+  }
+
+  /* Practice summary and wizard */
+  .pr-stat-row {
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+
+  .pr-stat {
+    padding: 9px 5px;
+    border-radius: 12px;
+  }
+
+  .pr-stat b {
+    font-size: 18px;
+  }
+
+  .pr-stat span {
+    font-size: 10px;
+    line-height: 1.15;
+  }
+
+  .pb-progress {
+    gap: 3px;
+    margin: 0 0 28px;
+  }
+
+  .pb-progress span {
+    gap: 2px;
+    font-size: 10px;
+  }
+
+  .pb-progress i {
+    width: 26px;
+    height: 26px;
+    border-width: 1px;
+    font-size: 11px;
+  }
+
+  .pb-window {
+    min-height: 220px;
+  }
+
+  .pb-bar {
+    min-height: 62px;
+    gap: 6px;
+    padding: 7px 10px calc(7px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .pb-bar .btn {
+    min-height: 38px;
+    padding: 0 11px;
+    font-size: 12px;
+  }
+
+  .pb-bar-text b {
+    font-size: 12px;
+  }
+
+  .pb-bar-text small {
+    font-size: 10px;
+  }
+
+  /* Analytics cards communicate better as a clean data grid without
+     repeating six decorative icons above the actual charts. */
+  .analytics-stat-grid {
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+
+  .analytics-stat-card {
+    padding: 9px 7px;
+    border-top-width: 2px;
+    border-radius: 12px;
+  }
+
+  .analytics-stat-icon {
+    display: none;
+  }
+
+  .analytics-stat-card strong {
+    font-size: 18px;
+  }
+
+  .analytics-stat-card span:last-child {
+    margin-top: 2px;
+    font-size: 10px;
+    line-height: 1.15;
+  }
 }
 
 .lp2-intro {
@@ -18561,4 +18819,408 @@ body.ins-open .theme-toggle {
 }
 .bq-foot .btn {
   min-height: 38px;    
+}
+
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.tests-search-toggle,
+.eb-search-toggle {
+  display: none;
+}
+
+.icon-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+
+.pb-start-card {
+  width: min(100%, 460px);
+  min-height: 170px;
+  margin: 40px auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  padding: 28px 20px;
+  border: 2px solid var(--brand);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(145deg, var(--brand-tint), var(--surface));
+  color: var(--ink);
+  text-align: center;
+  font: inherit;
+  cursor: pointer;
+  box-shadow: 0 10px 28px var(--brand-glow);
+}
+
+.pb-start-card:hover {
+  border-color: var(--brand);
+}
+
+.pb-start-icon {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  flex: none;
+  border-radius: 14px;
+  background: var(--brand-tint);
+  color: var(--brand-dark);
+}
+
+.pb-start-icon svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.pb-start-card b,
+.pb-start-card small {
+  display: block;
+}
+
+.pb-start-card b {
+  font-size: 18px;
+}
+
+.pb-start-card small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.pb-start-arrow {
+  margin-top: 5px;
+  color: var(--brand-dark);
+  font-size: 22px;
+}
+
+body.practice-wizard-open .app-topbar,
+body.practice-wizard-open .app-bottom-nav {
+  display: none;
+}
+
+body.practice-wizard-open #practiceOverallStrip {
+  display: none;
+}
+
+body.practice-wizard-open #view-practice.active {
+  padding-top: 0;
+}
+
+body.practice-wizard-open #view-practice .page-body {
+  min-height: 100vh;
+  padding-top: 12px;
+  padding-bottom: 90px;
+}
+
+body.practice-wizard-open #view-practice .pb-start-card {
+  display: none;
+}
+
+.pb-back-link {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0 0 16px;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pb-back-link:hover {
+  color: var(--brand-dark);
+}
+
+.pb-back-link svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+body.practice-wizard-open .pb-bar {
+  bottom: 0;
+  padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+}
+
+@media (max-width: 600px) {
+  .tests-page-head {
+    justify-content: space-between;
+  }
+
+  .tests-search-toggle {
+    display: inline-grid;
+  }
+
+  .past-toolbar .tests-search {
+    display: none;
+    flex-basis: 100%;
+  }
+
+  .past-toolbar.search-open .tests-search {
+    display: flex;
+  }
+
+  .past-toolbar.search-open .tests-search-toggle {
+    background: var(--brand-tint);
+    border-color: var(--brand);
+  }
+
+  .past-toolbar {
+    display: none;
+  }
+
+  .past-toolbar.search-open {
+    display: flex;
+  }
+
+  .tests-status-tabs,
+  .past-sort {
+    display: flex;
+  }
+
+  #view-errors .section-title p,
+  #view-errors .eyebrow-label {
+    display: none;
+  }
+
+  #view-errors .section-title h1 {
+    font-size: 22px;
+  }
+
+  #ebAddManual {
+    min-height: 36px;
+    margin-bottom: 5px;
+    font-size: 12px;
+  }
+
+  #errorBookSummary {
+    display: none;
+  }
+
+  #view-errors .eb-toolbar {
+    margin-top: 0;
+  }
+
+  #view-errors .eb-toolbar .eb-subject-tabs {
+    order: 2;
+  }
+
+  #view-errors .eb-filters {
+    display: flex;
+    align-items: center;
+    order: 1;
+  }
+
+  #view-errors .eb-filters .eb-search-toggle {
+    display: inline-grid;
+  }
+
+  #view-errors .eb-filters .pr-search {
+    display: none;
+    flex: 1;
+    min-width: 0;
+  }
+
+  #view-errors .eb-toolbar.search-open .pr-search {
+    display: block;
+  }
+
+  #view-errors .eb-filters select {
+    flex: 1;
+  }
+
+  #view-errors .eb-toolbar.search-open .eb-search-toggle {
+    display: none;
+  }
+
+  .pb-start-card {
+    min-height: 190px;
+    margin: 48px auto;
+    padding: 26px 14px;
+  }
+
+  .pb-start-card b {
+    font-size: 15px;
+  }
+
+  .pb-start-card small {
+    font-size: 11px;
+  }
+
+  body.practice-wizard-open #view-practice .page-body {
+    padding-bottom: 82px;
+  }
+
+  body.practice-wizard-open .pb-progress {
+    margin-bottom: 12px;
+  }
+
+  body.practice-wizard-open .pb-card {
+    margin-bottom: 0;
+  }
+}
+
+@media (max-width: 600px) {
+  .tests-page-head {
+    position: relative;
+    padding-right: 88px;
+  }
+
+  .tests-page-head .past-sort {
+    position: absolute;
+    top: 0;
+    right: 44px;
+    width: 40px;
+    height: 38px;
+    margin: 0;
+  }
+
+  .tests-page-head .past-sort span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .tests-page-head .past-sort select {
+    position: absolute;
+    inset: 0;
+    width: 40px;
+    min-height: 38px;
+    padding: 0 4px;
+    font-size: 0;
+    text-indent: -999px;
+    opacity: 0;
+  }
+
+  .tests-page-head .past-sort .sort-icon {
+    display: block;
+    width: 20px;
+    height: 20px;
+    margin: 9px auto;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.8;
+  }
+
+  .tests-page-head .past-sort select option {
+    font-size: 13px;
+  }
+
+  .past-toolbar {
+    display: block;
+    margin-top: 6px;
+  }
+
+  .past-toolbar .tests-status-tabs {
+    display: none;
+  }
+
+  .past-toolbar .past-sort {
+    display: none;
+  }
+
+  .past-toolbar .tests-search {
+    display: none;
+    width: 100%;
+  }
+
+  .past-toolbar.search-open .tests-search {
+    display: flex;
+  }
+
+  .eb-toolbar {
+    position: static;
+    gap: 6px;
+    padding: 4px 0 6px;
+    margin: 2px 0 6px;
+  }
+
+  .eb-subj-tab {
+    min-height: 32px;
+    padding: 0 11px;
+    font-size: 12px;
+  }
+
+  .eb-filters {
+    gap: 6px;
+  }
+
+  .eb-filters .pr-search,
+  .eb-filters select {
+    min-height: 38px;
+    font-size: 13px;
+  }
+
+  .pb-progress {
+    gap: 3px;
+    margin: 0;
+    padding-bottom: 28px;
+  }
+
+  .pb-progress span {
+    gap: 2px;
+    font-size: 10px;
+  }
+
+  .pb-progress i {
+    width: 26px;
+    height: 26px;
+    border-width: 1px;
+    font-size: 11px;
+  }
+
+  .pb-bar {
+    min-height: 62px;
+    gap: 6px;
+    padding: 7px 10px calc(7px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .pb-bar .btn {
+    min-height: 38px;
+    padding: 0 11px;
+    font-size: 12px;
+  }
+
+  .pb-bar-text b {
+    font-size: 12px;
+  }
+
+  .pb-bar-text small {
+    font-size: 10px;
+  }
 }

@@ -8,8 +8,14 @@ const SUPABASE_URL = "https://rsxbortronrhtdwlvwao.supabase.co";
 const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJzeGJvcnRyb25yaHRkd2x2d2FvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkxNjY0NTcsImV4cCI6MjEwNDc0MjQ1N30.cVemoSdCmpxV22YMJQCFukAZstQnNUx4dEli9TXefZQ";
 
-const { createClient } = supabase;
-const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabaseFactory = window.supabase;
+const sb = supabaseFactory?.createClient
+  ? supabaseFactory.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  : null;
+
+if (!sb) {
+  console.error("Supabase could not be loaded. Public landing page remains available.");
+}
 
 /* =========================================================================
    1. SMALL SHARED HELPERS
@@ -369,6 +375,7 @@ async function routerCore() {
   // instructions modal mid-test.
   if (examStarted && !submitted && parsed.path === "/exam") {
     currentRoute = parsed;
+    if (parsed.path !== "/practice") document.body.classList.remove("practice-wizard-open");
     return;
   }
 
@@ -379,6 +386,12 @@ async function routerCore() {
   }
 
   currentRoute = parsed;
+
+  if (!sb) {
+    showView("landing");
+    syncAppShell(null, false);
+    return;
+  }
 
   const {
     data: { session },
@@ -784,11 +797,13 @@ function cachedRpc(name, args, ttl = 45000) {
   return p;
 }
 
-sb.auth.onAuthStateChange((event) => {
-  invalidateRpcCache();
-  if (event === "INITIAL_SESSION") return;
-  setTimeout(() => router(), 0);
-});
+if (sb) {
+  sb.auth.onAuthStateChange((event) => {
+    invalidateRpcCache();
+    if (event === "INITIAL_SESSION") return;
+    setTimeout(() => router(), 0);
+  });
+}
 /* =========================================================================
    3. AUTH VIEW
    ========================================================================= */
@@ -1025,6 +1040,15 @@ async function enterTestsView() {
   Object.assign(testsView, { q: "", kind: "all", sort: "newest" });
   const searchInput = document.getElementById("testsSearchInput");
   if (searchInput) searchInput.value = "";
+  const searchToggle = document.getElementById("testsSearchToggle");
+  if (searchToggle && !searchToggle.dataset.bound) {
+    searchToggle.dataset.bound = "1";
+    searchToggle.addEventListener("click", () => {
+      const toolbar = document.querySelector(".past-toolbar");
+      toolbar?.classList.toggle("search-open");
+      if (toolbar?.classList.contains("search-open")) searchInput?.focus();
+    });
+  }
   const sortSelect = document.getElementById("testsSortSelect");
   if (sortSelect) sortSelect.value = "newest";
   document
@@ -1177,6 +1201,11 @@ function bindErrorBookToolbar() {
   document.getElementById("ebAddManual").addEventListener("click", () =>
     openErrorBookModal({ question_text: "" }, null, () => enterErrorBookView()),
   );
+  document.getElementById("ebSearchToggle")?.addEventListener("click", () => {
+    const toolbar = document.querySelector("#view-errors .eb-toolbar");
+    toolbar?.classList.toggle("search-open");
+    if (toolbar?.classList.contains("search-open")) document.getElementById("ebSearch")?.focus();
+  });
   document.getElementById("ebSearch").addEventListener("input", (e) => { errorBookState.q = e.target.value.trim().toLowerCase(); renderErrorBook(); });
   document.getElementById("ebStatus").addEventListener("change", (e) => { errorBookState.status = e.target.value; renderErrorBook(); });
   catFilter.addEventListener("change", (e) => { errorBookState.cat = e.target.value; renderErrorBook(); });
@@ -9347,7 +9376,9 @@ function setupThemeDrag() {
    ========================================================= */
 
 function setupTheme() {
-  const savedTheme = localStorage.getItem("jee_theme") || "light";
+  const savedTheme =
+    localStorage.getItem("jee_theme") ||
+    (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
 
   applyTheme(savedTheme);
 
@@ -10145,6 +10176,10 @@ function pbRender() {
   const last = PB_STEPS.length;
   const titles = ["Choose subjects", "Choose chapters", "Questions and level", "Time limit", "Choose a mode"];
   document.getElementById("pbWizard").innerHTML = `
+    <button type="button" class="pb-back-link" id="pbBack" aria-label="Back to Infinite Practice">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"></path><path d="M9 12h12"></path></svg>
+      <span>Back</span>
+    </button>
     <div class="pb-progress" aria-label="Step ${pb.step} of ${last}">${PB_STEPS.map((name, i) => `<span class="${i + 1 === pb.step ? "now" : i + 1 < pb.step ? "done" : ""}"><i>${i + 1 < pb.step ? "✓" : i + 1}</i><em>${name}</em></span>`).join("")}</div>
     <section class="card pb-card pb-window"><h2><span class="pb-n">${pb.step}</span> ${titles[pb.step - 1]}</h2>${pbStepHtml()}</section>`;
   const bar = document.getElementById("pbBar");
@@ -10159,6 +10194,32 @@ function pbRender() {
   document.getElementById("pbBarTitle").textContent = `Step ${pb.step} of ${last}`;
   document.getElementById("pbBarSub").textContent = n ? `${n} chapter${n === 1 ? "" : "s"} · ${Math.min(pbCountValue() || 0, pbAvailable(pb.difficulty))} questions · ${pbMinutes()} min` : "Pick a subject to begin";
   window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function openPracticeWizard() {
+  document.body.classList.add("practice-wizard-open");
+  document.getElementById("practiceOverallStrip")?.setAttribute("hidden", "");
+  pbRender();
+}
+
+function renderPracticeStartCard() {
+  const wiz = document.getElementById("pbWizard");
+  if (!wiz) return;
+  document.body.classList.remove("practice-wizard-open");
+  document.getElementById("practiceOverallStrip")?.removeAttribute("hidden");
+  document.getElementById("pbBar").hidden = true;
+  wiz.innerHTML = `<button type="button" class="pb-start-card" id="pbStartCard">
+    <span class="pb-start-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"></path></svg>
+    </span>
+    <span><b>Start creating a test</b><small>Choose subjects, questions, time, and mode</small></span>
+    <span class="pb-start-arrow" aria-hidden="true">→</span>
+  </button>`;
+  wiz.querySelector("#pbStartCard").addEventListener("click", openPracticeWizard);
+}
+
+function closePracticeWizard() {
+  renderPracticeStartCard();
 }
 
 function pbRefreshBar() {
@@ -10189,6 +10250,10 @@ function pbBind() {
   wiz.addEventListener("click", (e) => {
     const t = e.target.closest("button");
     if (!t) return;
+    if (t.id === "pbBack") {
+      closePracticeWizard();
+      return;
+    }
     const d = t.dataset;
     if (d.pbSubj) {
       if (pb.subjects.has(d.pbSubj)) {
@@ -10291,11 +10356,14 @@ async function pbStart() {
   }
   invalidateRpcCache();
   if (data.question_count < count) toast(`Only ${data.question_count} questions matched, so your test has ${data.question_count}.`, "success");
+  document.body.classList.remove("practice-wizard-open");
   navigate(`/exam?test=${data.test_id}&practice=1&mode=${pb.mode}`);
 }
 
 async function enterPracticeView() {
   const wiz = document.getElementById("pbWizard");
+  document.body.classList.remove("practice-wizard-open");
+  document.getElementById("practiceOverallStrip")?.removeAttribute("hidden");
   document.getElementById("pbBar").hidden = true;
   wiz.innerHTML = `<div class="empty-state">Loading…</div>`;
   const [bank, overall] = await Promise.all([cachedRpc("get_bank_catalog"), cachedRpc("get_practice_overall_report")]);
@@ -10312,7 +10380,7 @@ async function enterPracticeView() {
   [...pb.chapters.keys()].forEach((k) => { const [s2, c] = k.split("|"); if (!pbChapterTotal(s2, c)) pb.chapters.delete(k); });
   pb.step = 1;
   pbBind();
-  pbRender();
+  renderPracticeStartCard();
 }
 
 /* =========================================================================
