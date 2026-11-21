@@ -34,9 +34,186 @@
   <link rel="icon" type="image/png" sizes="512x512" href="assets/examle-icon-512.png"> 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=20261119-font">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <style id="navbar-theme-layout">
+    #themeToggle.topbar-theme-toggle,
+    #landingThemeToggle.landing-theme-toggle {
+      display: inline-grid !important;
+      place-items: center !important;
+      flex: 0 0 38px !important;
+      width: 38px !important;
+      height: 38px !important;
+      min-width: 38px !important;
+      max-width: 38px !important;
+      padding: 8px !important;
+      border: 1px solid var(--border) !important;
+      border-radius: 50% !important;
+      background: var(--surface) !important;
+      color: var(--ink) !important;
+      box-shadow: var(--shadow-sm) !important;
+    }
+    #themeToggle.topbar-theme-toggle .theme-switch-track,
+    #themeToggle.topbar-theme-toggle .theme-switch-thumb,
+    #landingThemeToggle.landing-theme-toggle .theme-switch-track,
+    #landingThemeToggle.landing-theme-toggle .theme-switch-thumb { display: none !important; }
+    #themeToggle.topbar-theme-toggle svg,
+    #landingThemeToggle.landing-theme-toggle svg {
+      width: 18px !important;
+      height: 18px !important;
+      stroke: currentColor !important;
+      fill: none !important;
+      transition: transform .22s ease, opacity .16s ease !important;
+    }
+    #landingThemeToggle.landing-theme-toggle {
+      border-color: rgba(255,210,63,.38) !important;
+      background: rgba(255,255,255,.08) !important;
+      color: #fff4d2 !important;
+    }
+    #themeToggle.topbar-theme-toggle:hover,
+    #landingThemeToggle.landing-theme-toggle:hover {
+      transform: translateY(-1px) scale(1.04) !important;
+      border-color: var(--brand) !important;
+    }
+    #themeToggle.topbar-theme-toggle {
+      position: relative !important;
+      inset: auto !important;
+      display: inline-flex !important;
+      flex: 0 0 62px !important;
+      align-items: center !important;
+      justify-content: center !important;
+      gap: 5px !important;
+      width: 62px !important;
+      height: 36px !important;
+      min-width: 62px !important;
+      max-width: 62px !important;
+      margin: 0 !important;
+      padding: 4px 7px !important;
+      border: 1px solid var(--border) !important;
+      border-radius: 999px !important;
+      background: var(--surface) !important;
+      color: var(--ink) !important;
+      box-shadow: var(--shadow-sm) !important;
+      font-size: 15px !important;
+      transform: none !important;
+      z-index: 60 !important;
+      transition: background .22s ease, border-color .22s ease, box-shadow .18s ease, transform .18s ease !important;
+    }
+    #themeToggle.topbar-theme-toggle:hover {
+      border-color: var(--brand) !important;
+      box-shadow: 0 4px 14px rgba(245,158,11,.16) !important;
+      transform: translateY(-1px) !important;
+    }
+    #themeToggle.topbar-theme-toggle .theme-switch-icon {
+      display: grid !important;
+      flex: 0 0 18px !important;
+      width: 18px !important;
+      height: 18px !important;
+      place-items: center !important;
+      font-size: 14px !important;
+      line-height: 1 !important;
+      transition: transform .28s cubic-bezier(.22,.75,.24,1) !important;
+    }
+    #themeToggle.topbar-theme-toggle .theme-switch-track {
+      position: relative !important;
+      display: block !important;
+      flex: 0 0 24px !important;
+      width: 24px !important;
+      height: 14px !important;
+      border-radius: 999px !important;
+      background: #d6cfbe !important;
+      transition: background .22s ease !important;
+    }
+    #themeToggle.topbar-theme-toggle .theme-switch-thumb {
+      position: absolute !important;
+      top: 2px !important;
+      left: 2px !important;
+      display: block !important;
+      width: 10px !important;
+      height: 10px !important;
+      border-radius: 50% !important;
+      background: #fff !important;
+      box-shadow: 0 1px 3px rgba(30,20,5,.22) !important;
+      transition: transform .26s cubic-bezier(.22,.75,.24,1) !important;
+    }
+    #themeToggle.topbar-theme-toggle[data-theme="dark"] .theme-switch-track { background: var(--brand) !important; }
+    #themeToggle.topbar-theme-toggle[data-theme="dark"] .theme-switch-thumb { transform: translateX(10px) !important; }
+    #themeToggle.topbar-theme-toggle[data-theme="dark"] .theme-switch-icon { transform: rotate(180deg) !important; }
+    body.app-shell-on .topbar-right {
+      flex: 0 0 auto !important;
+      align-items: center !important;
+      justify-content: flex-end !important;
+      gap: 8px !important;
+      margin-left: auto !important;
+    }
+    body.app-shell-on .topbar-left { flex: 1 1 auto !important; min-width: 0 !important; }
+    body.app-shell-on .app-topbar { overflow: visible !important; }
+    body.practice-wizard-open .app-topbar { display: flex !important; }
+    body:has(#view-practice.active) .theme-toggle,
+    body:has(#view-announcements.active) .theme-toggle,
+    body.ins-open .theme-toggle,
+    body.app-shell-on .theme-toggle { bottom: auto !important; }
+    @media (max-width: 1023px) {
+      #themeToggle.topbar-theme-toggle {
+        flex-basis: 52px !important;
+        width: 52px !important;
+        min-width: 52px !important;
+        max-width: 52px !important;
+      }
+      body.app-shell-on .topbar-right { gap: 6px !important; }
+      body.app-shell-on .topbar-trophy { display: none !important; }
+    }
+    @media (max-width: 480px) {
+      #themeToggle.topbar-theme-toggle {
+        flex-basis: 48px !important;
+        width: 48px !important;
+        min-width: 48px !important;
+        max-width: 48px !important;
+        height: 34px !important;
+      }
+      #themeToggle.topbar-theme-toggle .theme-switch-track { width: 20px !important; }
+      #themeToggle.topbar-theme-toggle[data-theme="dark"] .theme-switch-thumb { transform: translateX(6px) !important; }
+      body.app-shell-on .app-topbar { height: 58px !important; }
+    }
+
+    /* Icon-only theme button: no toggle track or label */
+    #themeToggle.topbar-theme-toggle,
+    #landingThemeToggle.landing-theme-toggle {
+      flex: 0 0 38px !important;
+      width: 38px !important;
+      height: 38px !important;
+      min-width: 38px !important;
+      max-width: 38px !important;
+      padding: 9px !important;
+      border-radius: 50% !important;
+    }
+    #themeToggle.topbar-theme-toggle svg,
+    #landingThemeToggle.landing-theme-toggle svg {
+      width: 18px !important;
+      height: 18px !important;
+      stroke-width: 1.8 !important;
+      stroke-linecap: round !important;
+      stroke-linejoin: round !important;
+      fill: none !important;
+    }
+    #themeToggle.topbar-theme-toggle .theme-icon-sun,
+    #themeToggle.topbar-theme-toggle .theme-icon-moon,
+    #landingThemeToggle.landing-theme-toggle .theme-icon-sun,
+    #landingThemeToggle.landing-theme-toggle .theme-icon-moon {
+      display: block;
+    }
+    @media (max-width: 480px) {
+      #themeToggle.topbar-theme-toggle,
+      #landingThemeToggle.landing-theme-toggle {
+        width: 36px !important;
+        height: 36px !important;
+        min-width: 36px !important;
+        max-width: 36px !important;
+        padding: 8px !important;
+      }
+    }
+  </style>
 </head>
  
 <body>
@@ -58,10 +235,6 @@
       <div class="splash-bar"><i></i></div>
     </div>
   </div>
-    <button type="button" id="themeToggle" class="theme-toggle" aria-label="Switch to dark theme" title="Switch theme">
-    🌙
-  </button>
-
   <!-- =====================================================================
      APP SHELL — desktop sidebar + mobile bottom nav.
      Hidden by default; shown (via body.app-shell-on) only for signed-in
@@ -88,11 +261,8 @@
         <a href="#/analytics" class="app-nav-item" data-nav="analytics" title="Analytics"><span class="app-nav-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span><span class="app-nav-label">Analytics</span></a>
         <a href="#/leaderboard" class="app-nav-item" data-nav="leaderboard" title="Leaderboard"><span class="app-nav-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0Z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg></span><span class="app-nav-label">Leaderboard</span></a>
         <a href="#/profile" class="app-nav-item" data-nav="profile" title="Profile"><span class="app-nav-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/></svg></span><span class="app-nav-label">Profile</span></a>
-        <a href="#/admin-test" class="app-nav-item" id="appNavAdmin" data-nav="admin-test" title="Admin panel" style="display:none;"><span class="app-nav-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8v8M8 12h8"/></svg></span><span class="app-nav-label">Admin panel</span></a>
-        <a href="#/bulk-import" class="app-nav-item" id="appNavBulkImport" data-nav="bulk-import" title="Bulk import" style="display:none;"><span class="app-nav-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 17v3h16v-3"/></svg></span><span class="app-nav-label">Bulk import</span></a>
-        <a href="#/admin-reports" class="app-nav-item" id="appNavReports" data-nav="admin-reports" title="Reports" style="display:none;"><span class="app-nav-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></svg></span><span class="app-nav-label">Reports</span></a>
-        <a href="#/admin-bank" class="app-nav-item" id="appNavBank" data-nav="admin-bank" title="Question bank" style="display:none;"><span class="app-nav-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg></span><span class="app-nav-label">Question bank</span></a>
-        <a href="#/admin-feedback" class="app-nav-item" id="appNavFeedback" data-nav="admin-feedback" title="Feedback" style="display:none;"><span class="app-nav-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.5 7.2L4 21l1.8-5.5A8 8 0 1 1 21 12Z"/></svg></span><span class="app-nav-label">Feedback</span></a>
+        <a href="#/support" class="app-nav-item" id="appNavSupport" data-nav="support" title="Support"><span class="app-nav-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z"/><path d="M8 10h8M8 14h5"/></svg></span><span class="app-nav-label">Support</span><i class="sup-dot" id="appSupDot" hidden></i></a>
+        <a href="#/admin-panel" class="app-nav-item" id="appNavAdmin" data-nav="admin-panel" title="Admin panel" style="display:none;"><span class="app-nav-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8v8M8 12h8"/></svg></span><span class="app-nav-label">Admin panel</span></a>
       </nav>
     </div>
   </aside>
@@ -117,6 +287,10 @@
       </div>
     </div>
     <div class="topbar-right">
+      <button type="button" id="themeToggle" class="theme-toggle topbar-theme-toggle" aria-label="Switch to dark theme" title="Switch theme">
+        <svg class="theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.2 15.2A8.5 8.5 0 0 1 8.8 3.8 8.5 8.5 0 1 0 20.2 15.2Z"/></svg>
+        <svg class="theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42"/></svg>
+      </button>
       <a href="#/leaderboard" class="topbar-icon-btn topbar-trophy" aria-label="Leaderboard" title="Leaderboard">🏆</a>
       <button type="button" class="ann-btn" id="annBtn" aria-label="Announcements" title="Announcements"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span class="ann-badge" id="annBadge" hidden>0</span></button>
       <button type="button" class="topbar-pill" id="notifPill" hidden><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span class="topbar-pill-label"></span></button>
@@ -153,6 +327,10 @@
           <a href="#lp-how" class="landing-nav-link">Process</a>
           <a href="#lp-community" class="landing-nav-link">Community</a>
           <a href="#lp-faq" class="landing-nav-link">FAQ</a>
+          <button type="button" id="landingThemeToggle" class="landing-theme-toggle" aria-label="Switch to dark theme" title="Switch theme">
+            <svg class="theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.2 15.2A8.5 8.5 0 0 1 8.8 3.8 8.5 8.5 0 1 0 20.2 15.2Z"/></svg>
+            <svg class="theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42"/></svg>
+          </button>
           <a href="#/login" class="landing-nav-login">Log in</a>
           <a href="#/register" class="btn btn-primary btn-sm landing-nav-cta">Start now</a>
         </div>
@@ -453,7 +631,7 @@
           <a href="neet-test-series.html">NEET</a>
           <a href="jee-pyq-practice.html">PYQ practice</a>
         </nav>
-        <p class="app-footer-contact">For any query, support, or doubt, contact <a href="mailto:shobhitdwivedi.in@gmail.com">shobhitdwivedi.in@gmail.com</a></p>
+        <p class="app-footer-contact">For any query, support, or doubt, <a href="#/login" id="supportFooterLink" data-support>click this</a></p>
       </div>
     </footer>
   </section>
@@ -799,6 +977,68 @@
     </div>
   </section>
 
+  <section id="view-support" class="view">
+    <div class="page-body">
+      <div class="container spt-container">
+        <div class="spt-head"><h1>Support</h1><button type="button" class="btn btn-primary btn-sm" id="spNew">+ New query</button></div>
+        <div class="spt-tabs" id="spTabs"><button type="button" class="spt-tab active" data-sp="all">All</button><button type="button" class="spt-tab" data-sp="open">Waiting</button><button type="button" class="spt-tab" data-sp="answered">Resolved</button></div>
+        <div id="spList"><div class="empty-state">Loading…</div></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="view-admin-panel" class="view">
+    <div class="page-body">
+      <div class="container admin-page-container">
+        <div id="adminPanelNotAdmin" class="error-box" style="display:none;">Only admin accounts can access the admin panel.</div>
+        <div id="adminPanelContent" class="admin-panel" style="display:none;">
+          <div class="adm-head"><div><h1>Admin panel</h1></div></div>
+          <div class="adm-tools">
+          <a class="adm-tool" href="#/admin-analytics"><span class="adm-tool-ico">📈</span><b class="adm-tool-title">Website analytics</b></a>
+          <a class="adm-tool" href="#/admin-test"><span class="adm-tool-ico">📚</span><b class="adm-tool-title">All tests</b></a>
+          <a class="adm-tool" href="#/admin-test?create=1"><span class="adm-tool-ico">➕</span><b class="adm-tool-title">Create a test</b></a>
+          <a class="adm-tool" href="#/bulk-import"><span class="adm-tool-ico">⬆️</span><b class="adm-tool-title">Bulk import</b></a>
+          <a class="adm-tool" href="#/admin-bank"><span class="adm-tool-ico">🗄️</span><b class="adm-tool-title">Question bank</b></a>
+          <a class="adm-tool" href="#/admin-reports"><span class="adm-tool-ico">🚩</span><b class="adm-tool-title">Question reports</b><em class="adm-pill is-alert" data-adm-badge="reports"></em></a>
+          <a class="adm-tool" href="#/admin-queries"><span class="adm-tool-ico">🙋</span><b class="adm-tool-title">Student queries</b><em class="adm-pill is-alert" data-adm-badge="queries"></em></a>
+          <a class="adm-tool" href="#/admin-feedback"><span class="adm-tool-ico">💬</span><b class="adm-tool-title">Feedback</b></a>
+          <a class="adm-tool" href="#/announcements"><span class="adm-tool-ico">📢</span><b class="adm-tool-title">Announcements</b></a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="view-admin-analytics" class="view">
+    <div class="page-body">
+      <div class="container admin-page-container">
+        <a class="admin-back" href="#/admin-panel"><span aria-hidden="true">←</span> Admin panel</a>
+        <div id="aaNotAdmin" class="error-box" style="display:none;">Only admin accounts can see analytics.</div>
+        <div id="aaContent" style="display:none;">
+          <div class="adm-head"><div><span class="eyebrow-label">Admin</span><h1>Website analytics</h1><p class="text-muted" id="admUpdated"></p></div>
+            <div class="adm-head-actions"><button type="button" class="btn btn-sm" id="admRefresh">↻ Refresh</button></div></div>
+          <div id="adminAnalytics"><div class="empty-state">Loading analytics…</div></div>
+          <div class="adm-section-head adm-st-head"><h2>Student-made tests</h2></div>
+          <div id="adminStudentTests" class="adm-panel"><div class="empty-state">Loading…</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="view-admin-queries" class="view">
+    <div class="page-body">
+      <div class="container admin-page-container">
+        <a class="admin-back" href="#/admin-panel"><span aria-hidden="true">←</span> Admin panel</a>
+        <div id="aqNotAdmin" class="error-box" style="display:none;">Only admin accounts can see this.</div>
+        <div id="aqContent" style="display:none;">
+          <div class="adm-head"><div><h1>Student queries</h1></div></div>
+          <div class="an-tabs" id="aqTabs"><button type="button" class="an-tab active" data-aq="open">Open</button><button type="button" class="an-tab" data-aq="answered">Answered</button></div>
+          <div id="aqList"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- =====================================================================
      ADMIN TEST MANAGER VIEW
      ===================================================================== -->
@@ -806,6 +1046,7 @@
 
     <div class="page-body">
       <div class="container admin-page-container">
+        <a class="admin-back" id="adminTestBack" href="#/admin-panel"><span aria-hidden="true">←</span> Admin panel</a>
 
         <div id="notAdminNotice" style="display:none;" class="error-box">
           Only admin accounts can create or manage tests. Ask whoever set up this app to mark your profile as admin.
@@ -816,9 +1057,7 @@
           <section id="adminHomePanel" class="admin-home">
             <div class="admin-hero">
               <div>
-                <span class="eyebrow-label">Admin panel</span>
-                <h1>Manage your tests</h1>
-                <p class="text-muted">Create tests, track submissions, review results and handle reported questions.</p>
+                <h1>All tests</h1>
               </div>
               <div class="admin-hero-actions">
                 <a href="#/bulk-import" class="btn btn-sm">⬆ Bulk import</a>
@@ -848,55 +1087,76 @@
             <button type="button" data-jump="reportsCard">Reports</button>
           </nav>
 
-          <div class="card" id="detailsCard" style="display:none;">
-            <h2 style="font-size:16px;" id="detailsTitle">Test details</h2>
-            <form id="testDetailsForm">
-              <div class="field" hidden><input type="radio" name="testMode" value="live" checked><input type="radio" name="testMode" value="practice"></div>
-              <div class="form-row">
-                <div class="field">
-                  <label for="titleInput">Test title</label>
-                  <input id="titleInput" type="text" required placeholder="e.g. JEE Main Full Syllabus Test 1">
-                </div>
-                <div class="field">
-                  <label for="categoryInput">Category</label>
-                  <select id="categoryInput" required>
-                    <option value="JEE Main">JEE Main</option>
-                    <option value="JEE Advanced">JEE Advanced</option>
-                    <option value="NEET">NEET</option>
-                    <option value="Class 9th">Class 9th</option>
-                    <option value="Class 10th">Class 10th</option>
-                    <option value="Class 11th">Class 11th</option>
-                    <option value="Class 12th">Class 12th</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
+          <div class="card tc-card" id="detailsCard" style="display:none;">
+            <div class="tc-head">
+              <span class="tc-badge" aria-hidden="true">📝</span>
+              <div>
+                <h2 id="detailsTitle">Test details</h2>
+                
               </div>
-              <div class="form-row">
-                <div class="field">
-                  <label for="durationInput">Duration (minutes)</label>
-                  <input id="durationInput" type="number" min="1" value="60" required>
+            </div>
+            <form id="testDetailsForm" class="tc-form">
+              <div class="field" hidden><input type="radio" name="testMode" value="live" checked><input type="radio" name="testMode" value="practice"></div>
+
+              <section class="tc-group">
+                <h3 class="tc-group-title"><i>1</i> Basics</h3>
+                <div class="tc-grid">
+                  <div class="field tc-span2">
+                    <label for="titleInput">Test title</label>
+                    <input id="titleInput" type="text" required placeholder="e.g. JEE Main Full Syllabus Test 1">
+                  </div>
+                  <div class="field">
+                    <label for="categoryInput">Category</label>
+                    <select id="categoryInput" required>
+                      <option value="JEE Main">JEE Main</option>
+                      <option value="JEE Advanced">JEE Advanced</option>
+                      <option value="NEET">NEET</option>
+                      <option value="Class 9th">Class 9th</option>
+                      <option value="Class 10th">Class 10th</option>
+                      <option value="Class 11th">Class 11th</option>
+                      <option value="Class 12th">Class 12th</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="durationInput">Duration (minutes)</label>
+                    <input id="durationInput" type="number" min="1" value="60" required>
+                  </div>
                 </div>
                 <div class="field" id="practiceCategoryField" hidden></div>
-              </div>
-              <div class="field">
-                <label for="descInput">Description</label>
-                <textarea id="descInput" rows="2" placeholder="Briefly describe this test"></textarea>
-              </div>
-              <div class="field">
-                <label for="instructionsInput">Instructions</label>
-                <textarea id="instructionsInput" rows="3" placeholder="Instructions students should read before starting"></textarea>
-              </div>
-              <div class="form-row" id="scheduleRow">
+              </section>
+
+              <section class="tc-group" id="scheduleRow">
+                <h3 class="tc-group-title"><i>2</i> Schedule</h3>
+                <div class="tc-grid">
+                  <div class="field">
+                    <label for="fromInput">Opens at</label>
+                    <input id="fromInput" type="datetime-local" required>
+                  </div>
+                  <div class="field">
+                    <label for="untilInput">Closes at</label>
+                    <input id="untilInput" type="datetime-local" required>
+                  </div>
+                </div>
+                <p class="helper-text">Students can start the test only between these two times.</p>
+              </section>
+
+              <section class="tc-group">
+                <h3 class="tc-group-title"><i>3</i> Details for students</h3>
                 <div class="field">
-                  <label for="fromInput">Opens at</label>
-                  <input id="fromInput" type="datetime-local" required>
+                  <label for="descInput">Description</label>
+                  <textarea id="descInput" rows="2" placeholder="Briefly describe this test"></textarea>
                 </div>
                 <div class="field">
-                  <label for="untilInput">Closes at</label>
-                  <input id="untilInput" type="datetime-local" required>
+                  <label for="instructionsInput">Instructions</label>
+                  <textarea id="instructionsInput" rows="3" placeholder="Instructions students should read before starting"></textarea>
                 </div>
+              </section>
+
+              <div class="tc-actions">
+                <a class="btn" href="#/admin-test">Cancel</a>
+                <button type="submit" class="btn btn-primary" id="saveDetailsBtn">Create test</button>
               </div>
-              <button type="submit" class="btn btn-primary" id="saveDetailsBtn">Create test</button>
             </form>
           </div>
 
@@ -1144,6 +1404,7 @@
 
   <section id="view-admin-bank" class="view">
     <div class="page-body"><div class="container admin-page-container">
+        <a class="admin-back" href="#/admin-panel"><span aria-hidden="true">←</span> Admin panel</a>
       <div id="abNotAdmin" class="error-box" style="display:none;">Only admin accounts can manage the question bank.</div>
       <div id="abContent">
         <div class="pr-head"><div><span class="eyebrow-label">Admin</span><h1>Question bank</h1><p class="text-muted" id="abSummary">Loading…</p></div>
@@ -1171,9 +1432,11 @@
 
   <section id="view-admin-feedback" class="view">
     <div class="page-body"><div class="container admin-page-container">
+        <a class="admin-back" href="#/admin-panel"><span aria-hidden="true">←</span> Admin panel</a>
       <div id="afNotAdmin" class="error-box" style="display:none;">Only admin accounts can see feedback.</div>
       <div id="afContent">
-        <div class="pr-head"><div><span class="eyebrow-label">Admin</span><h1>Student feedback</h1><p class="text-muted" id="afSummary">Loading…</p></div></div>
+        <div class="pr-head"><div><h1>Student feedback</h1><span id="afSummary" hidden></span></div></div>
+        <div id="afStats" class="af-stats" hidden></div>
         <div id="afList"><div class="empty-state">Loading…</div></div>
       </div>
     </div></div>
@@ -1181,10 +1444,11 @@
 
   <section id="view-admin-reports" class="view">
     <div class="page-body"><div class="container admin-page-container">
+        <a class="admin-back" href="#/admin-panel"><span aria-hidden="true">←</span> Admin panel</a>
       <div id="arNotAdmin" class="error-box" style="display:none;">Only admin accounts can see reported questions.</div>
       <div id="arContent">
         <div class="pr-head"><div><span class="eyebrow-label">Admin</span><h1>Reported questions</h1>
-          <p class="text-muted">Questions students flagged in any test, Live or Infinite Practice.</p></div></div>
+          <p class="text-muted" id="arSummary">Questions students flagged in any test, Live, Infinite Practice or student-made.</p></div></div>
         <div class="an-tabs"><button type="button" class="an-tab active" data-ar="open">Open</button><button type="button" class="an-tab" data-ar="resolved">Resolved</button></div>
         <div id="arList"><div class="empty-state">Loading…</div></div>
       </div>
@@ -1195,6 +1459,7 @@
 
     <div class="page-body">
       <div class="container admin-page-container">
+        <a class="admin-back" href="#/admin-panel"><span aria-hidden="true">←</span> Admin panel</a>
         <div id="bulkImportNotAdmin" class="error-box" style="display:none;">Only admin accounts can import questions.</div>
         <div id="bulkImportContent" style="display:none;">
           <div class="section-title">
@@ -1490,7 +1755,7 @@
 
   <footer class="app-footer app-footer-shared">
     <div class="container">
-      <p>For any query, support, or doubt, contact <a href="mailto:shobhitdwivedi.in@gmail.com">shobhitdwivedi.in@gmail.com</a></p>
+      <p>For any query, support, or doubt, <a href="#/support" id="supportFooterLinkApp" data-support>click this</a></p>
     </div>
   </footer>
 
@@ -1569,7 +1834,34 @@
     </div>
   </div>
 
-  <script defer src="script.js"></script>
+  <script defer src="script.js?v=20261119-0948"></script>
+<div class="sup-resolved-modal" id="supResolvedModal" role="dialog" aria-modal="true" aria-labelledby="supResolvedTitle" hidden>
+  <div class="sup-resolved-backdrop" data-sup-resolved-close></div>
+  <div class="sup-resolved-sheet">
+    <span class="sup-resolved-icon" aria-hidden="true">✓</span>
+    <h2 id="supResolvedTitle">Your query was resolved</h2>
+    <p id="supResolvedText"></p>
+    <div class="sup-resolved-actions">
+      <button type="button" class="btn" data-sup-resolved-close>Close</button>
+      <button type="button" class="btn btn-primary" id="supResolvedView">View</button>
+    </div>
+  </div>
+</div>
+
+<div class="sup-fab-wrap" id="supFabWrap" hidden>
+  <button type="button" class="sup-fab" id="supFab" aria-label="Help and queries"><span aria-hidden="true">💬</span> Help<i class="sup-dot" id="supDot" hidden></i></button>
+</div>
+<div class="sup-modal" id="supModal" role="dialog" aria-modal="true" aria-labelledby="supTitle">
+  <div class="sup-backdrop" data-sup-close></div>
+  <div class="sup-sheet">
+    <header class="sup-head"><h2 id="supTitle">Raise a query</h2><button type="button" class="sup-x" data-sup-close aria-label="Close">✕</button></header>
+        <div class="sup-pane" id="supPaneNew">
+      <div id="supComposer"></div>
+      <button type="button" class="btn btn-primary sup-send" id="supSend">Send</button>
+    </div>
+  </div>
+</div>
+
 </body> 
 
 </html> 

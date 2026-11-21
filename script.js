@@ -14,7 +14,9 @@ const sb = supabaseFactory?.createClient
   : null;
 
 if (!sb) {
-  console.error("Supabase could not be loaded. Public landing page remains available.");
+  console.error(
+    "Supabase could not be loaded. Public landing page remains available.",
+  );
 }
 
 /* =========================================================================
@@ -254,6 +256,11 @@ const VIEWS = [
   "practice-report",
   "practice-stats",
   "test-details",
+  "admin-panel",
+  "admin-analytics",
+  "admin-student-tests",
+  "admin-queries",
+  "support",
   "admin-test",
   "bulk-import",
   "exam",
@@ -283,6 +290,11 @@ const APP_SHELL_VIEWS = new Set([
   "practice-report",
   "practice-stats",
   "test-details",
+  "admin-panel",
+  "admin-analytics",
+  "admin-student-tests",
+  "admin-queries",
+  "support",
   "admin-test",
   "bulk-import",
   "result",
@@ -325,7 +337,6 @@ function showView(name) {
   });
 }
 
-
 /* =========================================================================
    LOADING — the cheetah appears only while something is really loading.
    Start-up shows the full splash; later pages show it only if they take
@@ -366,6 +377,9 @@ async function router() {
 
 async function routerCore() {
   const parsed = parseHash();
+  if (parsed.path !== "/practice") {
+    document.body.classList.remove("practice-wizard-open");
+  }
 
   // Supabase silently re-fires auth-state changes on things like the tab
   // regaining focus — which happens right after a tab-switch violation
@@ -375,7 +389,8 @@ async function routerCore() {
   // instructions modal mid-test.
   if (examStarted && !submitted && parsed.path === "/exam") {
     currentRoute = parsed;
-    if (parsed.path !== "/practice") document.body.classList.remove("practice-wizard-open");
+    if (parsed.path !== "/practice")
+      document.body.classList.remove("practice-wizard-open");
     return;
   }
 
@@ -401,16 +416,28 @@ async function routerCore() {
     // Public, signed-out visitors land on the marketing page first; only an
     // explicit "/login" request (e.g. the Participate buttons) — or a deep
     // link to a page that requires a session — opens the existing auth view.
-    if (parsed.path === "/" || parsed.path === "/landing" || parsed.path.startsWith("/lp-")) {
+    if (
+      parsed.path === "/" ||
+      parsed.path === "/landing" ||
+      parsed.path.startsWith("/lp-")
+    ) {
       showView("landing");
       if (parsed.path.startsWith("/lp-")) {
-        setTimeout(() => document.getElementById(parsed.path.slice(1))?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+        setTimeout(
+          () =>
+            document
+              .getElementById(parsed.path.slice(1))
+              ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+          60,
+        );
       }
     } else {
       showView("auth");
       // "Start now" opens Register, "Log in" opens Log in
-      if (parsed.path === "/register") document.getElementById("tabSignupBtn")?.click();
-      else if (parsed.path === "/login") document.getElementById("tabLoginBtn")?.click();
+      if (parsed.path === "/register")
+        document.getElementById("tabSignupBtn")?.click();
+      else if (parsed.path === "/login")
+        document.getElementById("tabLoginBtn")?.click();
     }
     syncAppShell(null, false);
     return;
@@ -479,6 +506,26 @@ async function routerCore() {
     case "/test-details":
       showView("test-details");
       await enterTestDetailsView();
+      break;
+    case "/support":
+      showView("support");
+      await enterSupportView();
+      break;
+    case "/admin-panel":
+      showView("admin-panel");
+      await enterAdminPanelView();
+      break;
+    case "/admin-analytics":
+      showView("admin-analytics");
+      await enterAdminAnalyticsView();
+      break;
+    case "/admin-student-tests":
+      showView("admin-student-tests");
+      await enterAdminStudentTestsView();
+      break;
+    case "/admin-queries":
+      showView("admin-queries");
+      await enterAdminQueriesView();
       break;
     case "/admin-test":
       showView("admin-test");
@@ -552,7 +599,10 @@ const pushNotifications = (() => {
         window.OneSignalDeferred.push((OneSignal) => {
           clearTimeout(timer);
           try {
-            OneSignal.Notifications.addEventListener("permissionChange", notify);
+            OneSignal.Notifications.addEventListener(
+              "permissionChange",
+              notify,
+            );
             OneSignal.User.PushSubscription.addEventListener("change", notify);
           } catch (err) {
             console.warn("OneSignal listeners unavailable:", err);
@@ -572,10 +622,15 @@ const pushNotifications = (() => {
       try {
         if (!os.Notifications.isPushSupported()) return "unsupported";
         if (os.Notifications.permission !== true)
-          return (os.Notifications.permissionNative ?? (typeof Notification !== "undefined" ? Notification.permission : "default")) === "denied"
+          return (os.Notifications.permissionNative ??
+            (typeof Notification !== "undefined"
+              ? Notification.permission
+              : "default")) === "denied"
             ? "denied"
             : "default";
-        return os.User.PushSubscription.optedIn === false ? "default" : "granted";
+        return os.User.PushSubscription.optedIn === false
+          ? "default"
+          : "granted";
       } catch (err) {
         await new Promise((resolve) => setTimeout(resolve, 500)); // still initialising
       }
@@ -599,7 +654,10 @@ const pushNotifications = (() => {
     try {
       await os.Slidedown.promptPush({ force: true });
     } catch (err) {
-      console.warn("OneSignal slidedown failed, using the browser prompt:", err);
+      console.warn(
+        "OneSignal slidedown failed, using the browser prompt:",
+        err,
+      );
       try {
         await os.Notifications.requestPermission();
       } catch (_) {
@@ -638,6 +696,11 @@ const PAGE_TITLES = {
   "practice-stats": "My practice progress",
   "practice-library": "Practice library",
   "test-details": "Test details",
+  "admin-panel": "Admin panel",
+  "admin-analytics": "Website analytics",
+  "admin-student-tests": "Student-made tests",
+  "admin-queries": "Student queries",
+  "support": "Support",
   "admin-test": "Manage test",
   "bulk-import": "Bulk import",
   result: "Report",
@@ -657,12 +720,15 @@ function setSidebarCollapsed(collapsed, remember = true) {
     button.setAttribute("aria-label", label);
     button.title = label;
   }
-  if (remember) localStorage.setItem(SIDEBAR_KEY, collapsed ? "collapsed" : "open");
+  if (remember)
+    localStorage.setItem(SIDEBAR_KEY, collapsed ? "collapsed" : "open");
 }
 
 function closeUserMenu() {
   document.getElementById("topbarMenu")?.setAttribute("hidden", "");
-  document.getElementById("topbarUserBtn")?.setAttribute("aria-expanded", "false");
+  document
+    .getElementById("topbarUserBtn")
+    ?.setAttribute("aria-expanded", "false");
 }
 
 const NOTIFICATION_PILL = {
@@ -685,9 +751,13 @@ async function refreshNotificationPill(current) {
 function setupShell() {
   // Open by default; the choice is remembered.
   setSidebarCollapsed(localStorage.getItem(SIDEBAR_KEY) === "collapsed", false);
-  document.getElementById("sidebarToggle").addEventListener("click", () =>
-    setSidebarCollapsed(!document.body.classList.contains("sidebar-collapsed")),
-  );
+  document
+    .getElementById("sidebarToggle")
+    .addEventListener("click", () =>
+      setSidebarCollapsed(
+        !document.body.classList.contains("sidebar-collapsed"),
+      ),
+    );
 
   const menuButton = document.getElementById("topbarUserBtn");
   const menu = document.getElementById("topbarMenu");
@@ -723,7 +793,17 @@ async function syncAppShell(viewName, signedIn) {
   refreshAnnouncementBadge();
 
   document.querySelectorAll(".app-nav-item, .app-bottom-item").forEach((el) => {
-    el.classList.toggle("active", el.dataset.nav === (viewName === "practice-report" || viewName === "practice-stats" || viewName === "practice-category" || viewName === "practice-create" || viewName === "practice-library" ? "practice" : viewName));
+    el.classList.toggle(
+      "active",
+      el.dataset.nav ===
+        (viewName === "practice-report" ||
+        viewName === "practice-stats" ||
+        viewName === "practice-category" ||
+        viewName === "practice-create" ||
+        viewName === "practice-library"
+          ? "practice"
+          : viewName),
+    );
   });
   document.getElementById("topbarTitle").textContent =
     PAGE_TITLES[viewName] || "Examle";
@@ -739,16 +819,746 @@ async function syncAppShell(viewName, signedIn) {
   document.getElementById("topbarUserRole").textContent = role;
   document.getElementById("topbarEyebrow").textContent = role;
   document.getElementById("appNavAdmin").style.display = isAdmin ? "" : "none";
-  document.getElementById("appNavBulkImport").style.display = isAdmin ? "" : "none";
-  const reportsNav = document.getElementById("appNavReports");
-  if (reportsNav) reportsNav.style.display = isAdmin ? "" : "none";
+  const supportNav = document.getElementById("appNavSupport");
+  if (supportNav) supportNav.style.display = isAdmin ? "none" : "";
   const labelsNav = document.getElementById("appNavLabels");
   if (labelsNav) labelsNav.style.display = isAdmin ? "" : "none";
-  const bankNav = document.getElementById("appNavBank");
-  if (bankNav) bankNav.style.display = isAdmin ? "" : "none";
-  const feedbackNav = document.getElementById("appNavFeedback");
-  if (feedbackNav) feedbackNav.style.display = isAdmin ? "" : "none";
 }
+
+/* =========================================================================
+   ADMIN — hub, website analytics, student-made tests
+   ========================================================================= */
+const ADM_NF = new Intl.NumberFormat("en-IN");
+const admNum = (n) => ADM_NF.format(Number(n) || 0);
+function admDur(sec) {
+  sec = Math.max(0, Math.round(Number(sec) || 0));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  if (h >= 100) return `${admNum(h)} h`;
+  if (h) return `${h}h ${m}m`;
+  if (m) return `${m}m`;
+  return `${sec}s`;
+}
+function admDay(iso) {
+  const d = new Date(`${String(iso).slice(0, 10)}T00:00:00`);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+}
+const admST = { rows: [], total: 0, busy: false };
+let admBound = false;
+
+async function admGate(notId, contentId) {
+  myProfile = myProfile || (await getMyProfile());
+  const ok = myProfile?.role === "admin";
+  document.getElementById(notId).style.display = ok ? "none" : "block";
+  document.getElementById(contentId).style.display = ok ? "block" : "none";
+  return ok;
+}
+function admMigrationHint(error) {
+  return /admin_get_|function|schema cache/i.test(error?.message || "")
+    ? "This needs the latest migration. Run migration.sql in the Supabase SQL editor, then refresh."
+    : friendlyError(error);
+}
+
+async function enterAdminPanelView() {
+  if (await admGate("adminPanelNotAdmin", "adminPanelContent")) admLoadBadges();
+}
+
+async function enterAdminAnalyticsView() {
+  if (!(await admGate("aaNotAdmin", "aaContent"))) return;
+  const btn = document.getElementById("admRefresh");
+  if (btn && !btn.dataset.bound) {
+    btn.dataset.bound = "1";
+    btn.addEventListener("click", () => { loadAdminAnalytics(); loadAdminStudentTests(true); });
+  }
+  const box = document.getElementById("adminStudentTests");
+  if (box && !box.dataset.bound) {
+    box.dataset.bound = "1";
+    box.addEventListener("click", (e) => {
+      if (e.target.closest("[data-adm-more]")) loadAdminStudentTests(false);
+    });
+  }
+  await Promise.all([loadAdminAnalytics(), loadAdminStudentTests(true)]);
+}
+
+async function enterAdminStudentTestsView() {
+  navigate("/admin-analytics");
+}
+
+async function loadAdminAnalytics() {
+  const box = document.getElementById("adminAnalytics");
+  if (!box) return;
+  box.innerHTML = `<div class="empty-state">Loading analytics…</div>`;
+  const { data, error } = await sb.rpc("admin_get_site_analytics");
+  if (error) {
+    box.innerHTML = `<div class="error-box">${escapeHtml(admMigrationHint(error))}</div>`;
+    return;
+  }
+  renderAdminAnalytics(data || {});
+}
+
+function renderAdminAnalytics(d) {
+  const box = document.getElementById("adminAnalytics");
+  const u = d.users || {}, t = d.tests || {}, a = d.attempts || {}, tm = d.time || {}, c = d.content || {};
+  const tile = (ico, label, value, sub = "", alert = false) =>
+    `<div class="adm-tile${alert ? " is-alert" : ""}"><span class="adm-tile-ico" aria-hidden="true">${ico}</span><div class="adm-tile-body"><span>${label}</span><strong>${value}</strong>${sub ? `<small>${sub}</small>` : ""}</div></div>`;
+  const tiles = [
+    tile("👥", "Students registered", admNum(u.students), `+${admNum(u.new_7d)} this week`),
+    tile("⚡", "Active this week", admNum(u.active_7d), `${admNum(u.active_today)} today`),
+    tile("📚", "Admin tests", admNum(t.admin_tests), `${admNum(t.live_tests)} live · ${admNum(t.practice_tests)} practice`),
+    tile("🧑‍🎓", "Student-made tests", admNum(t.student_made), `${admNum(t.student_made_7d)} this week`),
+    tile("📝", "Attempts completed", admNum(a.completed), `${admNum(a.completed_7d)} this week`),
+    tile("⏱️", "Time spent", admDur(tm.total_seconds), `${admDur(tm.seconds_7d)} this week`),
+    tile("🎯", "Accuracy", `${Number(tm.accuracy) || 0}%`, `${admNum(tm.questions_answered)} answers`),
+    tile("🚩", "Open reports", admNum(c.open_reports), "", Number(c.open_reports) > 0),
+  ].join("");
+
+  const days = d.daily || [];
+  const bars = (key, label) => {
+    const vals = days.map((r) => Number(r[key]) || 0);
+    const max = Math.max(1, ...vals);
+    return `<div class="adm-panel"><div class="adm-panel-head"><h3>${label}</h3><b>${admNum(vals.reduce((s, v) => s + v, 0))}</b></div>
+      <div class="adm-bars">${vals.map((v, i) => `<i class="${v ? "" : "is-zero"}" style="--h:${Math.max(4, Math.round((v / max) * 100))}%" title="${escapeHtml(admDay(days[i].day))}: ${admNum(v)}"></i>`).join("")}</div>
+      <div class="adm-axis"><span>${days[0] ? admDay(days[0].day) : ""}</span><span>${days.length ? admDay(days[days.length - 1].day) : ""}</span></div></div>`;
+  };
+  const subjects = (d.subjects || [])
+    .map((s) => `<div class="adm-row"><div class="adm-row-main"><b>${escapeHtml(s.subject || "Other")}</b><div class="adm-meter"><i style="--w:${Math.min(100, Number(s.accuracy) || 0)}%"></i></div></div><div class="adm-row-side"><b>${Number(s.accuracy) || 0}%</b></div></div>`)
+    .join("");
+  const chapters = d.chapters || [];
+  const maxCh = Math.max(1, ...chapters.map((x) => Number(x.n) || 0));
+  const chaptersPanel = `<div class="adm-panel"><div class="adm-panel-head"><h3>Top chapters in student tests</h3></div>${
+    chapters.map((x) => `<div class="adm-row"><div class="adm-row-main"><b>${escapeHtml(x.chapter)}</b><small>${escapeHtml(x.subject || "")}</small><div class="adm-meter"><i style="--w:${Math.round(((Number(x.n) || 0) / maxCh) * 100)}%"></i></div></div><div class="adm-row-side"><b>${admNum(x.n)}</b></div></div>`).join("") || `<div class="adm-empty">No data yet.</div>`
+  }</div>`;
+  const lvl = (v) => {
+    v = String(v || "").toLowerCase();
+    if (/^(1|easy)$/.test(v)) return "Easy";
+    if (/^(2|med|medium)$/.test(v)) return "Medium";
+    if (/^(3|hard)$/.test(v)) return "Hard";
+    return v ? v[0].toUpperCase() + v.slice(1) : "Unrated";
+  };
+  const diff = d.difficulty || [];
+  const diffTotal = diff.reduce((s, x) => s + (Number(x.n) || 0), 0) || 1;
+  const difficultyPanel = `<div class="adm-panel"><div class="adm-panel-head"><h3>Difficulty students choose</h3></div>${
+    diff.map((x) => { const pct = Math.round(((Number(x.n) || 0) / diffTotal) * 100); return `<div class="adm-row"><div class="adm-row-main"><b>${escapeHtml(lvl(x.level))}</b><div class="adm-meter"><i style="--w:${pct}%"></i></div></div><div class="adm-row-side"><b>${pct}%</b></div></div>`; }).join("") || `<div class="adm-empty">No data yet.</div>`
+  }</div>`;
+  box.innerHTML = `<div class="adm-tiles">${tiles}</div>
+    <div class="adm-charts">${bars("signups", "New students · 14 days")}${bars("attempts", "Attempts · 14 days")}
+    ${subjects ? `<div class="adm-panel"><div class="adm-panel-head"><h3>Accuracy by subject</h3></div>${subjects}</div>` : ""}</div>
+    <div class="adm-charts">${chaptersPanel}${difficultyPanel}</div>`;
+  const up = document.getElementById("admUpdated");
+  if (up) up.textContent = `Updated ${new Date().toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
+}
+
+async function loadAdminStudentTests(reset, targetId = "adminStudentTests") {
+  const box = document.getElementById(targetId);
+  if (!box || admST.busy) return;
+  admST.busy = true;
+  if (reset) {
+    admST.rows = [];
+    admST.total = 0;
+    box.innerHTML = `<div class="empty-state">Loading…</div>`;
+  }
+  const { data, error } = await sb.rpc("admin_get_student_custom_tests", { p_limit: 12, p_offset: admST.rows.length });
+  admST.busy = false;
+  if (error) {
+    box.innerHTML = `<div class="error-box">${escapeHtml(admMigrationHint(error))}</div>`;
+    return;
+  }
+  admST.total = Number(data?.total) || 0;
+  admST.rows = admST.rows.concat(data?.rows || []);
+  if (!admST.rows.length) {
+    box.innerHTML = `<div class="empty-state">No student has made a practice test yet.</div>`;
+    return;
+  }
+  const rows = admST.rows
+    .map((r) => `<div class="adm-row"><div class="adm-row-main"><b>${escapeHtml(r.title)}</b><small>${escapeHtml(r.student)}${r.class ? " · " + escapeHtml(r.class) : ""} · ${formatDateTime(r.created_at)}</small></div><div class="adm-st-meta"><span class="rp-chip">${r.mode === "practice" ? "Practice" : "Quiz"}</span><span><b>${admNum(r.questions)}</b> Q</span><span><b>${admNum(r.attempts)}</b> attempts</span></div></div>`)
+    .join("");
+  box.innerHTML = `<div class="adm-panel-head"><h3>${admNum(admST.total)} test${admST.total === 1 ? "" : "s"}</h3></div>${rows}${admST.rows.length < admST.total ? `<div class="adm-more"><button type="button" class="btn btn-sm" data-adm-more>Show more</button></div>` : ""}`;
+}
+
+/* =========================================================================
+   SUPPORT — student popup, Support page, admin inbox (threads + attachments)
+   ========================================================================= */
+const SUP = { uid: null, busy: false, promptShown: false, resolvedTicket: null, resolvedCount: 1 };
+const supEl = (id) => document.getElementById(id);
+const SUP_MAX_FILES = 5;
+const SUP_MAX_BYTES = 10 * 1024 * 1024;
+const SUP_ACCEPT = "image/*,audio/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.csv,.zip";
+
+function supHint(e) {
+  return /support_tickets|support_messages|bucket|relation|schema cache|row-level|policy|admin_reply_support|student_add_support/i.test(e?.message || "")
+    ? "Support isn't fully set up yet. The admin needs to run the latest migration."
+    : friendlyError(e);
+}
+function supFmtSize(n) {
+  n = Number(n) || 0;
+  return n >= 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB";
+}
+function supKind(att) {
+  const t = String(att?.type || "").toLowerCase();
+  const ext = String(att?.name || att?.path || "").split(".").pop().toLowerCase();
+  if (t.startsWith("image/") || /^(png|jpe?g|gif|webp|bmp|heic)$/.test(ext)) return "image";
+  if (t.startsWith("audio/") || /^(webm|ogg|oga|m4a|mp3|wav|aac)$/.test(ext)) return "audio";
+  return "file";
+}
+async function supSigned(path) {
+  if (!path) return null;
+  const { data } = await sb.storage.from("support-attachments").createSignedUrl(path, 3600);
+  return data?.signedUrl || null;
+}
+async function supAttList(atts) {
+  const list = Array.isArray(atts) ? atts : [];
+  const parts = await Promise.all(
+    list.map(async (a) => {
+      const url = await supSigned(a.path);
+      if (!url) return "";
+      const safe = escapeHtml(url);
+      const name = escapeHtml(a.name || "File");
+      const kind = supKind(a);
+      if (kind === "image") return `<a href="${safe}" target="_blank" rel="noopener"><img class="sup-img" src="${safe}" alt="${name}"></a>`;
+      if (kind === "audio") return `<audio class="sup-audio" controls preload="metadata" src="${safe}"></audio>`;
+      return `<a class="sup-file" href="${safe}" target="_blank" rel="noopener" download="${name}"><span>📄</span><b>${name}</b><small>${a.size ? supFmtSize(a.size) : ""}</small></a>`;
+    }),
+  );
+  return parts.join("");
+}
+function supLegacyAtts(t) {
+  const out = [];
+  if (t.image_path) out.push({ path: t.image_path, name: "image", type: "image/*" });
+  if (t.audio_path) out.push({ path: t.audio_path, name: "voice note", type: "audio/webm" });
+  return out.concat(Array.isArray(t.attachments) ? t.attachments : []);
+}
+async function supThreadHtml(ticket, msgs, viewer, studentName) {
+  const items = [{ role: "student", body: ticket.message, atts: supLegacyAtts(ticket), at: ticket.created_at }];
+  if (ticket.admin_reply && !msgs.some((m) => m.sender_role === "admin"))
+    items.push({ role: "admin", body: ticket.admin_reply, atts: [], at: ticket.replied_at });
+  msgs.forEach((m) => items.push({ role: m.sender_role, body: m.body, atts: m.attachments, at: m.created_at }));
+  const parts = await Promise.all(
+    items.map(async (it) => {
+      const who = it.role === "admin" ? "Admin" : viewer === "student" ? "You" : studentName || "Student";
+      return `<div class="sup-msg ${it.role === "admin" ? "is-admin" : "is-student"}"><div class="sup-msg-head"><b>${escapeHtml(who)}</b><small>${it.at ? formatDateTime(it.at) : ""}</small></div>${it.body ? `<p>${escapeHtml(it.body)}</p>` : ""}${await supAttList(it.atts)}</div>`;
+    }),
+  );
+  return parts.join("");
+}
+async function supLoadMessages(ids) {
+  const map = new Map();
+  if (!ids.length) return map;
+  const { data } = await sb.from("support_messages").select("*").in("ticket_id", ids).order("created_at", { ascending: true });
+  (data || []).forEach((m) => {
+    if (!map.has(m.ticket_id)) map.set(m.ticket_id, []);
+    map.get(m.ticket_id).push(m);
+  });
+  return map;
+}
+
+/* ---------- composer: text + files + voice note (used in 3 places) ---------- */
+function supComposerHtml(placeholder, owner = "") {
+  return `<div class="sc" data-owner="${escapeHtml(owner)}">
+    <textarea class="sc-text" maxlength="2000" rows="3" placeholder="${escapeHtml(placeholder)}"></textarea>
+    <div class="sc-bar">
+      <label class="sup-btn">📎 Attach<input type="file" multiple hidden data-sc-file accept="${SUP_ACCEPT}"></label>
+      <button type="button" class="sup-btn" data-sc-rec>🎙️ Voice note</button>
+    </div>
+    <div class="sc-files"></div>
+    <p class="sc-msg" role="status"></p>
+  </div>`;
+}
+const scSt = (el) => (el._sc = el._sc || { files: [], urls: [], rec: null, stream: null, chunks: [], timer: null, discard: false });
+function scSay(el, text, bad = false) {
+  const m = el?.querySelector(".sc-msg");
+  if (!m) return;
+  m.textContent = text || "";
+  m.classList.toggle("is-bad", !!bad);
+}
+function scRender(el) {
+  const st = scSt(el);
+  st.urls.forEach((u) => URL.revokeObjectURL(u));
+  st.urls = [];
+  el.querySelector(".sc-files").innerHTML = st.files
+    .map((f, i) => {
+      const kind = supKind({ type: f.type, name: f.name });
+      const url = URL.createObjectURL(f);
+      st.urls.push(url);
+      const body =
+        kind === "image" ? `<img src="${url}" alt="">`
+        : kind === "audio" ? `<audio controls preload="metadata" src="${url}"></audio>`
+        : `<span class="sc-doc">📄 <b>${escapeHtml(f.name)}</b><small>${supFmtSize(f.size)}</small></span>`;
+      return `<div class="sup-chip${kind === "audio" ? " sup-chip-audio" : ""}">${body}<button type="button" data-sc-rm="${i}" aria-label="Remove">✕</button></div>`;
+    })
+    .join("");
+}
+function scAdd(el, list) {
+  const st = scSt(el);
+  let msg = "";
+  [...list].forEach((f) => {
+    if (st.files.length >= SUP_MAX_FILES) msg = `You can attach up to ${SUP_MAX_FILES} files.`;
+    else if (f.size > SUP_MAX_BYTES) msg = `${f.name} is larger than 10 MB.`;
+    else st.files.push(f);
+  });
+  scRender(el);
+  scSay(el, msg, !!msg);
+}
+const scValue = (el) => ({ text: el.querySelector(".sc-text").value.trim(), n: scSt(el).files.length });
+function scPickMime() {
+  if (typeof MediaRecorder === "undefined" || !MediaRecorder.isTypeSupported) return "";
+  return ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus", "audio/ogg"].find((m) => MediaRecorder.isTypeSupported(m)) || "";
+}
+function scStopRec(el, discard) {
+  const st = el?._sc;
+  if (st?.rec && st.rec.state !== "inactive") {
+    st.discard = !!discard;
+    st.rec.stop();
+  }
+}
+async function scToggleRec(el) {
+  const st = scSt(el);
+  const btn = el.querySelector("[data-sc-rec]");
+  if (st.rec) { scStopRec(el, false); return; }
+  if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+    scSay(el, "Voice notes aren't supported in this browser.", true);
+    return;
+  }
+  if (st.files.length >= SUP_MAX_FILES) { scSay(el, `You can attach up to ${SUP_MAX_FILES} files.`, true); return; }
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (err) {
+    scSay(el, err?.name === "NotFoundError" ? "No microphone found." : "Microphone blocked. Allow it from the address bar and try again.", true);
+    return;
+  }
+  try {
+    const mime = scPickMime();
+    const rec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+    st.stream = stream; st.rec = rec; st.chunks = []; st.discard = false;
+    rec.ondataavailable = (e) => { if (e.data && e.data.size) st.chunks.push(e.data); };
+    rec.onerror = () => scSay(el, "Recording failed. Try again.", true);
+    rec.onstop = () => {
+      clearInterval(st.timer);
+      st.stream?.getTracks().forEach((t) => t.stop());
+      st.stream = null; st.rec = null;
+      btn.classList.remove("is-rec");
+      btn.textContent = "🎙️ Voice note";
+      if (!st.discard && st.chunks.length) {
+        const type = (rec.mimeType || mime || "audio/webm").split(";")[0];
+        const ext = type.includes("mp4") ? "m4a" : type.includes("ogg") ? "ogg" : "webm";
+        st.files.push(new File([new Blob(st.chunks, { type })], `voice-note-${Date.now()}.${ext}`, { type }));
+        scRender(el);
+      }
+      st.chunks = [];
+    };
+    rec.start(250);
+    let secs = 0;
+    btn.classList.add("is-rec");
+    btn.textContent = "⏹ Stop 0:00";
+    scSay(el, "");
+    st.timer = setInterval(() => {
+      secs += 1;
+      btn.textContent = `⏹ Stop ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
+      if (secs >= 180) scStopRec(el, false);
+    }, 1000);
+  } catch (err) {
+    stream.getTracks().forEach((t) => t.stop());
+    scSay(el, "Voice recording isn't available in this browser.", true);
+  }
+}
+async function scUpload(el, ownerUid) {
+  const st = scSt(el);
+  const out = [];
+  const stamp = Date.now();
+  for (let i = 0; i < st.files.length; i++) {
+    const f = st.files[i];
+    const safe = f.name.replace(/[^\w.\-]+/g, "_").slice(-60) || "file";
+    const path = `${ownerUid}/${stamp}-${i}-${safe}`;
+    const { error } = await sb.storage.from("support-attachments").upload(path, f, { contentType: f.type || "application/octet-stream" });
+    if (error) throw error;
+    out.push({ path, name: f.name, type: f.type || "application/octet-stream", size: f.size });
+  }
+  return out;
+}
+function scReset(el) {
+  scStopRec(el, true);
+  scSt(el).files = [];
+  el.querySelector(".sc-text").value = "";
+  scRender(el);
+  scSay(el, "");
+}
+
+/* ---------- student: popup + resolved notice ---------- */
+async function supRefreshFab() {
+  annBackSync();
+  try {
+    const { data } = await sb.auth.getSession();
+    const session = data?.session;
+    if (!session) return;
+    SUP.uid = session.user.id;
+    myProfile = myProfile || (await getMyProfile());
+    const isStudent = myProfile?.role === "student";
+    const supportNav = document.getElementById("appNavSupport");
+    if (supportNav) supportNav.style.display = isStudent ? "" : "none";
+    if (!isStudent) return;
+    const busy = /take|attempt|exam|play|session/i.test(location.hash) || document.body.classList.contains("practice-wizard-open");
+    const { count, data: replies } = await sb
+      .from("support_tickets")
+      .select("id, message, admin_reply, replied_at", { count: "exact" })
+      .not("replied_at", "is", null)
+      .is("student_seen_at", null)
+      .eq("user_id", SUP.uid)
+      .order("replied_at", { ascending: false })
+      .limit(1);
+    const appDot = document.getElementById("appSupDot");
+    if (appDot) appDot.hidden = !count;
+    if (!busy && !SUP.promptShown && replies?.length) {
+      const key = `${replies[0].id}:${replies[0].replied_at}`;
+      let seen = [];
+      try { seen = JSON.parse(localStorage.getItem("sup_popup_seen") || "[]"); } catch (_) {}
+      if (!seen.includes(key)) {
+        SUP.promptShown = true;
+        SUP.resolvedTicket = replies[0];
+        SUP.resolvedCount = count || 1;
+        try { localStorage.setItem("sup_popup_seen", JSON.stringify(seen.concat(key).slice(-50))); } catch (_) {}
+        supShowResolvedPrompt(replies[0]);
+      }
+    }
+  } catch (_) {}
+}
+async function supMarkResolvedSeen() {
+  const modal = supEl("supResolvedModal");
+  if (modal) modal.hidden = true;
+  SUP.resolvedTicket = null;
+  try { await sb.rpc("student_mark_support_seen"); } catch (_) {}
+  const d = document.getElementById("appSupDot");
+  if (d) d.hidden = true;
+}
+function supShowResolvedPrompt(ticket) {
+  const n = SUP.resolvedCount || 1;
+  supEl("supResolvedTitle").textContent = n > 1 ? `${n} of your queries were resolved` : "Your query was resolved";
+  const txt = n > 1 ? "The admin has replied to your queries." : ticket.admin_reply || "The admin has replied to your query.";
+  supEl("supResolvedText").textContent = txt.length > 160 ? txt.slice(0, 157) + "…" : txt;
+  supEl("supResolvedModal").hidden = false;
+}
+function supOpen() {
+  const host = supEl("supComposer");
+  if (host && !host.firstElementChild) host.innerHTML = supComposerHtml("Write your query");
+  supEl("supModal").classList.add("open");
+  document.body.classList.add("sup-open");
+}
+function supClose() {
+  const c = supEl("supComposer")?.firstElementChild;
+  if (c) scStopRec(c, true);
+  supEl("supModal")?.classList.remove("open");
+  document.body.classList.remove("sup-open");
+}
+async function supSend() {
+  if (SUP.busy) return;
+  const comp = supEl("supComposer")?.firstElementChild;
+  if (!comp) return;
+  const v = scValue(comp);
+  if (!v.text && !v.n) { scSay(comp, "Write a message or attach something.", true); return; }
+  if (scSt(comp).rec) { scSay(comp, "Stop the recording first.", true); return; }
+  SUP.busy = true;
+  const btn = supEl("supSend");
+  btn.disabled = true;
+  scSay(comp, "Sending…");
+  try {
+    const { data } = await sb.auth.getSession();
+    const uid = data?.session?.user?.id;
+    if (!uid) throw new Error("Please log in again.");
+    const atts = await scUpload(comp, uid);
+    const { error } = await sb.from("support_tickets").insert({ user_id: uid, message: v.text, attachments: atts });
+    if (error) throw error;
+    scReset(comp);
+    scSay(comp, "Query sent. Track it in Support.");
+    setTimeout(() => { scSay(comp, ""); supClose(); }, 1200);
+    if (location.hash.startsWith("#/support")) loadSupportPage();
+  } catch (e) {
+    scSay(comp, supHint(e), true);
+  } finally {
+    SUP.busy = false;
+    btn.disabled = false;
+  }
+}
+async function supEntry() {
+  const { data } = await sb.auth.getSession();
+  if (!data?.session) { navigate("/login"); return; }
+  SUP.uid = data.session.user.id;
+  myProfile = myProfile || (await getMyProfile());
+  if (myProfile?.role === "admin") { navigate("/admin-queries"); return; }
+  supOpen();
+}
+function supOnClick(e) {
+  const t = e.target;
+  if (t.closest("[data-sup-close]")) return supClose();
+  if (t.closest("[data-sup-resolved-close]")) return supMarkResolvedSeen();
+  if (t.closest("#supResolvedView")) {
+    supMarkResolvedSeen();
+    navigate("/support?tab=resolved");
+    return;
+  }
+  const rec = t.closest("[data-sc-rec]");
+  if (rec) return scToggleRec(rec.closest(".sc"));
+  const rm = t.closest("[data-sc-rm]");
+  if (rm) {
+    const el = rm.closest(".sc");
+    scSt(el).files.splice(Number(rm.dataset.scRm), 1);
+    scRender(el);
+    return;
+  }
+  const link = t.closest("[data-support]");
+  if (link) { e.preventDefault(); supEntry(); }
+}
+function supOnChange(e) {
+  const inp = e.target.closest?.("[data-sc-file]");
+  if (!inp) return;
+  scAdd(inp.closest(".sc"), inp.files);
+  inp.value = "";
+}
+function supFixDuration(e) {
+  const a = e.target;
+  if (!(a instanceof HTMLAudioElement) || a.duration !== Infinity) return;
+  a.currentTime = 1e101;
+  a.addEventListener("timeupdate", function f() { a.removeEventListener("timeupdate", f); a.currentTime = 0; });
+}
+async function annBackSync() {
+  const el = document.querySelector("#view-announcements .ann-back");
+  if (!el || !location.hash.startsWith("#/announcements")) return;
+  try { myProfile = myProfile || (await getMyProfile()); } catch (_) {}
+  const admin = myProfile?.role === "admin";
+  el.setAttribute("href", admin ? "#/admin-panel" : "#/dashboard");
+  el.setAttribute("aria-label", admin ? "Back to admin panel" : "Back to home");
+  const s = el.querySelector("span");
+  if (s) s.textContent = admin ? "Admin panel" : "Home";
+}
+function supInit() {
+  try {
+    document.addEventListener("click", supOnClick);
+    document.addEventListener("change", supOnChange);
+    document.addEventListener("loadedmetadata", supFixDuration, true);
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      if (!supEl("supResolvedModal")?.hidden) supMarkResolvedSeen();
+      supClose();
+    });
+    supEl("supSend")?.addEventListener("click", supSend);
+    window.addEventListener("hashchange", supRefreshFab);
+    sb.auth.onAuthStateChange(() => setTimeout(supRefreshFab, 400));
+    supRefreshFab();
+  } catch (_) {}
+}
+if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", supInit);
+else supInit();
+
+/* ---------- student: Support page (#/support) ---------- */
+let spTab = "all";
+let spBound = false;
+let spRows = [];
+let spMsgs = new Map();
+function spSyncTabs() {
+  const names = { all: "All", open: "Waiting", answered: "Resolved" };
+  const nums = {
+    all: spRows.length,
+    open: spRows.filter((r) => r.status === "open").length,
+    answered: spRows.filter((r) => r.status === "answered").length,
+  };
+  document.querySelectorAll("#spTabs [data-sp]").forEach((b) => {
+    b.classList.toggle("active", b.dataset.sp === spTab);
+    b.innerHTML = `${names[b.dataset.sp]} <span>${nums[b.dataset.sp]}</span>`;
+  });
+}
+async function spRender() {
+  const list = document.getElementById("spList");
+  spSyncTabs();
+  const rows = spRows.filter((r) => spTab === "all" || r.status === spTab);
+  if (!rows.length) {
+    list.innerHTML = `<div class="empty-state">${spTab === "answered" ? "No resolved queries yet." : spTab === "open" ? "Nothing waiting." : "You haven't raised any query yet."}</div>`;
+    return;
+  }
+  const parts = await Promise.all(
+    rows.map(async (r) => `<article class="spt-card${r._new ? " is-new" : ""}" data-ticket="${r.id}">
+      <header><small>${formatDateTime(r.created_at)}</small>${r._new ? `<span class="sup-pill is-new">New reply</span>` : ""}<span class="sup-pill${r.status === "answered" ? " is-done" : ""}">${r.status === "answered" ? "Resolved" : "Waiting"}</span></header>
+      <div class="sup-thread">${await supThreadHtml(r, spMsgs.get(r.id) || [], "student", "")}</div>
+      ${r.status === "answered" ? `<div class="spt-actions"><button type="button" class="btn btn-sm" data-sp-reopen="${r.id}">↩ Reopen</button></div>` : ""}
+      <div class="spt-composer" hidden></div>
+    </article>`),
+  );
+  list.innerHTML = parts.join("");
+}
+async function loadSupportPage() {
+  const list = document.getElementById("spList");
+  list.innerHTML = `<div class="empty-state">Loading…</div>`;
+  const { data, error } = await sb.from("support_tickets").select("*").eq("user_id", SUP.uid).order("created_at", { ascending: false }).limit(100);
+  if (error) { list.innerHTML = `<div class="error-box">${escapeHtml(supHint(error))}</div>`; return; }
+  spRows = (data || []).map((r) => ({ ...r, _new: !!(r.replied_at && !r.student_seen_at) }));
+  spMsgs = await supLoadMessages(spRows.map((r) => r.id));
+  await spRender();
+  if (spRows.some((r) => r._new)) {
+    try { await sb.rpc("student_mark_support_seen"); } catch (_) {}
+    const d = document.getElementById("appSupDot");
+    if (d) d.hidden = true;
+  }
+}
+async function enterSupportView() {
+  const { data } = await sb.auth.getSession();
+  if (!data?.session) { navigate("/login"); return; }
+  SUP.uid = data.session.user.id;
+  myProfile = myProfile || (await getMyProfile());
+  if (!spBound) {
+    spBound = true;
+    document.getElementById("spTabs").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-sp]");
+      if (!b) return;
+      spTab = b.dataset.sp;
+      spRender();
+    });
+    document.getElementById("spNew").addEventListener("click", () => supOpen());
+    document.getElementById("spList").addEventListener("click", async (e) => {
+      const card = e.target.closest(".spt-card");
+      if (!card) return;
+      const box = card.querySelector(".spt-composer");
+      const open = e.target.closest("[data-sp-reopen]");
+      if (open) {
+        box.innerHTML = supComposerHtml("Add more details", SUP.uid) + `<div class="spt-composer-actions"><button type="button" class="btn btn-sm" data-sp-cancel>Cancel</button><button type="button" class="btn btn-sm btn-primary" data-sp-send="${open.dataset.spReopen}">Reopen</button></div>`;
+        box.hidden = false;
+        open.hidden = true;
+        return;
+      }
+      if (e.target.closest("[data-sp-cancel]")) {
+        const c = box.querySelector(".sc");
+        if (c) scStopRec(c, true);
+        box.hidden = true;
+        box.innerHTML = "";
+        const b = card.querySelector("[data-sp-reopen]");
+        if (b) b.hidden = false;
+        return;
+      }
+      const send = e.target.closest("[data-sp-send]");
+      if (!send) return;
+      const comp = box.querySelector(".sc");
+      const v = scValue(comp);
+      if (!v.text && !v.n) { scSay(comp, "Write a message or attach something.", true); return; }
+      if (scSt(comp).rec) { scSay(comp, "Stop the recording first.", true); return; }
+      send.disabled = true;
+      scSay(comp, "Sending…");
+      try {
+        const atts = await scUpload(comp, SUP.uid);
+        const { error } = await sb.rpc("student_add_support_message", { p_ticket: send.dataset.spSend, p_body: v.text, p_attachments: atts });
+        if (error) throw error;
+        await loadSupportPage();
+      } catch (err) {
+        scSay(comp, supHint(err), true);
+        send.disabled = false;
+      }
+    });
+  }
+  const want = qs("tab");
+  spTab = want === "resolved" ? "answered" : want === "open" ? "open" : "all";
+  await loadSupportPage();
+}
+
+/* ---------- admin: student queries inbox ---------- */
+let aqTab = "open";
+let aqBound = false;
+async function enterAdminQueriesView() {
+  if (!(await admGate("aqNotAdmin", "aqContent"))) return;
+  if (!aqBound) {
+    aqBound = true;
+    document.getElementById("aqTabs").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-aq]");
+      if (!b) return;
+      aqTab = b.dataset.aq;
+      document.querySelectorAll("#aqTabs [data-aq]").forEach((x) => x.classList.toggle("active", x === b));
+      loadAdminQueries();
+    });
+    document.getElementById("aqList").addEventListener("click", async (e) => {
+      const btn = e.target.closest("[data-aq-send]");
+      if (!btn) return;
+      const card = btn.closest(".aq-card");
+      const comp = card.querySelector(".sc");
+      const v = scValue(comp);
+      if (!v.text && !v.n) { scSay(comp, "Write a reply or attach something.", true); return; }
+      if (scSt(comp).rec) { scSay(comp, "Stop the recording first.", true); return; }
+      btn.disabled = true;
+      scSay(comp, "Sending…");
+      try {
+        const atts = await scUpload(comp, card.dataset.owner);
+        const { error } = await sb.rpc("admin_reply_support", { p_ticket: btn.dataset.aqSend, p_body: v.text, p_attachments: atts });
+        if (error) throw error;
+        await loadAdminQueries();
+      } catch (err) {
+        scSay(comp, supHint(err), true);
+        btn.disabled = false;
+      }
+    });
+  }
+  await loadAdminQueries();
+}
+async function loadAdminQueries() {
+  const list = document.getElementById("aqList");
+  list.innerHTML = `<div class="empty-state">Loading…</div>`;
+  const { data, error } = await sb
+    .from("support_tickets")
+    .select("id, user_id, message, image_path, audio_path, attachments, status, admin_reply, replied_at, created_at, profiles(full_name, class_grade)")
+    .order("created_at", { ascending: false })
+    .limit(100);
+  if (error) { list.innerHTML = `<div class="error-box">${escapeHtml(supHint(error))}</div>`; return; }
+  const all = data || [];
+  const openN = all.filter((r) => r.status === "open").length;
+  document.querySelectorAll("#aqTabs [data-aq]").forEach((b) => {
+    const n = b.dataset.aq === "open" ? openN : all.length - openN;
+    b.innerHTML = `${b.dataset.aq === "open" ? "Open" : "Answered"} <span class="seg-count">${n}</span>`;
+  });
+  const rows = all.filter((r) => r.status === aqTab);
+  if (!rows.length) { list.innerHTML = `<div class="empty-state">${aqTab === "open" ? "No open queries ✓" : "Nothing answered yet."}</div>`; return; }
+  const msgs = await supLoadMessages(rows.map((r) => r.id));
+  const parts = await Promise.all(
+    rows.map(async (r) => {
+      const name = r.profiles?.full_name || "Student";
+      return `<article class="aq-card" data-owner="${r.user_id}">
+      <header class="aq-head"><div class="aq-who"><b>${escapeHtml(name)}</b><small>${r.profiles?.class_grade ? escapeHtml(r.profiles.class_grade) + " · " : ""}${formatDateTime(r.created_at)}</small></div></header>
+      <div class="sup-thread">${await supThreadHtml(r, msgs.get(r.id) || [], "admin", name)}</div>
+      <div class="aq-reply">${supComposerHtml("Write a reply", r.user_id)}<button type="button" class="btn btn-sm btn-primary" data-aq-send="${r.id}">Send reply</button></div>
+    </article>`;
+    }),
+  );
+  list.innerHTML = parts.join("");
+}
+
+async function admLoadBadges() {
+  try {
+    const [q, r] = await Promise.all([
+      sb.from("support_tickets").select("id", { count: "exact", head: true }).eq("status", "open"),
+      sb.from("question_reports").select("id", { count: "exact", head: true }).is("resolved_at", null),
+    ]);
+    [["queries", q.count], ["reports", r.count]].forEach(([k, n]) => {
+      const el = document.querySelector(`[data-adm-badge="${k}"]`);
+      if (el) el.textContent = n ? String(n) : "";
+    });
+  } catch (_) {}
+}
+
+
+/* ---------- full screen ---------- */
+async function appEnterFullscreen() {
+  const el = document.documentElement;
+  if (document.fullscreenElement || document.webkitFullscreenElement) return;
+  try {
+    if (el.requestFullscreen) await el.requestFullscreen({ navigationUI: "hide" });
+    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+  } catch (_) {}
+}
+let fsFirstDone = false;
+function fsFirstGesture() {
+  if (fsFirstDone) return;
+  sb.auth.getSession().then(({ data }) => {
+    if (!data?.session || fsFirstDone) return;
+    fsFirstDone = true;
+    appEnterFullscreen();
+  });
+}
+["pointerdown", "touchend", "keydown"].forEach((t) => document.addEventListener(t, fsFirstGesture, { passive: true }));
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("#beginModal button");
+  if (b && /start|begin|continue|ready/i.test(b.textContent || "")) appEnterFullscreen();
+});
 
 window.addEventListener("hashchange", router);
 
@@ -761,7 +1571,9 @@ const rpcCache = new Map();
 const RPC_TIMEOUT_MS = 12000;
 
 function timeoutError(label) {
-  return new Error(`${label} timed out. Check your connection and Supabase project.`);
+  return new Error(
+    `${label} timed out. Check your connection and Supabase project.`,
+  );
 }
 
 function withTimeout(promise, label, timeoutMs = RPC_TIMEOUT_MS) {
@@ -951,6 +1763,7 @@ function setupAuthListeners() {
 
   loginForm.addEventListener("submit", async (e) => {
     e.preventDefault();
+    appEnterFullscreen();
     const btn = document.getElementById("loginBtn");
     btn.disabled = true;
     btn.textContent = "Logging in…";
@@ -1058,12 +1871,13 @@ async function enterTestsView() {
   await loadTestsCatalog();
 }
 
-
 /* =========================================================================
    TEST MODE — Live Test vs Infinite Practice (admin side)
    ========================================================================= */
 function getTestMode() {
-  return document.querySelector('input[name="testMode"]:checked')?.value || "live";
+  return (
+    document.querySelector('input[name="testMode"]:checked')?.value || "live"
+  );
 }
 
 function syncModeUI() {
@@ -1079,7 +1893,9 @@ function syncModeUI() {
 }
 
 function setTestMode(mode) {
-  const radio = document.querySelector(`input[name="testMode"][value="${mode}"]`);
+  const radio = document.querySelector(
+    `input[name="testMode"][value="${mode}"]`,
+  );
   if (radio) radio.checked = true;
   syncModeUI();
 }
@@ -1094,8 +1910,12 @@ function scheduleForMode() {
     };
   }
   return {
-    available_from: new Date(document.getElementById("fromInput").value).toISOString(),
-    available_until: new Date(document.getElementById("untilInput").value).toISOString(),
+    available_from: new Date(
+      document.getElementById("fromInput").value,
+    ).toISOString(),
+    available_until: new Date(
+      document.getElementById("untilInput").value,
+    ).toISOString(),
   };
 }
 
@@ -1116,7 +1936,9 @@ async function loadPracticeAdminStats() {
   const body = document.getElementById("practiceAdminBody");
   if (!body || !currentTest) return;
   body.innerHTML = `<div class="empty-state">Loading…</div>`;
-  const { data, error } = await sb.rpc("admin_get_practice_test_stats", { p_test_id: currentTest.id });
+  const { data, error } = await sb.rpc("admin_get_practice_test_stats", {
+    p_test_id: currentTest.id,
+  });
   if (error) {
     body.innerHTML = `<div class="error-box">${escapeHtml(friendlyError(error))}</div>`;
     return;
@@ -1130,7 +1952,14 @@ async function loadPracticeAdminStats() {
   const rows = qs_
     .map((q) => {
       const acc = q.accuracy == null ? null : Number(q.accuracy);
-      const tone = acc == null ? "" : acc < 40 ? "pr-bad" : acc < 70 ? "pr-mid" : "pr-good";
+      const tone =
+        acc == null
+          ? ""
+          : acc < 40
+            ? "pr-bad"
+            : acc < 70
+              ? "pr-mid"
+              : "pr-good";
       return `<tr><td>Q${q.question_order}</td><td>${escapeHtml(q.subject || "")}${q.chapter ? " · " + escapeHtml(q.chapter) : ""}</td><td>${q.tries}</td><td class="${tone}">${acc == null ? "—" : acc + "%"}</td><td>${formatDurationShort(q.avg_seconds)}</td></tr>`;
     })
     .join("");
@@ -1152,12 +1981,22 @@ async function loadPracticeAdminStats() {
    ========================================================================= */
 const practiceHub = { rows: [], cat: "all", q: "", bound: false };
 
-const prPct = (v) => (v == null || v === "" ? "—" : `${Math.round(Number(v))}%`);
-const prTone = (v) => (v == null ? "" : Number(v) >= 70 ? "pr-good" : Number(v) >= 40 ? "pr-mid" : "pr-bad");
+const prPct = (v) =>
+  v == null || v === "" ? "—" : `${Math.round(Number(v))}%`;
+const prTone = (v) =>
+  v == null
+    ? ""
+    : Number(v) >= 70
+      ? "pr-good"
+      : Number(v) >= 40
+        ? "pr-mid"
+        : "pr-bad";
 
 function prDeploymentHint(error) {
   const msg = friendlyError(error);
-  return /function|schema cache|does not exist/i.test(String(error?.message || ""))
+  return /function|schema cache|does not exist/i.test(
+    String(error?.message || ""),
+  )
     ? "Practice reports are not set up yet. Ask the admin to run the latest migration.sql in Supabase."
     : msg;
 }
@@ -1171,8 +2010,6 @@ function prStat(value, label) {
   return `<div class="pr-stat"><b>${value}</b><span>${escapeHtml(label)}</span></div>`;
 }
 
-
-
 /* =========================================================================
    ERROR BOOK POPUP — opens straight away from any report review.
    Note, photo and voice note, then save.
@@ -1181,7 +2018,14 @@ function prStat(value, label) {
    ERROR BOOK v2 — sorted by subject, LaTeX, filters, view + edit popup
    ========================================================================= */
 const EB_SUBJECTS = ["Physics", "Chemistry", "Maths", "Biology", "Other"];
-const errorBookState = { rows: [], subject: "all", status: "all", q: "", cat: "", bound: false };
+const errorBookState = {
+  rows: [],
+  subject: "all",
+  status: "all",
+  q: "",
+  cat: "",
+  bound: false,
+};
 
 function normalizeSubject(value) {
   const v = String(value || "").toLowerCase();
@@ -1197,46 +2041,86 @@ function bindErrorBookToolbar() {
   errorBookState.bound = true;
   const cats = document.getElementById("errorCategory");
   const catFilter = document.getElementById("ebCategoryFilter");
-  if (cats && catFilter) catFilter.innerHTML = `<option value="">All reasons</option>` + [...cats.options].map((o) => `<option>${escapeHtml(o.value)}</option>`).join("");
-  document.getElementById("ebAddManual").addEventListener("click", () =>
-    openErrorBookModal({ question_text: "" }, null, () => enterErrorBookView()),
-  );
+  if (cats && catFilter)
+    catFilter.innerHTML =
+      `<option value="">All reasons</option>` +
+      [...cats.options]
+        .map((o) => `<option>${escapeHtml(o.value)}</option>`)
+        .join("");
+  document
+    .getElementById("ebAddManual")
+    .addEventListener("click", () =>
+      openErrorBookModal({ question_text: "" }, null, () =>
+        enterErrorBookView(),
+      ),
+    );
   document.getElementById("ebSearchToggle")?.addEventListener("click", () => {
     const toolbar = document.querySelector("#view-errors .eb-toolbar");
     toolbar?.classList.toggle("search-open");
-    if (toolbar?.classList.contains("search-open")) document.getElementById("ebSearch")?.focus();
+    if (toolbar?.classList.contains("search-open"))
+      document.getElementById("ebSearch")?.focus();
   });
-  document.getElementById("ebSearch").addEventListener("input", (e) => { errorBookState.q = e.target.value.trim().toLowerCase(); renderErrorBook(); });
-  document.getElementById("ebStatus").addEventListener("change", (e) => { errorBookState.status = e.target.value; renderErrorBook(); });
-  catFilter.addEventListener("change", (e) => { errorBookState.cat = e.target.value; renderErrorBook(); });
+  document.getElementById("ebSearch").addEventListener("input", (e) => {
+    errorBookState.q = e.target.value.trim().toLowerCase();
+    renderErrorBook();
+  });
+  document.getElementById("ebStatus").addEventListener("change", (e) => {
+    errorBookState.status = e.target.value;
+    renderErrorBook();
+  });
+  catFilter.addEventListener("change", (e) => {
+    errorBookState.cat = e.target.value;
+    renderErrorBook();
+  });
   document.getElementById("ebSubjectTabs").addEventListener("click", (e) => {
     const b = e.target.closest("[data-subj]");
     if (!b) return;
     errorBookState.subject = b.dataset.subj;
     renderErrorBook();
   });
-  document.getElementById("errorBookList").addEventListener("click", async (e) => {
-    const btn = e.target.closest("[data-eb]");
-    if (!btn) return;
-    const entry = errorBookState.rows.find((r) => r.id === btn.dataset.id);
-    if (!entry) return;
-    const act = btn.dataset.eb;
-    if (act === "toggle") {
-      await toggleErrorItem(btn, entry);
-      return;
-    }
-    if (act === "open") {
-      openErrorBookModal({ id: entry.question_id, question_text: entry.question_text, subject: entry.subject, chapter: entry.chapter }, entry.attempt_id, () => enterErrorBookView(), entry);
-    } else if (act === "resolve") {
-      await sb.from("error_book_entries").update({ resolved: !entry.resolved, updated_at: new Date().toISOString() }).eq("id", entry.id);
-      await enterErrorBookView();
-    } else if (act === "delete") {
-      if (!confirm("Delete this Error Book entry?")) return;
-      const { error } = await sb.from("error_book_entries").delete().eq("id", entry.id);
-      if (error) toast(friendlyError(error), "error");
-      else await enterErrorBookView();
-    }
-  });
+  document
+    .getElementById("errorBookList")
+    .addEventListener("click", async (e) => {
+      const btn = e.target.closest("[data-eb]");
+      if (!btn) return;
+      const entry = errorBookState.rows.find((r) => r.id === btn.dataset.id);
+      if (!entry) return;
+      const act = btn.dataset.eb;
+      if (act === "toggle") {
+        await toggleErrorItem(btn, entry);
+        return;
+      }
+      if (act === "open") {
+        openErrorBookModal(
+          {
+            id: entry.question_id,
+            question_text: entry.question_text,
+            subject: entry.subject,
+            chapter: entry.chapter,
+          },
+          entry.attempt_id,
+          () => enterErrorBookView(),
+          entry,
+        );
+      } else if (act === "resolve") {
+        await sb
+          .from("error_book_entries")
+          .update({
+            resolved: !entry.resolved,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", entry.id);
+        await enterErrorBookView();
+      } else if (act === "delete") {
+        if (!confirm("Delete this Error Book entry?")) return;
+        const { error } = await sb
+          .from("error_book_entries")
+          .delete()
+          .eq("id", entry.id);
+        if (error) toast(friendlyError(error), "error");
+        else await enterErrorBookView();
+      }
+    });
 }
 
 function renderErrorBook() {
@@ -1244,7 +2128,10 @@ function renderErrorBook() {
   const list = document.getElementById("errorBookList");
   const summary = document.getElementById("errorBookSummary");
   const tabs = document.getElementById("ebSubjectTabs");
-  const rows = st.rows.map((r) => ({ ...r, _subj: normalizeSubject(r.subject) }));
+  const rows = st.rows.map((r) => ({
+    ...r,
+    _subj: normalizeSubject(r.subject),
+  }));
   const open = rows.filter((r) => !r.resolved).length;
   summary.innerHTML = `
     <div class="home-stat-card"><div class="home-stat-val">${rows.length}</div><div class="home-stat-lbl">Saved mistakes</div></div>
@@ -1253,14 +2140,25 @@ function renderErrorBook() {
   const countBy = (k) => rows.filter((r) => r._subj === k).length;
   tabs.innerHTML =
     `<button type="button" class="eb-subj-tab ${st.subject === "all" ? "active" : ""}" data-subj="all">All <i>${rows.length}</i></button>` +
-    EB_SUBJECTS.filter((k) => k !== "Other" || countBy(k)).map((k) => `<button type="button" class="eb-subj-tab ${st.subject === k ? "active" : ""}" data-subj="${k}">${k} <i>${countBy(k)}</i></button>`).join("");
+    EB_SUBJECTS.filter((k) => k !== "Other" || countBy(k))
+      .map(
+        (k) =>
+          `<button type="button" class="eb-subj-tab ${st.subject === k ? "active" : ""}" data-subj="${k}">${k} <i>${countBy(k)}</i></button>`,
+      )
+      .join("");
 
   const shown = rows.filter((r) => {
     if (st.subject !== "all" && r._subj !== st.subject) return false;
     if (st.status === "open" && r.resolved) return false;
     if (st.status === "done" && !r.resolved) return false;
     if (st.cat && r.category !== st.cat) return false;
-    if (st.q && !`${r.question_text || ""} ${r.comment || ""} ${r.chapter || ""}`.toLowerCase().includes(st.q)) return false;
+    if (
+      st.q &&
+      !`${r.question_text || ""} ${r.comment || ""} ${r.chapter || ""}`
+        .toLowerCase()
+        .includes(st.q)
+    )
+      return false;
     return true;
   });
   if (!rows.length) {
@@ -1271,7 +2169,9 @@ function renderErrorBook() {
     list.innerHTML = `<div class="empty-state">No mistakes match this view.</div>`;
     return;
   }
-  const card = (r) => `<article class="eb-item ${r.resolved ? "is-resolved" : ""}">
+  const card = (
+    r,
+  ) => `<article class="eb-item ${r.resolved ? "is-resolved" : ""}">
       <button type="button" class="eb-item-head" data-eb="toggle" data-id="${r.id}" aria-expanded="false">
         <span class="eb-dot subj-${r._subj.toLowerCase()}"></span>
         <span class="eb-item-main"><span class="eb-item-title">${escapeHtml(r.chapter || "Topic not set")}</span>
@@ -1284,7 +2184,9 @@ function renderErrorBook() {
     st.subject === "all"
       ? EB_SUBJECTS.map((k) => {
           const g = shown.filter((r) => r._subj === k);
-          return g.length ? `<h3 class="eb-group">${k} <small>${g.length}</small></h3>${g.map(card).join("")}` : "";
+          return g.length
+            ? `<h3 class="eb-group">${k} <small>${g.length}</small></h3>${g.map(card).join("")}`
+            : "";
         }).join("")
       : shown.map(card).join("");
   renderMath(list);
@@ -1301,13 +2203,23 @@ function canonicalSubject(value) {
 }
 
 function initSubjectChapter(subjectEl, chapterEl, subject = "", chapter = "") {
-  if (typeof subjectEl === "string") subjectEl = document.getElementById(subjectEl);
-  if (typeof chapterEl === "string") chapterEl = document.getElementById(chapterEl);
+  if (typeof subjectEl === "string")
+    subjectEl = document.getElementById(subjectEl);
+  if (typeof chapterEl === "string")
+    chapterEl = document.getElementById(chapterEl);
   if (!subjectEl || !chapterEl) return;
   const refill = (keep) => {
-    fillChapterSelect(chapterEl, "Not sure / not listed", subjectEl.value || "");
+    fillChapterSelect(
+      chapterEl,
+      "Not sure / not listed",
+      subjectEl.value || "",
+    );
     if (keep) {
-      if (![...chapterEl.options].some((o) => o.value === keep)) chapterEl.insertAdjacentHTML("beforeend", `<option>${escapeHtml(keep)}</option>`);
+      if (![...chapterEl.options].some((o) => o.value === keep))
+        chapterEl.insertAdjacentHTML(
+          "beforeend",
+          `<option>${escapeHtml(keep)}</option>`,
+        );
       chapterEl.value = keep;
     }
   };
@@ -1341,19 +2253,36 @@ async function toggleErrorItem(head, entry) {
   renderMath(body);
   const media = body.querySelector(".eb-media");
   if (entry.image_path) {
-    const { data: u } = await sb.storage.from("error-book").createSignedUrl(entry.image_path, 3600);
-    if (u?.signedUrl) media.insertAdjacentHTML("beforeend", `<img class="eb-preview" src="${u.signedUrl}" alt="Attached photo">`);
+    const { data: u } = await sb.storage
+      .from("error-book")
+      .createSignedUrl(entry.image_path, 3600);
+    if (u?.signedUrl)
+      media.insertAdjacentHTML(
+        "beforeend",
+        `<img class="eb-preview" src="${u.signedUrl}" alt="Attached photo">`,
+      );
   }
   if (entry.voice_note_path) {
-    const { data: u } = await sb.storage.from("error-book").createSignedUrl(entry.voice_note_path, 3600);
-    if (u?.signedUrl) media.insertAdjacentHTML("beforeend", `<audio controls src="${u.signedUrl}"></audio>`);
+    const { data: u } = await sb.storage
+      .from("error-book")
+      .createSignedUrl(entry.voice_note_path, 3600);
+    if (u?.signedUrl)
+      media.insertAdjacentHTML(
+        "beforeend",
+        `<audio controls src="${u.signedUrl}"></audio>`,
+      );
   }
 }
 
 /* ---- voice recording helpers: pick a format this browser supports (Chrome/Android = webm, Safari/iPhone = mp4) ---- */
 function recorderOptions() {
   if (!window.MediaRecorder || !MediaRecorder.isTypeSupported) return undefined;
-  const type = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"].find((t) => MediaRecorder.isTypeSupported(t));
+  const type = [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/mp4",
+    "audio/ogg;codecs=opus",
+  ].find((t) => MediaRecorder.isTypeSupported(t));
   return type ? { mimeType: type } : undefined;
 }
 function cleanMime(type) {
@@ -1375,14 +2304,17 @@ function openImageLightbox(src) {
     box.remove();
     document.removeEventListener("keydown", onKey);
   };
-  const onKey = (e) => { if (e.key === "Escape") close(); };
+  const onKey = (e) => {
+    if (e.key === "Escape") close();
+  };
   box.addEventListener("click", close);
   document.addEventListener("keydown", onKey);
   document.body.appendChild(box);
 }
 document.addEventListener("click", (e) => {
   const img = e.target.closest("img.eb-preview");
-  if (img && img.getAttribute("src")) openImageLightbox(img.getAttribute("src"));
+  if (img && img.getAttribute("src"))
+    openImageLightbox(img.getAttribute("src"));
 });
 
 /* =========================================================================
@@ -1396,7 +2328,8 @@ document.addEventListener("click", (e) => {
    ========================================================================= */
 async function compressImage(file, maxSide = 1600, quality = 0.8) {
   try {
-    if (!file || !/^image\//.test(file.type) || /gif|svg/.test(file.type)) return file;
+    if (!file || !/^image\//.test(file.type) || /gif|svg/.test(file.type))
+      return file;
     const url = URL.createObjectURL(file);
     const img = await new Promise((resolve, reject) => {
       const el = new Image();
@@ -1405,14 +2338,19 @@ async function compressImage(file, maxSide = 1600, quality = 0.8) {
       el.src = url;
     });
     URL.revokeObjectURL(url);
-    const k = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+    const k = Math.min(
+      1,
+      maxSide / Math.max(img.naturalWidth, img.naturalHeight),
+    );
     const canvas = document.createElement("canvas");
     canvas.width = Math.max(1, Math.round(img.naturalWidth * k));
     canvas.height = Math.max(1, Math.round(img.naturalHeight * k));
     canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
     const webp = canvas.toDataURL("image/webp").startsWith("data:image/webp");
     const type = webp ? "image/webp" : "image/jpeg";
-    const blob = await new Promise((resolve) => canvas.toBlob(resolve, type, quality));
+    const blob = await new Promise((resolve) =>
+      canvas.toBlob(resolve, type, quality),
+    );
     if (!blob || (k === 1 && blob.size >= file.size)) return file;
     const base = (file.name || "photo").replace(/\.[^.]+$/, "");
     return new File([blob], `${base}.${webp ? "webp" : "jpg"}`, { type });
@@ -1440,15 +2378,27 @@ function openCameraCapture() {
     const start = async () => {
       stop();
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: facing }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: facing },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+          },
+          audio: false,
+        });
         video.srcObject = stream;
         msg.hidden = true;
       } catch (err) {
         msg.hidden = false;
-        msg.textContent = err?.name === "NotAllowedError" ? "Camera is blocked. Allow camera access in your browser settings." : "Could not open the camera.";
+        msg.textContent =
+          err?.name === "NotAllowedError"
+            ? "Camera is blocked. Allow camera access in your browser settings."
+            : "Could not open the camera.";
       }
     };
-    const onKey = (e) => { if (e.key === "Escape") finish(null); };
+    const onKey = (e) => {
+      if (e.key === "Escape") finish(null);
+    };
     const finish = (file) => {
       stop();
       document.removeEventListener("keydown", onKey);
@@ -1469,7 +2419,18 @@ function openCameraCapture() {
         c.width = video.videoWidth;
         c.height = video.videoHeight;
         c.getContext("2d").drawImage(video, 0, 0);
-        c.toBlob((blob) => finish(blob ? new File([blob], `photo-${Date.now()}.jpg`, { type: "image/jpeg" }) : null), "image/jpeg", 0.92);
+        c.toBlob(
+          (blob) =>
+            finish(
+              blob
+                ? new File([blob], `photo-${Date.now()}.jpg`, {
+                    type: "image/jpeg",
+                  })
+                : null,
+            ),
+          "image/jpeg",
+          0.92,
+        );
       }
     });
     start();
@@ -1482,17 +2443,26 @@ function openImageEditor(file) {
     const img = new Image();
     img.onerror = () => {
       URL.revokeObjectURL(url);
-      toast("This photo can't be edited here, so it will be used as it is.", "error");
+      toast(
+        "This photo can't be edited here, so it will be used as it is.",
+        "error",
+      );
       compressImage(file).then(resolve);
     };
     img.onload = () => {
       const MAX = 2400;
-      const k = Math.min(1, MAX / Math.max(img.naturalWidth, img.naturalHeight));
+      const k = Math.min(
+        1,
+        MAX / Math.max(img.naturalWidth, img.naturalHeight),
+      );
       const baseW = Math.round(img.naturalWidth * k);
       const baseH = Math.round(img.naturalHeight * k);
       const MIN = 0.08;
       let rot = 0;
-      let l = 0, t = 0, r = 1, b = 1;
+      let l = 0,
+        t = 0,
+        r = 1,
+        b = 1;
 
       const ov = document.createElement("div");
       ov.className = "ie-overlay";
@@ -1542,7 +2512,16 @@ function openImageEditor(file) {
       box.addEventListener("pointerdown", (e) => {
         e.preventDefault();
         box.setPointerCapture(e.pointerId);
-        drag = { mode: e.target.dataset.h || "move", x: e.clientX, y: e.clientY, l, t, r, b, rect: wrap.getBoundingClientRect() };
+        drag = {
+          mode: e.target.dataset.h || "move",
+          x: e.clientX,
+          y: e.clientY,
+          l,
+          t,
+          r,
+          b,
+          rect: wrap.getBoundingClientRect(),
+        };
       });
       box.addEventListener("pointermove", (e) => {
         if (!drag) return;
@@ -1550,9 +2529,12 @@ function openImageEditor(file) {
         const dy = (e.clientY - drag.y) / drag.rect.height;
         const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
         if (drag.mode === "move") {
-          const w = drag.r - drag.l, h = drag.b - drag.t;
-          l = clamp(drag.l + dx, 0, 1 - w); r = l + w;
-          t = clamp(drag.t + dy, 0, 1 - h); b = t + h;
+          const w = drag.r - drag.l,
+            h = drag.b - drag.t;
+          l = clamp(drag.l + dx, 0, 1 - w);
+          r = l + w;
+          t = clamp(drag.t + dy, 0, 1 - h);
+          b = t + h;
         } else {
           if (drag.mode.includes("w")) l = clamp(drag.l + dx, 0, drag.r - MIN);
           if (drag.mode.includes("e")) r = clamp(drag.r + dx, drag.l + MIN, 1);
@@ -1561,7 +2543,9 @@ function openImageEditor(file) {
         }
         paintBox();
       });
-      const endDrag = () => { drag = null; };
+      const endDrag = () => {
+        drag = null;
+      };
       box.addEventListener("pointerup", endDrag);
       box.addEventListener("pointercancel", endDrag);
 
@@ -1569,10 +2553,13 @@ function openImageEditor(file) {
         document.removeEventListener("keydown", onKey);
         URL.revokeObjectURL(url);
         ov.remove();
-        if (!document.getElementById("ebModal")) document.body.classList.remove("eb-open");
+        if (!document.getElementById("ebModal"))
+          document.body.classList.remove("eb-open");
         resolve(value instanceof File ? await compressImage(value) : value);
       };
-      const onKey = (e) => { if (e.key === "Escape") finish(null); };
+      const onKey = (e) => {
+        if (e.key === "Escape") finish(null);
+      };
       document.addEventListener("keydown", onKey);
 
       ov.addEventListener("click", (e) => {
@@ -1581,24 +2568,42 @@ function openImageEditor(file) {
         const act = btn.dataset.ie;
         if (act === "left" || act === "right") {
           rot = (rot + (act === "right" ? 90 : 270)) % 360;
-          l = 0; t = 0; r = 1; b = 1;
+          l = 0;
+          t = 0;
+          r = 1;
+          b = 1;
           paintImage();
           paintBox();
         } else if (act === "reset") {
-          l = 0; t = 0; r = 1; b = 1;
+          l = 0;
+          t = 0;
+          r = 1;
+          b = 1;
           paintBox();
         } else if (act === "cancel") {
           finish(null);
         } else if (act === "done") {
-          if (rot === 0 && l === 0 && t === 0 && r === 1 && b === 1) return finish(file);
-          const sx = Math.round(l * canvas.width), sy = Math.round(t * canvas.height);
-          const sw = Math.max(1, Math.round((r - l) * canvas.width)), sh = Math.max(1, Math.round((b - t) * canvas.height));
+          if (rot === 0 && l === 0 && t === 0 && r === 1 && b === 1)
+            return finish(file);
+          const sx = Math.round(l * canvas.width),
+            sy = Math.round(t * canvas.height);
+          const sw = Math.max(1, Math.round((r - l) * canvas.width)),
+            sh = Math.max(1, Math.round((b - t) * canvas.height));
           const out = document.createElement("canvas");
           out.width = sw;
           out.height = sh;
           out.getContext("2d").drawImage(canvas, sx, sy, sw, sh, 0, 0, sw, sh);
           out.toBlob(
-            (blob) => finish(blob ? new File([blob], (file.name || "photo").replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" }) : file),
+            (blob) =>
+              finish(
+                blob
+                  ? new File(
+                      [blob],
+                      (file.name || "photo").replace(/\.[^.]+$/, "") + ".jpg",
+                      { type: "image/jpeg" },
+                    )
+                  : file,
+              ),
             "image/jpeg",
             0.9,
           );
@@ -1635,19 +2640,28 @@ function bindImageEditor(inputId) {
 }
 
 async function openErrorBookModal(question, attemptId, onSaved, entry = null) {
-  const { data: { user } } = await sb.auth.getUser();
+  const {
+    data: { user },
+  } = await sb.auth.getUser();
   if (!user) return;
   let existing = entry;
   if (!existing && attemptId && question.id) {
     const { data: found } = await sb
       .from("error_book_entries")
-      .select("id, category, comment, image_path, voice_note_path, subject, chapter, question_text")
-      .eq("student_id", user.id).eq("attempt_id", attemptId).eq("question_id", question.id).maybeSingle();
+      .select(
+        "id, category, comment, image_path, voice_note_path, subject, chapter, question_text",
+      )
+      .eq("student_id", user.id)
+      .eq("attempt_id", attemptId)
+      .eq("question_id", question.id)
+      .maybeSingle();
     existing = found;
   }
   const isManual = !question.id && !question.question_text;
   const canEditText = !question.id && !!question.question_text;
-  const categories = document.getElementById("errorCategory")?.innerHTML || "<option>Other</option>";
+  const categories =
+    document.getElementById("errorCategory")?.innerHTML ||
+    "<option>Other</option>";
 
   document.getElementById("ebModal")?.remove();
   const wrap = document.createElement("div");
@@ -1686,26 +2700,50 @@ async function openErrorBookModal(question, attemptId, onSaved, entry = null) {
     $("ebQText").hidden = true;
     $("ebEditText").hidden = true;
   });
-  initSubjectChapter($("ebSubject"), $("ebChapter"), canonicalSubject(question.subject || existing?.subject), question.chapter || existing?.chapter || "");
+  initSubjectChapter(
+    $("ebSubject"),
+    $("ebChapter"),
+    canonicalSubject(question.subject || existing?.subject),
+    question.chapter || existing?.chapter || "",
+  );
   if (existing?.image_path) {
-    sb.storage.from("error-book").createSignedUrl(existing.image_path, 3600).then(({ data: u }) => {
-      if (u?.signedUrl) { $("ebImagePreview").src = u.signedUrl; $("ebImagePreview").hidden = false; }
-    });
+    sb.storage
+      .from("error-book")
+      .createSignedUrl(existing.image_path, 3600)
+      .then(({ data: u }) => {
+        if (u?.signedUrl) {
+          $("ebImagePreview").src = u.signedUrl;
+          $("ebImagePreview").hidden = false;
+        }
+      });
   }
   if (existing?.voice_note_path) {
-    sb.storage.from("error-book").createSignedUrl(existing.voice_note_path, 3600).then(({ data: u }) => {
-      if (u?.signedUrl) { $("ebAudio").src = u.signedUrl; $("ebAudio").hidden = false; }
-    });
+    sb.storage
+      .from("error-book")
+      .createSignedUrl(existing.voice_note_path, 3600)
+      .then(({ data: u }) => {
+        if (u?.signedUrl) {
+          $("ebAudio").src = u.signedUrl;
+          $("ebAudio").hidden = false;
+        }
+      });
   }
   if (existing) {
     $("ebCategory").value = existing.category;
     $("ebNote").value = existing.comment || "";
-    $("ebVoiceStatus").textContent = existing.voice_note_path ? "A voice note is already saved. Record again to replace it." : "";
+    $("ebVoiceStatus").textContent = existing.voice_note_path
+      ? "A voice note is already saved. Record again to replace it."
+      : "";
   } else {
-    $("ebCategory").value = question.is_correct === false ? "Concept gap" : "Other";
+    $("ebCategory").value =
+      question.is_correct === false ? "Concept gap" : "Other";
   }
 
-  let recorder = null, chunks = [], voiceBlob = null, imageFile = null, recTimer = null;
+  let recorder = null,
+    chunks = [],
+    voiceBlob = null,
+    imageFile = null,
+    recTimer = null;
   const close = () => {
     clearInterval(recTimer);
     if (recorder?.state === "recording") recorder.stop();
@@ -1715,10 +2753,14 @@ async function openErrorBookModal(question, attemptId, onSaved, entry = null) {
   };
   $("ebClose").onclick = close;
   $("ebCancel").onclick = close;
-  wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
+  wrap.addEventListener("click", (e) => {
+    if (e.target === wrap) close();
+  });
 
   const showPicked = () => {
-    $("ebImageName").textContent = imageFile ? `Ready · ${Math.max(1, Math.round(imageFile.size / 1024))} KB` : "";
+    $("ebImageName").textContent = imageFile
+      ? `Ready · ${Math.max(1, Math.round(imageFile.size / 1024))} KB`
+      : "";
     $("ebImageEdit").hidden = !imageFile;
     const img = $("ebImagePreview");
     if (imageFile) {
@@ -1742,7 +2784,8 @@ async function openErrorBookModal(question, attemptId, onSaved, entry = null) {
   $("ebImage").addEventListener("change", onFileInput);
   $("ebImageCam").addEventListener("change", onFileInput);
   $("ebCamBtn").addEventListener("click", async () => {
-    if (!navigator.mediaDevices?.getUserMedia || !window.isSecureContext) return $("ebImageCam").click();
+    if (!navigator.mediaDevices?.getUserMedia || !window.isSecureContext)
+      return $("ebImageCam").click();
     const shot = await openCameraCapture();
     if (shot) await handlePicked(shot);
   });
@@ -1757,42 +2800,64 @@ async function openErrorBookModal(question, attemptId, onSaved, entry = null) {
 
   $("ebRec").addEventListener("click", async () => {
     if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
-      $("ebVoiceStatus").textContent = "Voice recording is not supported in this browser.";
+      $("ebVoiceStatus").textContent =
+        "Voice recording is not supported in this browser.";
       return;
     }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       chunks = [];
       recorder = new MediaRecorder(stream, recorderOptions());
-      recorder.addEventListener("dataavailable", (ev) => { if (ev.data.size) chunks.push(ev.data); });
+      recorder.addEventListener("dataavailable", (ev) => {
+        if (ev.data.size) chunks.push(ev.data);
+      });
       recorder.addEventListener("stop", () => {
         clearInterval(recTimer);
         stream.getTracks().forEach((t) => t.stop());
-        voiceBlob = new Blob(chunks, { type: cleanMime(recorder.mimeType) || "audio/webm" });
+        voiceBlob = new Blob(chunks, {
+          type: cleanMime(recorder.mimeType) || "audio/webm",
+        });
         if (!voiceBlob.size) {
           voiceBlob = null;
-          $("ebVoiceStatus").textContent = "Nothing was recorded. Check your microphone and try again.";
-          $("ebRec").disabled = false; $("ebStop").disabled = true; $("ebDel").disabled = true;
+          $("ebVoiceStatus").textContent =
+            "Nothing was recorded. Check your microphone and try again.";
+          $("ebRec").disabled = false;
+          $("ebStop").disabled = true;
+          $("ebDel").disabled = true;
           return;
         }
         $("ebAudio").src = URL.createObjectURL(voiceBlob);
         $("ebAudio").hidden = false;
         $("ebVoiceStatus").textContent = "Recorded. Press play to listen.";
-        $("ebRec").disabled = false; $("ebStop").disabled = true; $("ebDel").disabled = false;
+        $("ebRec").disabled = false;
+        $("ebStop").disabled = true;
+        $("ebDel").disabled = false;
       });
       recorder.start();
-      $("ebRec").disabled = true; $("ebStop").disabled = false;
+      $("ebRec").disabled = true;
+      $("ebStop").disabled = false;
       const t0 = Date.now();
       $("ebVoiceStatus").textContent = "Recording… 0s. Press Stop when done.";
-      recTimer = setInterval(() => { $("ebVoiceStatus").textContent = `Recording… ${Math.round((Date.now() - t0) / 1000)}s. Press Stop when done.`; }, 500);
+      recTimer = setInterval(() => {
+        $("ebVoiceStatus").textContent =
+          `Recording… ${Math.round((Date.now() - t0) / 1000)}s. Press Stop when done.`;
+      }, 500);
     } catch (err) {
-      $("ebVoiceStatus").textContent = err?.name === "NotAllowedError" ? "Microphone is blocked. Allow it in browser settings." : "Could not start recording.";
+      $("ebVoiceStatus").textContent =
+        err?.name === "NotAllowedError"
+          ? "Microphone is blocked. Allow it in browser settings."
+          : "Could not start recording.";
     }
   });
-  $("ebStop").addEventListener("click", () => { if (recorder?.state === "recording") recorder.stop(); });
+  $("ebStop").addEventListener("click", () => {
+    if (recorder?.state === "recording") recorder.stop();
+  });
   $("ebDel").addEventListener("click", () => {
-    voiceBlob = null; $("ebAudio").hidden = true; $("ebAudio").removeAttribute("src");
-    $("ebDel").disabled = true; $("ebVoiceStatus").textContent = "Recording deleted.";
+    voiceBlob = null;
+    $("ebAudio").hidden = true;
+    $("ebAudio").removeAttribute("src");
+    $("ebDel").disabled = true;
+    $("ebVoiceStatus").textContent = "Recording deleted.";
   });
 
   $("ebSave").addEventListener("click", async () => {
@@ -1802,38 +2867,70 @@ async function openErrorBookModal(question, attemptId, onSaved, entry = null) {
       msg.textContent = "Please write the question or a short reminder.";
       return;
     }
-    btn.disabled = true; btn.textContent = "Saving…"; msg.textContent = "";
+    btn.disabled = true;
+    btn.textContent = "Saving…";
+    msg.textContent = "";
     const payload = {
-      student_id: user.id, attempt_id: attemptId, question_id: question.id,
-      question_text: $("ebQuestion") && !$("ebQuestion").hidden ? $("ebQuestion").value.trim() : question.question_text, category: $("ebCategory").value,
-      subject: $("ebSubject").value || null, chapter: $("ebChapter").value || null,
-      comment: $("ebNote").value.trim() || null, updated_at: new Date().toISOString(),
+      student_id: user.id,
+      attempt_id: attemptId,
+      question_id: question.id,
+      question_text:
+        $("ebQuestion") && !$("ebQuestion").hidden
+          ? $("ebQuestion").value.trim()
+          : question.question_text,
+      category: $("ebCategory").value,
+      subject: $("ebSubject").value || null,
+      chapter: $("ebChapter").value || null,
+      comment: $("ebNote").value.trim() || null,
+      updated_at: new Date().toISOString(),
     };
-    for (const [file, column, prefix, ext] of [[imageFile, "image_path", "images", ""], [voiceBlob, "voice_note_path", "voice-notes", audioExt(voiceBlob?.type)]]) {
+    for (const [file, column, prefix, ext] of [
+      [imageFile, "image_path", "images", ""],
+      [voiceBlob, "voice_note_path", "voice-notes", audioExt(voiceBlob?.type)],
+    ]) {
       if (!file) continue;
-      const name = file.name ? file.name.replace(/[^a-zA-Z0-9._-]/g, "_") : `voice-${Date.now()}${ext}`;
+      const name = file.name
+        ? file.name.replace(/[^a-zA-Z0-9._-]/g, "_")
+        : `voice-${Date.now()}${ext}`;
       const path = `${user.id}/${prefix}/${Date.now()}-${name}`;
-      const { error: upErr } = await sb.storage.from("error-book").upload(path, file, { upsert: false, contentType: cleanMime(file.type) });
+      const { error: upErr } = await sb.storage
+        .from("error-book")
+        .upload(path, file, {
+          upsert: false,
+          contentType: cleanMime(file.type),
+        });
       if (upErr) {
-        msg.textContent = /bucket/i.test(upErr.message || "") ? "Attachment storage is not set up yet. Ask the admin to run migration.sql." : `Upload failed: ${friendlyError(upErr)}`;
-        btn.disabled = false; btn.textContent = "Save to Error Book";
+        msg.textContent = /bucket/i.test(upErr.message || "")
+          ? "Attachment storage is not set up yet. Ask the admin to run migration.sql."
+          : `Upload failed: ${friendlyError(upErr)}`;
+        btn.disabled = false;
+        btn.textContent = "Save to Error Book";
         return;
       }
       payload[column] = path;
     }
     const { error } = existing?.id
-      ? await sb.from("error_book_entries").update(payload).eq("id", existing.id)
+      ? await sb
+          .from("error_book_entries")
+          .update(payload)
+          .eq("id", existing.id)
       : isManual
         ? await sb.from("error_book_entries").insert(payload)
-        : await sb.from("error_book_entries").upsert(payload, { onConflict: "student_id,attempt_id,question_id" });
+        : await sb
+            .from("error_book_entries")
+            .upsert(payload, {
+              onConflict: "student_id,attempt_id,question_id",
+            });
     if (error) {
       msg.textContent = friendlyError(error);
-      btn.disabled = false; btn.textContent = "Save to Error Book";
+      btn.disabled = false;
+      btn.textContent = "Save to Error Book";
       return;
     }
     close();
     toast("Saved to your Error Book", "success");
-    if (document.getElementById("view-errors")?.classList.contains("active")) enterErrorBookView();
+    if (document.getElementById("view-errors")?.classList.contains("active"))
+      enterErrorBookView();
     if (onSaved) onSaved();
   });
 }
@@ -1859,55 +2956,268 @@ function renderPracticeOverallStrip(strip, data, error) {
   </div>`;
 }
 
-
-
 /* =========================================================================
    SYLLABUS CHAPTERS — JEE Main, JEE Advanced and NEET (grouped by subject)
    ========================================================================= */
 const CHAPTER_GROUPS = [
-  { subject: "Physics", group: "Physics", chapters: ["Units and Measurements","Kinematics","Laws of Motion","Work, Energy and Power","Centre of Mass and Collisions","Rotational Motion","Gravitation","Mechanical Properties of Solids","Fluid Mechanics","Thermal Properties of Matter","Thermodynamics","Kinetic Theory of Gases","Oscillations (SHM)","Waves and Sound","Electrostatics","Capacitance","Current Electricity","Magnetic Effects of Current","Magnetism and Matter","Electromagnetic Induction","Alternating Current","Electromagnetic Waves","Ray Optics","Wave Optics","Dual Nature of Matter and Radiation","Atoms","Nuclei","Semiconductor Electronics","Communication Systems","Experimental Skills"] },
-  { subject: "Chemistry", group: "Chemistry: Physical", chapters: ["Some Basic Concepts (Mole Concept)","Atomic Structure","States of Matter","Chemical Thermodynamics","Chemical Equilibrium","Ionic Equilibrium","Redox Reactions","Solutions","Electrochemistry","Chemical Kinetics","Surface Chemistry","Solid State"] },
-  { subject: "Chemistry", group: "Chemistry: Inorganic", chapters: ["Periodic Table and Periodicity","Chemical Bonding and Molecular Structure","Hydrogen","s-Block Elements","p-Block Elements (Group 13 and 14)","p-Block Elements (Group 15 to 18)","d and f Block Elements","Coordination Compounds","Metallurgy","Qualitative Analysis","Environmental Chemistry"] },
-  { subject: "Chemistry", group: "Chemistry: Organic", chapters: ["General Organic Chemistry (GOC)","Isomerism","Hydrocarbons","Haloalkanes and Haloarenes","Alcohols, Phenols and Ethers","Aldehydes, Ketones and Carboxylic Acids","Amines","Biomolecules","Polymers","Chemistry in Everyday Life","Practical Organic Chemistry"] },
-  { subject: "Mathematics", group: "Mathematics", chapters: ["Sets, Relations and Functions","Complex Numbers","Quadratic Equations","Sequences and Series","Permutations and Combinations","Binomial Theorem","Matrices and Determinants","Trigonometry","Inverse Trigonometric Functions","Limits, Continuity and Differentiability","Application of Derivatives","Indefinite Integration","Definite Integration and Area","Differential Equations","Straight Lines","Circles","Parabola, Ellipse and Hyperbola","Vector Algebra","3D Geometry","Probability","Statistics","Mathematical Reasoning"] },
-  { subject: "Biology", group: "Biology: Botany (NEET)", chapters: ["The Living World","Biological Classification","Plant Kingdom","Morphology of Flowering Plants","Anatomy of Flowering Plants","Cell: The Unit of Life","Cell Cycle and Cell Division","Transport in Plants","Mineral Nutrition","Photosynthesis","Respiration in Plants","Plant Growth and Development","Sexual Reproduction in Flowering Plants","Principles of Inheritance and Variation","Molecular Basis of Inheritance","Microbes in Human Welfare","Biotechnology: Principles and Processes","Biotechnology and its Applications","Organisms and Populations","Ecosystem","Biodiversity and Conservation","Environmental Issues"] },
-  { subject: "Biology", group: "Biology: Zoology (NEET)", chapters: ["Animal Kingdom","Structural Organisation in Animals","Biomolecules (Biology)","Digestion and Absorption","Breathing and Exchange of Gases","Body Fluids and Circulation","Excretory Products and Elimination","Locomotion and Movement","Neural Control and Coordination","Chemical Coordination and Integration","Human Reproduction","Reproductive Health","Evolution","Human Health and Disease"] },
+  {
+    subject: "Physics",
+    group: "Physics",
+    chapters: [
+      "Units and Measurements",
+      "Kinematics",
+      "Laws of Motion",
+      "Work, Energy and Power",
+      "Centre of Mass and Collisions",
+      "Rotational Motion",
+      "Gravitation",
+      "Mechanical Properties of Solids",
+      "Fluid Mechanics",
+      "Thermal Properties of Matter",
+      "Thermodynamics",
+      "Kinetic Theory of Gases",
+      "Oscillations (SHM)",
+      "Waves and Sound",
+      "Electrostatics",
+      "Capacitance",
+      "Current Electricity",
+      "Magnetic Effects of Current",
+      "Magnetism and Matter",
+      "Electromagnetic Induction",
+      "Alternating Current",
+      "Electromagnetic Waves",
+      "Ray Optics",
+      "Wave Optics",
+      "Dual Nature of Matter and Radiation",
+      "Atoms",
+      "Nuclei",
+      "Semiconductor Electronics",
+      "Communication Systems",
+      "Experimental Skills",
+    ],
+  },
+  {
+    subject: "Chemistry",
+    group: "Chemistry: Physical",
+    chapters: [
+      "Some Basic Concepts (Mole Concept)",
+      "Atomic Structure",
+      "States of Matter",
+      "Chemical Thermodynamics",
+      "Chemical Equilibrium",
+      "Ionic Equilibrium",
+      "Redox Reactions",
+      "Solutions",
+      "Electrochemistry",
+      "Chemical Kinetics",
+      "Surface Chemistry",
+      "Solid State",
+    ],
+  },
+  {
+    subject: "Chemistry",
+    group: "Chemistry: Inorganic",
+    chapters: [
+      "Periodic Table and Periodicity",
+      "Chemical Bonding and Molecular Structure",
+      "Hydrogen",
+      "s-Block Elements",
+      "p-Block Elements (Group 13 and 14)",
+      "p-Block Elements (Group 15 to 18)",
+      "d and f Block Elements",
+      "Coordination Compounds",
+      "Metallurgy",
+      "Qualitative Analysis",
+      "Environmental Chemistry",
+    ],
+  },
+  {
+    subject: "Chemistry",
+    group: "Chemistry: Organic",
+    chapters: [
+      "General Organic Chemistry (GOC)",
+      "Isomerism",
+      "Hydrocarbons",
+      "Haloalkanes and Haloarenes",
+      "Alcohols, Phenols and Ethers",
+      "Aldehydes, Ketones and Carboxylic Acids",
+      "Amines",
+      "Biomolecules",
+      "Polymers",
+      "Chemistry in Everyday Life",
+      "Practical Organic Chemistry",
+    ],
+  },
+  {
+    subject: "Mathematics",
+    group: "Mathematics",
+    chapters: [
+      "Sets, Relations and Functions",
+      "Complex Numbers",
+      "Quadratic Equations",
+      "Sequences and Series",
+      "Permutations and Combinations",
+      "Binomial Theorem",
+      "Matrices and Determinants",
+      "Trigonometry",
+      "Inverse Trigonometric Functions",
+      "Limits, Continuity and Differentiability",
+      "Application of Derivatives",
+      "Indefinite Integration",
+      "Definite Integration and Area",
+      "Differential Equations",
+      "Straight Lines",
+      "Circles",
+      "Parabola, Ellipse and Hyperbola",
+      "Vector Algebra",
+      "3D Geometry",
+      "Probability",
+      "Statistics",
+      "Mathematical Reasoning",
+    ],
+  },
+  {
+    subject: "Biology",
+    group: "Biology: Botany (NEET)",
+    chapters: [
+      "The Living World",
+      "Biological Classification",
+      "Plant Kingdom",
+      "Morphology of Flowering Plants",
+      "Anatomy of Flowering Plants",
+      "Cell: The Unit of Life",
+      "Cell Cycle and Cell Division",
+      "Transport in Plants",
+      "Mineral Nutrition",
+      "Photosynthesis",
+      "Respiration in Plants",
+      "Plant Growth and Development",
+      "Sexual Reproduction in Flowering Plants",
+      "Principles of Inheritance and Variation",
+      "Molecular Basis of Inheritance",
+      "Microbes in Human Welfare",
+      "Biotechnology: Principles and Processes",
+      "Biotechnology and its Applications",
+      "Organisms and Populations",
+      "Ecosystem",
+      "Biodiversity and Conservation",
+      "Environmental Issues",
+    ],
+  },
+  {
+    subject: "Biology",
+    group: "Biology: Zoology (NEET)",
+    chapters: [
+      "Animal Kingdom",
+      "Structural Organisation in Animals",
+      "Biomolecules (Biology)",
+      "Digestion and Absorption",
+      "Breathing and Exchange of Gases",
+      "Body Fluids and Circulation",
+      "Excretory Products and Elimination",
+      "Locomotion and Movement",
+      "Neural Control and Coordination",
+      "Chemical Coordination and Integration",
+      "Human Reproduction",
+      "Reproductive Health",
+      "Evolution",
+      "Human Health and Disease",
+    ],
+  },
 ];
 
 function fillChapterSelect(select, placeholder, subject) {
   if (!select) return;
   const keep = select.value;
-  const groups = CHAPTER_GROUPS.filter((g) => !subject || g.subject === subject);
+  const groups = CHAPTER_GROUPS.filter(
+    (g) => !subject || g.subject === subject,
+  );
   select.innerHTML =
     `<option value="">${escapeHtml(placeholder)}</option>` +
     groups
-      .map((g) => `<optgroup label="${escapeHtml(g.group)}">${g.chapters.map((c) => `<option>${escapeHtml(c)}</option>`).join("")}</optgroup>`)
+      .map(
+        (g) =>
+          `<optgroup label="${escapeHtml(g.group)}">${g.chapters.map((c) => `<option>${escapeHtml(c)}</option>`).join("")}</optgroup>`,
+      )
       .join("");
-  if (keep && [...select.options].some((o) => o.value === keep)) select.value = keep;
+  if (keep && [...select.options].some((o) => o.value === keep))
+    select.value = keep;
 }
 
 const PR_CATS = [
-  { key: "pyq", icon: "📜", title: "PYQ Practice", sub: "Previous year questions" },
-  { key: "topic", icon: "🎯", title: "Chapter-wise", sub: "One chapter at a time" },
-  { key: "subject", icon: "📚", title: "Subject-wise", sub: "Physics, Chemistry, Maths, Biology" },
-  { key: "jee_main_paper", icon: "🧪", title: "JEE Main Papers", sub: "Full shift papers" },
-  { key: "jee_adv_paper", icon: "🚀", title: "JEE Advanced Papers", sub: "Paper 1 and Paper 2" },
-  { key: "neet_paper", icon: "🧬", title: "NEET Papers", sub: "Full NEET papers" },
-  { key: "full", icon: "🏁", title: "Full Syllabus Tests", sub: "Complete exam practice" },
-  { key: "custom", icon: "✨", title: "Custom Tests", sub: "Made on your request" },
+  {
+    key: "pyq",
+    icon: "📜",
+    title: "PYQ Practice",
+    sub: "Previous year questions",
+  },
+  {
+    key: "topic",
+    icon: "🎯",
+    title: "Chapter-wise",
+    sub: "One chapter at a time",
+  },
+  {
+    key: "subject",
+    icon: "📚",
+    title: "Subject-wise",
+    sub: "Physics, Chemistry, Maths, Biology",
+  },
+  {
+    key: "jee_main_paper",
+    icon: "🧪",
+    title: "JEE Main Papers",
+    sub: "Full shift papers",
+  },
+  {
+    key: "jee_adv_paper",
+    icon: "🚀",
+    title: "JEE Advanced Papers",
+    sub: "Paper 1 and Paper 2",
+  },
+  {
+    key: "neet_paper",
+    icon: "🧬",
+    title: "NEET Papers",
+    sub: "Full NEET papers",
+  },
+  {
+    key: "full",
+    icon: "🏁",
+    title: "Full Syllabus Tests",
+    sub: "Complete exam practice",
+  },
+  {
+    key: "custom",
+    icon: "✨",
+    title: "Custom Tests",
+    sub: "Made on your request",
+  },
 ];
-const PR_CAT_LABEL = Object.fromEntries([["all", "Practice"], ...PR_CATS.map((c) => [c.key, c.title])]);
+const PR_CAT_LABEL = Object.fromEntries([
+  ["all", "Practice"],
+  ...PR_CATS.map((c) => [c.key, c.title]),
+]);
 Object.assign(practiceHub, { subject: "", chapter: "", exam: "", sort: "new" });
 
 function renderPracticeCategories() {
   const box = document.getElementById("practiceCategories");
   if (!box) return;
-  const count = (key) => practiceHub.rows.filter((r) => r.practice_category === key).length;
+  const count = (key) =>
+    practiceHub.rows.filter((r) => r.practice_category === key).length;
   const card = (key, icon, title, sub, n) =>
     `<a class="pr-cat" href="#/practice-list?cat=${key}"><span class="pr-cat-icon">${icon}</span><span class="pr-cat-text"><b>${escapeHtml(title)}</b></span><span class="pr-cat-n">${n}</span></a>`;
   box.innerHTML =
-    card("all", "📚", "All Practice", "Every test in one list", practiceHub.rows.length) +
-    PR_CATS.map((c) => card(c.key, c.icon, c.title, c.sub, count(c.key))).join("");
+    card(
+      "all",
+      "📚",
+      "All Practice",
+      "Every test in one list",
+      practiceHub.rows.length,
+    ) +
+    PR_CATS.map((c) => card(c.key, c.icon, c.title, c.sub, count(c.key))).join(
+      "",
+    );
 }
 
 function bindPracticeHub() {
@@ -1916,10 +3226,15 @@ function bindPracticeHub() {
   fillChapterSelect(document.getElementById("pcChapter"), "All chapters");
   const on = (id, key, evt = "change") =>
     document.getElementById(id).addEventListener(evt, (e) => {
-      practiceHub[key] = key === "q" ? e.target.value.trim().toLowerCase() : e.target.value;
+      practiceHub[key] =
+        key === "q" ? e.target.value.trim().toLowerCase() : e.target.value;
       if (key === "subject") {
         practiceHub.chapter = "";
-        fillChapterSelect(document.getElementById("pcChapter"), "All chapters", practiceHub.subject);
+        fillChapterSelect(
+          document.getElementById("pcChapter"),
+          "All chapters",
+          practiceHub.subject,
+        );
         document.getElementById("pcChapter").value = "";
       }
       renderPracticeHubList();
@@ -1935,36 +3250,70 @@ function renderPracticeHubList() {
   const target = document.getElementById("pcList");
   if (!target) return;
   const h = practiceHub;
-  const has = (arr, v) => (arr || []).some((x) => String(x).toLowerCase() === v.toLowerCase());
-  const inCategory = h.rows.filter((r) => h.cat === "all" || r.practice_category === h.cat);
+  const has = (arr, v) =>
+    (arr || []).some((x) => String(x).toLowerCase() === v.toLowerCase());
+  const inCategory = h.rows.filter(
+    (r) => h.cat === "all" || r.practice_category === h.cat,
+  );
   const filtering = !!(h.q || h.exam || h.subject || h.chapter);
 
   // labels only appear when this category really has labelled tests
-  const labels = h.cat === "all" ? [] : (h.labels || []).filter((l) => inCategory.some((r) => r.label_id === l.id));
+  const labels =
+    h.cat === "all"
+      ? []
+      : (h.labels || []).filter((l) =>
+          inCategory.some((r) => r.label_id === l.id),
+        );
   const grouped = labels.length > 0 && !filtering;
-  const current = grouped && h.label ? labels.find((l) => l.id === h.label) : null;
+  const current =
+    grouped && h.label ? labels.find((l) => l.id === h.label) : null;
   let pool = inCategory;
-  if (grouped) pool = current ? inCategory.filter((r) => r.label_id === current.id) : inCategory.filter((r) => !labels.some((l) => l.id === r.label_id));
+  if (grouped)
+    pool = current
+      ? inCategory.filter((r) => r.label_id === current.id)
+      : inCategory.filter((r) => !labels.some((l) => l.id === r.label_id));
 
   renderPracticeLabelArea(grouped, labels, current, inCategory, pool);
 
   let rows = pool.filter((r) => {
-    if (h.q && !String(r.title || "").toLowerCase().includes(h.q)) return false;
+    if (
+      h.q &&
+      !String(r.title || "")
+        .toLowerCase()
+        .includes(h.q)
+    )
+      return false;
     if (h.exam && r.exam !== h.exam) return false;
-    if (h.subject && r.practice_subject !== h.subject && !has(r.subjects, h.subject)) return false;
-    if (h.chapter && String(r.practice_chapter || "").toLowerCase() !== h.chapter.toLowerCase() && !has(r.chapters, h.chapter)) return false;
+    if (
+      h.subject &&
+      r.practice_subject !== h.subject &&
+      !has(r.subjects, h.subject)
+    )
+      return false;
+    if (
+      h.chapter &&
+      String(r.practice_chapter || "").toLowerCase() !==
+        h.chapter.toLowerCase() &&
+      !has(r.chapters, h.chapter)
+    )
+      return false;
     return true;
   });
   const sorters = {
     new: (a, b) => new Date(b.created_at) - new Date(a.created_at),
-    fresh: (a, b) => (a.attempts ? 1 : 0) - (b.attempts ? 1 : 0) || new Date(b.created_at) - new Date(a.created_at),
+    fresh: (a, b) =>
+      (a.attempts ? 1 : 0) - (b.attempts ? 1 : 0) ||
+      new Date(b.created_at) - new Date(a.created_at),
     most: (a, b) => b.attempts - a.attempts,
     weak: (a, b) => (a.avg_pct ?? 101) - (b.avg_pct ?? 101),
     az: (a, b) => String(a.title).localeCompare(String(b.title)),
   };
   rows = rows.sort(sorters[h.sort] || sorters.new);
   const countEl = document.getElementById("pcCount");
-  if (countEl) countEl.textContent = pool.length ? `${rows.length} of ${pool.length} test${pool.length === 1 ? "" : "s"}` : "";
+  if (countEl)
+    countEl.textContent = pool.length
+      ? `${rows.length} of ${pool.length} test${pool.length === 1 ? "" : "s"}`
+      : "";
   if (!inCategory.length) {
     target.innerHTML = `<div class="empty-state pr-empty">No tests here yet.</div>`;
     return;
@@ -1980,7 +3329,11 @@ function renderPracticeHubList() {
   target.innerHTML = rows
     .map((r) => {
       const href = `#/exam?test=${encodeURIComponent(r.test_id)}&practice=1`;
-      const cta = r.in_progress_attempt_id ? "Continue" : r.attempts ? "Again" : "Start";
+      const cta = r.in_progress_attempt_id
+        ? "Continue"
+        : r.attempts
+          ? "Again"
+          : "Start";
       const progress = r.attempts
         ? `<div class="pr-mini"><span><b>${r.attempts}</b>×</span><span>Best <b class="${prTone(r.best_pct)}">${prPct(r.best_pct)}</b></span><span>Avg <b class="${prTone(r.avg_pct)}">${prPct(r.avg_pct)}</b></span></div>`
         : "";
@@ -2017,9 +3370,18 @@ async function openSyllabusModal(testId) {
     document.body.classList.remove("eb-open");
     document.removeEventListener("keydown", onKey);
   };
-  const onKey = (e) => { if (e.key === "Escape") close(); };
+  const onKey = (e) => {
+    if (e.key === "Escape") close();
+  };
   document.addEventListener("keydown", onKey);
-  wrap.addEventListener("click", (e) => { if (e.target === wrap || e.target.closest(".syl-x") || e.target.closest(".syl-foot a")) close(); });
+  wrap.addEventListener("click", (e) => {
+    if (
+      e.target === wrap ||
+      e.target.closest(".syl-x") ||
+      e.target.closest(".syl-foot a")
+    )
+      close();
+  });
 
   const info = await loadTestStartInfo(testId);
   const minutes = info?.duration_minutes ?? row.duration_minutes;
@@ -2027,13 +3389,20 @@ async function openSyllabusModal(testId) {
   const marks = info?.total_marks ?? row.total_marks;
   const subjects = info?.subjects?.length
     ? info.subjects
-    : (row.subjects || []).map((name) => ({ subject: name, chapters: (row.chapters || []) }));
+    : (row.subjects || []).map((name) => ({
+        subject: name,
+        chapters: row.chapters || [],
+      }));
   const e = escapeHtml;
   const syllabus = subjects.length
-    ? subjects.map((sub) => `<div class="ins-subject">
+    ? subjects
+        .map(
+          (sub) => `<div class="ins-subject">
         <div class="ins-subject-top"><strong>${e(sub.subject)}</strong>${sub.question_count ? `<span>${sub.question_count} Q</span>` : ""}</div>
         <div class="ins-chips">${(sub.chapters || []).length ? sub.chapters.map((c) => `<span>${e(c)}</span>`).join("") : `<em>Chapters not listed</em>`}</div>
-      </div>`).join("")
+      </div>`,
+        )
+        .join("")
     : `<p class="ins-muted">The syllabus is not listed for this test.</p>`;
   wrap.querySelector(".syl-body").innerHTML = `
     <div class="syl-facts"><div><strong>⏱ ${e(minutes ?? "—")} min</strong><span>Time</span></div><div><strong>${e(qn ?? "—")}</strong><span>Questions</span></div><div><strong>${e(marks ?? "—")}</strong><span>Marks</span></div></div>
@@ -2068,7 +3437,17 @@ function renderPracticeLabelArea(grouped, labels, current, inCategory, pool) {
 }
 
 async function requestStatusChip(status) {
-  const tone = { Pending: "locked", "Under Review": "review", Approved: "is-on", "Test Created": "is-on", Scheduled: "is-on", Done: "is-on", Rejected: "closed", Cancelled: "closed" }[status] || "locked";
+  const tone =
+    {
+      Pending: "locked",
+      "Under Review": "review",
+      Approved: "is-on",
+      "Test Created": "is-on",
+      Scheduled: "is-on",
+      Done: "is-on",
+      Rejected: "closed",
+      Cancelled: "closed",
+    }[status] || "locked";
   return `<span class="status-tag ${tone}">${escapeHtml(status)}</span>`;
 }
 
@@ -2077,7 +3456,9 @@ async function renderCustomRequestsPanel(target) {
   target.innerHTML = `<div class="card pr-section"><div class="empty-state">Loading your requests…</div></div>`;
   const { data, error } = await sb
     .from("test_requests")
-    .select("id, exam, subjects, question_count, status, admin_note, created_at, updated_at")
+    .select(
+      "id, exam, subjects, question_count, status, admin_note, created_at, updated_at",
+    )
     .order("created_at", { ascending: false });
   const list = error
     ? `<div class="error-box">${escapeHtml(friendlyError(error))}</div>`
@@ -2085,7 +3466,8 @@ async function renderCustomRequestsPanel(target) {
       ? `<p class="text-muted">You have not requested a custom test yet.</p>`
       : data
           .map(
-            (r) => `<div class="pr-req"><div><b>${escapeHtml(r.exam)}</b> · ${escapeHtml((r.subjects || []).join(", ") || "All subjects")} · ${Number(r.question_count)} Q<small>Requested ${formatDateTime(r.created_at)}</small>${r.admin_note ? `<div class="req-admin-reply">💬 ${escapeHtml(r.admin_note)}</div>` : ""}</div>${requestStatusChip(r.status)}</div>`,
+            (r) =>
+              `<div class="pr-req"><div><b>${escapeHtml(r.exam)}</b> · ${escapeHtml((r.subjects || []).join(", ") || "All subjects")} · ${Number(r.question_count)} Q<small>Requested ${formatDateTime(r.created_at)}</small>${r.admin_note ? `<div class="req-admin-reply">💬 ${escapeHtml(r.admin_note)}</div>` : ""}</div>${requestStatusChip(r.status)}</div>`,
           )
           .join("");
   target.innerHTML = `<section class="card pr-section"><div class="pr-req-head"><h2>Your custom test requests</h2><a class="btn btn-primary btn-sm" href="#/practice-library?category=custom">＋ Request a test</a></div>${list}</section>`;
@@ -2105,20 +3487,35 @@ async function renderPracticeUpdates() {
     .limit(3);
   if (!data?.length) return;
   box.innerHTML = data
-    .map((r) => `<a class="pr-update" href="#/practice-list?cat=custom">📬 <span>Your <b>${escapeHtml(r.exam)}</b> custom test request is now</span> ${requestStatusChip(r.status)}</a>`)
+    .map(
+      (r) =>
+        `<a class="pr-update" href="#/practice-list?cat=custom">📬 <span>Your <b>${escapeHtml(r.exam)}</b> custom test request is now</span> ${requestStatusChip(r.status)}</a>`,
+    )
     .join("");
 }
-
 
 async function enterPracticeCategoryView() {
   const cat = qs("cat") || "all";
   bindPracticeHub();
-  Object.assign(practiceHub, { cat, label: qs("label") || "", q: "", subject: "", chapter: "", exam: "", sort: "new", labels: [] });
-  ["pcSearch", "pcExam", "pcSubject", "pcChapter"].forEach((id) => (document.getElementById(id).value = ""));
+  Object.assign(practiceHub, {
+    cat,
+    label: qs("label") || "",
+    q: "",
+    subject: "",
+    chapter: "",
+    exam: "",
+    sort: "new",
+    labels: [],
+  });
+  ["pcSearch", "pcExam", "pcSubject", "pcChapter"].forEach(
+    (id) => (document.getElementById(id).value = ""),
+  );
   fillChapterSelect(document.getElementById("pcChapter"), "All chapters");
   document.getElementById("pcSort").value = "new";
   const meta = PR_CATS.find((c) => c.key === cat);
-  document.getElementById("pcTitle").textContent = meta ? `${meta.icon} ${meta.title}` : "All Practice";
+  document.getElementById("pcTitle").textContent = meta
+    ? `${meta.icon} ${meta.title}`
+    : "All Practice";
   document.getElementById("pcSub").textContent = "";
   document.getElementById("pcLabels").innerHTML = "";
   const extra = document.getElementById("pcExtra");
@@ -2130,7 +3527,12 @@ async function enterPracticeCategoryView() {
     cachedRpc("get_practice_hub"),
     cat === "all"
       ? Promise.resolve({ data: [] })
-      : sb.from("practice_labels").select("id, category, name, sort_order").eq("category", cat).order("sort_order").order("name"),
+      : sb
+          .from("practice_labels")
+          .select("id, category, name, sort_order")
+          .eq("category", cat)
+          .order("sort_order")
+          .order("name"),
   ]);
   if (hub.error) {
     list.innerHTML = `<div class="error-box">${escapeHtml(prDeploymentHint(hub.error))}</div>`;
@@ -2149,7 +3551,9 @@ async function enterPracticeReportView() {
     return;
   }
   body.innerHTML = `<div class="empty-state">Loading report…</div>`;
-  const { data, error } = await sb.rpc("get_practice_test_report", { p_test_id: testId });
+  const { data, error } = await sb.rpc("get_practice_test_report", {
+    p_test_id: testId,
+  });
   if (error || !data) {
     body.innerHTML = `<a class="practice-back-link" href="#/practice">← Practice</a><div class="error-box">${escapeHtml(prDeploymentHint(error))}</div>`;
     return;
@@ -2165,8 +3569,11 @@ async function enterPracticeReportView() {
   const last = attempts[attempts.length - 1];
   const prev = attempts.length > 1 ? attempts[attempts.length - 2] : null;
   const best = Math.max(...attempts.map((a) => Number(a.percentage)));
-  const avgAcc = attempts.reduce((n, a) => n + Number(a.accuracy), 0) / attempts.length;
-  const delta = prev ? Math.round(Number(last.percentage) - Number(prev.percentage)) : null;
+  const avgAcc =
+    attempts.reduce((n, a) => n + Number(a.accuracy), 0) / attempts.length;
+  const delta = prev
+    ? Math.round(Number(last.percentage) - Number(prev.percentage))
+    : null;
   const deltaHtml =
     delta == null
       ? ""
@@ -2192,7 +3599,13 @@ async function enterPracticeReportView() {
     .join("");
 
   const subjects = (data.subjects || [])
-    .map((x) => prBar(x.subject, x.accuracy, `${x.correct} right · ${x.wrong} wrong · ${x.unanswered} skipped`))
+    .map((x) =>
+      prBar(
+        x.subject,
+        x.accuracy,
+        `${x.correct} right · ${x.wrong} wrong · ${x.unanswered} skipped`,
+      ),
+    )
     .join("");
   const weak = (data.chapters || [])
     .slice(0, 5)
@@ -2200,7 +3613,8 @@ async function enterPracticeReportView() {
     .join("");
   const hard = (data.hardest_questions || [])
     .map(
-      (q) => `<div class="pr-hq"><b>Q${q.question_order}</b><span>${escapeHtml(q.subject || "")}${q.chapter ? " · " + escapeHtml(q.chapter) : ""}</span><em class="pr-bad">missed ${q.misses} of ${q.tries}</em></div>`,
+      (q) =>
+        `<div class="pr-hq"><b>Q${q.question_order}</b><span>${escapeHtml(q.subject || "")}${q.chapter ? " · " + escapeHtml(q.chapter) : ""}</span><em class="pr-bad">missed ${q.misses} of ${q.tries}</em></div>`,
     )
     .join("");
 
@@ -2240,8 +3654,10 @@ async function enterPracticeLibraryView() {
   };
   const [title, description] = labels[category] || labels.all;
   document.getElementById("practiceLibraryTitle").textContent = title;
-  document.getElementById("practiceLibraryDescription").textContent = description;
-  document.getElementById("practiceLibraryHeading").textContent = category === "custom" ? "Request a custom test" : title;
+  document.getElementById("practiceLibraryDescription").textContent =
+    description;
+  document.getElementById("practiceLibraryHeading").textContent =
+    category === "custom" ? "Request a custom test" : title;
   await renderPracticeCategory(target, category);
 }
 
@@ -2259,20 +3675,41 @@ async function renderPracticeCategory(target, category) {
     return;
   }
   const allEntries = merged || [];
-  const { data: practiceMeta } = await sb.from("tests").select("id, practice_category, practice_only").in("id", allEntries.map((entry) => entry.id));
-  const metaById = new Map((practiceMeta || []).map((item) => [String(item.id), item]));
-  allEntries.forEach((entry) => Object.assign(entry, metaById.get(String(entry.id)) || {}));
-  const practice = allEntries.filter((entry) => entry.is_practice || entry.practice_only);
+  const { data: practiceMeta } = await sb
+    .from("tests")
+    .select("id, practice_category, practice_only")
+    .in(
+      "id",
+      allEntries.map((entry) => entry.id),
+    );
+  const metaById = new Map(
+    (practiceMeta || []).map((item) => [String(item.id), item]),
+  );
+  allEntries.forEach((entry) =>
+    Object.assign(entry, metaById.get(String(entry.id)) || {}),
+  );
+  const practice = allEntries.filter(
+    (entry) => entry.is_practice || entry.practice_only,
+  );
   if (!practice.length) {
     target.innerHTML = `<div class="empty-state">No practice collections are published yet. Check back after the admin publishes one.</div>`;
     return;
   }
-  const filtered = category === "all" ? practice : practice.filter((entry) =>
-    entry.practice_category === category ||
-    (category === "pyq" && /pyq|shift|previous year/i.test(entry.title || "")) ||
-    (category === "topic" && /topic|chapter|subject/i.test(entry.title || "")) ||
-    (category === "full" && !/pyq|shift|previous year|topic|chapter|subject/i.test(entry.title || "")),
-  );
+  const filtered =
+    category === "all"
+      ? practice
+      : practice.filter(
+          (entry) =>
+            entry.practice_category === category ||
+            (category === "pyq" &&
+              /pyq|shift|previous year/i.test(entry.title || "")) ||
+            (category === "topic" &&
+              /topic|chapter|subject/i.test(entry.title || "")) ||
+            (category === "full" &&
+              !/pyq|shift|previous year|topic|chapter|subject/i.test(
+                entry.title || "",
+              )),
+        );
   target.innerHTML = filtered.length
     ? `<section class="practice-group"><div class="practice-group-heading"><h3>${escapeHtml(category === "all" ? "All available tests" : `${category[0].toUpperCase()}${category.slice(1)} tests`)}</h3><span>${filtered.length} available</span></div><div class="tests-card-grid">${filtered.map((entry) => testCardHtml({ ...entry, is_practice: true, practice_available: true })).join("")}</div></section>`
     : `<div class="empty-state">No tests right now.</div>`;
@@ -2298,13 +3735,19 @@ function bindCustomRequestForm() {
   const date = document.getElementById("requestDate");
   const minimum = requestMinimumDate();
   date.min = localDateTimeValue(minimum);
-  document.getElementById("requestDateHint").textContent = `Earliest date: ${minimum.toLocaleDateString(undefined, { dateStyle: "medium" })}.`;
+  document.getElementById("requestDateHint").textContent =
+    `Earliest date: ${minimum.toLocaleDateString(undefined, { dateStyle: "medium" })}.`;
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const selectedDate = new Date(date.value);
-    const subjects = [...document.querySelectorAll('input[name="requestSubject"]:checked')].map((input) => input.value);
+    const subjects = [
+      ...document.querySelectorAll('input[name="requestSubject"]:checked'),
+    ].map((input) => input.value);
     if (!subjects.length || !date.value || selectedDate < minimum) {
-      toast("Select at least one subject and a date at least 5 days from today.", "error");
+      toast(
+        "Select at least one subject and a date at least 5 days from today.",
+        "error",
+      );
       return;
     }
     const button = form.querySelector("button[type=submit]");
@@ -2312,19 +3755,27 @@ function bindCustomRequestForm() {
     const { error } = await sb.rpc("submit_test_request", {
       p_exam: document.getElementById("requestExam").value,
       p_subjects: subjects,
-      p_chapters: splitRequestLines(document.getElementById("requestChapters").value),
-      p_topics: splitRequestLines(document.getElementById("requestTopics").value),
+      p_chapters: splitRequestLines(
+        document.getElementById("requestChapters").value,
+      ),
+      p_topics: splitRequestLines(
+        document.getElementById("requestTopics").value,
+      ),
       p_difficulty: document.getElementById("requestDifficulty").value,
       p_question_source: document.getElementById("requestSource").value,
       p_question_count: Number(document.getElementById("requestCount").value),
-      p_duration_minutes: Number(document.getElementById("requestDuration").value),
+      p_duration_minutes: Number(
+        document.getElementById("requestDuration").value,
+      ),
       p_preferred_at: selectedDate.toISOString(),
-      p_student_note: document.getElementById("requestNote").value.trim() || null,
+      p_student_note:
+        document.getElementById("requestNote").value.trim() || null,
     });
     button.disabled = false;
     if (error) toast(friendlyError(error), "error");
     else {
-      document.getElementById("requestMessage").textContent = "Your custom request has been submitted for manual review.";
+      document.getElementById("requestMessage").textContent =
+        "Your custom request has been submitted for manual review.";
       await loadTestRequests();
     }
   });
@@ -2548,7 +3999,9 @@ function buildPastRows(merged) {
         kind: "practice",
         done,
         score: done ? Number(a.total_score) || 0 : null,
-        date: new Date(a.submitted_at || a.started_at || e.available_until).getTime(),
+        date: new Date(
+          a.submitted_at || a.started_at || e.available_until,
+        ).getTime(),
         hasPractice: true,
       });
       return;
@@ -2562,7 +4015,9 @@ function buildPastRows(merged) {
         kind: "main",
         done,
         score: done ? Number(a.total_score) || 0 : null,
-        date: new Date(a.submitted_at || a.started_at || e.available_until).getTime(),
+        date: new Date(
+          a.submitted_at || a.started_at || e.available_until,
+        ).getTime(),
         hasPractice: practiceTests.has(String(e.id)),
       });
     } else if (
@@ -2603,10 +4058,14 @@ function sortPastRows(rows, sort) {
   return rows.slice().sort(sorters[sort] || byDate);
 }
 
-
 function pastRowHtml(row) {
   const tid = encodeURIComponent(row.entry.id);
-  const tags = { main: "🔴 Live", new: "🔴 Live", infinite: "Practice", reattempt: "🔁 Re-attempt" };
+  const tags = {
+    main: "🔴 Live",
+    new: "🔴 Live",
+    infinite: "Practice",
+    reattempt: "🔁 Re-attempt",
+  };
   const retry = (ok) =>
     ok
       ? `<a class="btn btn-sm mt-reatt" href="#/exam?test=${tid}&practice=1"><span>🔁</span> Re-attempt</a>`
@@ -2615,22 +4074,37 @@ function pastRowHtml(row) {
     id
       ? `<button type="button" class="btn btn-sm btn-print" data-print-attempt="${id}"><span>📄</span> PDF</button>`
       : `<span class="btn btn-sm is-off" title="Finish an attempt first"><span>📄</span> PDF</span>`;
-  const resume = (practice) => `<a class="btn btn-primary btn-sm" href="#/exam?test=${tid}${practice ? "&practice=1&mode=keep" : ""}">Resume</a>`;
+  const resume = (practice) =>
+    `<a class="btn btn-primary btn-sm" href="#/exam?test=${tid}${practice ? "&practice=1&mode=keep" : ""}">Resume</a>`;
   let status = "";
   let buttons = "";
   if (row.kind === "infinite") {
     const h = row.hub;
     const last = h.last_attempt_id;
-    status = h.in_progress_attempt_id ? "In progress" : h.attempts ? `Best ${Math.round(Number(h.best_pct) || 0)}% · ${h.attempts} attempt${h.attempts === 1 ? "" : "s"}` : "Not finished";
-    const report = last ? `#/result?attempt=${last}` : `#/practice-report?test=${tid}`;
-    buttons = (h.in_progress_attempt_id ? resume(true) : `<a class="btn btn-primary btn-sm" href="${report}">Report</a>`) + retry(true) + pdf(last);
+    status = h.in_progress_attempt_id
+      ? "In progress"
+      : h.attempts
+        ? `Best ${Math.round(Number(h.best_pct) || 0)}% · ${h.attempts} attempt${h.attempts === 1 ? "" : "s"}`
+        : "Not finished";
+    const report = last
+      ? `#/result?attempt=${last}`
+      : `#/practice-report?test=${tid}`;
+    buttons =
+      (h.in_progress_attempt_id
+        ? resume(true)
+        : `<a class="btn btn-primary btn-sm" href="${report}">Report</a>`) +
+      retry(true) +
+      pdf(last);
   } else if (!row.done) {
     status = "In progress";
     buttons = resume(row.kind === "reattempt") + retry(false) + pdf(null);
   } else {
     const pct = pastPct(row);
     status = `${pct === null ? "—" : Math.round(pct) + "%"}${row.attempt?.disqualified_at ? " · not ranked" : ""}`;
-    buttons = `<a class="btn btn-primary btn-sm" href="#/result?attempt=${row.attempt.id}">Report</a>` + retry(row.kind === "reattempt" || !!row.canPractice) + pdf(row.attempt.id);
+    buttons =
+      `<a class="btn btn-primary btn-sm" href="#/result?attempt=${row.attempt.id}">Report</a>` +
+      retry(row.kind === "reattempt" || !!row.canPractice) +
+      pdf(row.attempt.id);
   }
   return `<article class="mt-card mt-${row.kind}">
     <div class="mt-main"><h3 class="mt-title">${escapeHtml(row.title)}</h3>
@@ -2649,27 +4123,33 @@ function renderPastTests() {
   // Infinite Practice tests and re-attempts of live tests are different things.
   const infiniteIds = new Set(testsPracticeHub.map((h) => String(h.test_id)));
   const live = buildPastRows(testsCatalogCache)
-    .filter((r) => !(r.kind === "practice" && infiniteIds.has(String(r.entry.id))))
+    .filter(
+      (r) => !(r.kind === "practice" && infiniteIds.has(String(r.entry.id))),
+    )
     .map((r) => (r.kind === "practice" ? { ...r, kind: "reattempt" } : r))
     .filter((r) => r.kind !== "new"); // only tests the student has started
-  const infinite = testsPracticeHub.filter((h) => h.attempts > 0 || h.in_progress_attempt_id).map((h) => ({
-    kind: "infinite",
-    hub: h,
-    title: h.title,
-    entry: { id: h.test_id },
-    attempt: null,
-    category: h.exam,
-    total: 100,
-    score: Number(h.best_pct) || 0,
-    done: !!h.attempts,
-    date: new Date(h.last_attempt_at || h.created_at).getTime(),
-  }));
+  const infinite = testsPracticeHub
+    .filter((h) => h.attempts > 0 || h.in_progress_attempt_id)
+    .map((h) => ({
+      kind: "infinite",
+      hub: h,
+      title: h.title,
+      entry: { id: h.test_id },
+      attempt: null,
+      category: h.exam,
+      total: 100,
+      score: Number(h.best_pct) || 0,
+      done: !!h.attempts,
+      date: new Date(h.last_attempt_at || h.created_at).getTime(),
+    }));
   const all = live.concat(infinite);
   const kindOk = (r) =>
     testsView.kind === "all" ||
     r.kind === testsView.kind ||
     (testsView.kind === "new" && r.kind === "infinite" && !r.done);
-  let rows = all.filter((r) => kindOk(r) && (!q || r.title.toLowerCase().includes(q)));
+  let rows = all.filter(
+    (r) => kindOk(r) && (!q || r.title.toLowerCase().includes(q)),
+  );
   rows = sortPastRows(rows, testsView.sort);
   if (!rows.length) {
     grid.innerHTML = `<div class="empty-state">${all.length ? "Nothing matches this view." : "You have not attempted any test yet."}</div>`;
@@ -2706,7 +4186,9 @@ function setupTestsCatalogListeners() {
   tabs.addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-filter]");
     if (!btn) return;
-    tabs.querySelectorAll("button").forEach((b) => b.classList.remove("active"));
+    tabs
+      .querySelectorAll("button")
+      .forEach((b) => b.classList.remove("active"));
     btn.classList.add("active");
     testsView.kind = btn.dataset.filter;
     renderPastTests();
@@ -2876,6 +4358,7 @@ async function renderHomeStats() {
 async function enterHomeView() {
   myProfile = myProfile || (await getMyProfile());
   const name = myProfile?.full_name || "Student";
+  const isAdmin = myProfile?.role === "admin";
 
   document.getElementById("homeGreetingWord").textContent = greetingWord();
   document.getElementById("homeGreetingName").textContent =
@@ -2910,11 +4393,18 @@ const adminTestsView = { q: "", status: "all" };
 function adminTestState(t) {
   const now = Date.now();
   if (!t.is_published) return "locked";
-  if (t.available_from && now < new Date(t.available_from).getTime()) return "scheduled";
-  if (t.available_until && now >= new Date(t.available_until).getTime()) return "closed";
+  if (t.available_from && now < new Date(t.available_from).getTime())
+    return "scheduled";
+  if (t.available_until && now >= new Date(t.available_until).getTime())
+    return "closed";
   return "live";
 }
-const ADMIN_STATE_LABEL = { live: "Live", scheduled: "Scheduled", locked: "Locked", closed: "Closed" };
+const ADMIN_STATE_LABEL = {
+  live: "Live",
+  scheduled: "Scheduled",
+  locked: "Locked",
+  closed: "Closed",
+};
 
 function bindAdminTestsControls() {
   const search = document.getElementById("adminTestsSearch");
@@ -2947,10 +4437,22 @@ function renderAdminTests() {
   const tile = (label, value, sub = "") =>
     `<div class="insight-tile"><span>${label}</span><strong>${value}</strong>${sub ? `<small>${sub}</small>` : ""}</div>`;
   overview.innerHTML =
-    tile("Total tests", adminTestsCache.length, `${adminTestsCache.reduce((s, t) => s + t.questions, 0)} questions`) +
-    tile("Live now", count("live"), count("scheduled") ? `${count("scheduled")} scheduled` : "") +
+    tile(
+      "Total tests",
+      adminTestsCache.length,
+      `${adminTestsCache.reduce((s, t) => s + t.questions, 0)} questions`,
+    ) +
+    tile(
+      "Live now",
+      count("live"),
+      count("scheduled") ? `${count("scheduled")} scheduled` : "",
+    ) +
     tile("Locked", count("locked"), "Not published yet") +
-    tile("Submissions", submissions, `${count("closed")} test${count("closed") === 1 ? "" : "s"} closed`);
+    tile(
+      "Submissions",
+      submissions,
+      `${count("closed")} test${count("closed") === 1 ? "" : "s"} closed`,
+    );
 
   const filters = [
     ["all", "All", adminTestsCache.length],
@@ -2980,7 +4482,12 @@ function renderAdminTests() {
   }
   const when = (iso) =>
     iso
-      ? new Date(iso).toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })
+      ? new Date(iso).toLocaleString(undefined, {
+          day: "numeric",
+          month: "short",
+          hour: "numeric",
+          minute: "2-digit",
+        })
       : "—";
   list.innerHTML = rows
     .map(
@@ -3012,6 +4519,7 @@ async function loadAdminTests() {
   const { data, error } = await sb
     .from("tests")
     .select("*")
+    .is("owner_id", null)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -3147,9 +4655,9 @@ function updateQuestionPreview() {
 }
 
 function setupAdminTestListeners() {
-  document.querySelectorAll('input[name="testMode"]').forEach((r) =>
-    r.addEventListener("change", syncModeUI),
-  );
+  document
+    .querySelectorAll('input[name="testMode"]')
+    .forEach((r) => r.addEventListener("change", syncModeUI));
   document.getElementById("typeInput").addEventListener("change", (e) => {
     const isMcq = e.target.value === "mcq";
     document.getElementById("mcqFields").style.display = isMcq
@@ -3431,6 +4939,12 @@ async function enterAdminTestView() {
   }
   document.getElementById("notAdminNotice").style.display = "none";
   document.getElementById("adminMainContent").style.display = "block";
+  const backLink = document.getElementById("adminTestBack");
+  if (backLink) {
+    const inEditor = !!qs("test") || qs("create") === "1";
+    backLink.setAttribute("href", inEditor ? "#/admin-test" : "#/admin-panel");
+    backLink.innerHTML = `<span aria-hidden="true">←</span> ${inEditor ? "All tests" : "Admin panel"}`;
+  }
 
   const testId = qs("test");
   const creating = qs("create") === "1";
@@ -3454,8 +4968,11 @@ async function enterAdminTestView() {
     return;
     const target = document.getElementById("studentRequestsAdminList");
     if (!target) return;
-    const { data, error } = await sb.from("test_requests")
-      .select("id, student_id, exam, subjects, chapters, topics, difficulty, question_source, question_count, duration_minutes, preferred_at, student_note, admin_note, status, created_at, profiles(full_name, email)")
+    const { data, error } = await sb
+      .from("test_requests")
+      .select(
+        "id, student_id, exam, subjects, chapters, topics, difficulty, question_source, question_count, duration_minutes, preferred_at, student_note, admin_note, status, created_at, profiles(full_name, email)",
+      )
       .order("created_at", { ascending: false });
     if (error) {
       target.innerHTML = `<div class="error-box">${escapeHtml(friendlyError(error))}</div>`;
@@ -3465,8 +4982,19 @@ async function enterAdminTestView() {
       target.innerHTML = `<div class="empty-state">No student requests yet.</div>`;
       return;
     }
-    const statuses = ["Pending", "Under Review", "Approved", "Test Created", "Scheduled", "Done", "Rejected", "Cancelled"];
-    target.innerHTML = data.map((request) => `
+    const statuses = [
+      "Pending",
+      "Under Review",
+      "Approved",
+      "Test Created",
+      "Scheduled",
+      "Done",
+      "Rejected",
+      "Cancelled",
+    ];
+    target.innerHTML = data
+      .map(
+        (request) => `
       <article class="request-row admin-request-row">
         <div><strong>${escapeHtml(request.profiles?.full_name || request.profiles?.email || request.student_id)}</strong><div class="text-muted">${escapeHtml(request.exam)} · ${escapeHtml((request.subjects || []).join(", "))}</div><small>${escapeHtml((request.chapters || []).join(", ") || "Whole syllabus")}</small></div>
         <div><strong>${escapeHtml(formatDateTime(request.preferred_at))}</strong><div class="text-muted">${request.question_count} questions · ${request.duration_minutes} min</div></div>
@@ -3475,35 +5003,85 @@ async function enterAdminTestView() {
           <textarea data-request-note="${request.id}" rows="2" placeholder="Message for the student (optional)">${escapeHtml(request.admin_note || "")}</textarea>
           <div class="req-admin-btns"><button type="button" class="btn btn-sm btn-success" data-request-done="${request.id}">✔ Mark done</button><button type="button" class="btn btn-sm btn-danger" data-request-delete="${request.id}">🗑 Delete</button></div>
         </div>
-      </article>`).join("");
-    target.querySelectorAll("[data-request-status]").forEach((select) => select.addEventListener("change", async () => {
-      select.disabled = true;
-      const { error: updateError } = await sb.from("test_requests").update({ status: select.value, updated_at: new Date().toISOString() }).eq("id", select.dataset.requestStatus);
-      select.disabled = false;
-      if (updateError) {
-        toast(friendlyError(updateError), "error");
-        await loadAdminTestRequests();
-        return;
-      }
-      toast("Request status updated.", "success");
-    }));
-    target.querySelectorAll("[data-request-note]").forEach((box) => box.addEventListener("change", async () => {
-      const { error: noteError } = await sb.from("test_requests").update({ admin_note: box.value.trim() || null, updated_at: new Date().toISOString() }).eq("id", box.dataset.requestNote);
-      toast(noteError ? friendlyError(noteError) : "Message saved. The student can see it.", noteError ? "error" : "success");
-    }));
-    target.querySelectorAll("[data-request-done]").forEach((btn) => btn.addEventListener("click", async () => {
-      const id = btn.dataset.requestDone;
-      const note = target.querySelector(`[data-request-note="${id}"]`)?.value.trim() || null;
-      const { error: doneError } = await sb.from("test_requests").update({ status: "Done", admin_note: note, updated_at: new Date().toISOString() }).eq("id", id);
-      if (doneError) toast(friendlyError(doneError), "error");
-      else { toast("Marked as done. The student will see it.", "success"); await loadAdminTestRequests(); }
-    }));
-    target.querySelectorAll("[data-request-delete]").forEach((btn) => btn.addEventListener("click", async () => {
-      if (!confirm("Delete this request permanently? The student will no longer see it.")) return;
-      const { error: delError } = await sb.from("test_requests").delete().eq("id", btn.dataset.requestDelete);
-      if (delError) toast(friendlyError(delError), "error");
-      else { toast("Request deleted.", "success"); await loadAdminTestRequests(); }
-    }));
+      </article>`,
+      )
+      .join("");
+    target.querySelectorAll("[data-request-status]").forEach((select) =>
+      select.addEventListener("change", async () => {
+        select.disabled = true;
+        const { error: updateError } = await sb
+          .from("test_requests")
+          .update({
+            status: select.value,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", select.dataset.requestStatus);
+        select.disabled = false;
+        if (updateError) {
+          toast(friendlyError(updateError), "error");
+          await loadAdminTestRequests();
+          return;
+        }
+        toast("Request status updated.", "success");
+      }),
+    );
+    target.querySelectorAll("[data-request-note]").forEach((box) =>
+      box.addEventListener("change", async () => {
+        const { error: noteError } = await sb
+          .from("test_requests")
+          .update({
+            admin_note: box.value.trim() || null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", box.dataset.requestNote);
+        toast(
+          noteError
+            ? friendlyError(noteError)
+            : "Message saved. The student can see it.",
+          noteError ? "error" : "success",
+        );
+      }),
+    );
+    target.querySelectorAll("[data-request-done]").forEach((btn) =>
+      btn.addEventListener("click", async () => {
+        const id = btn.dataset.requestDone;
+        const note =
+          target.querySelector(`[data-request-note="${id}"]`)?.value.trim() ||
+          null;
+        const { error: doneError } = await sb
+          .from("test_requests")
+          .update({
+            status: "Done",
+            admin_note: note,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", id);
+        if (doneError) toast(friendlyError(doneError), "error");
+        else {
+          toast("Marked as done. The student will see it.", "success");
+          await loadAdminTestRequests();
+        }
+      }),
+    );
+    target.querySelectorAll("[data-request-delete]").forEach((btn) =>
+      btn.addEventListener("click", async () => {
+        if (
+          !confirm(
+            "Delete this request permanently? The student will no longer see it.",
+          )
+        )
+          return;
+        const { error: delError } = await sb
+          .from("test_requests")
+          .delete()
+          .eq("id", btn.dataset.requestDelete);
+        if (delError) toast(friendlyError(delError), "error");
+        else {
+          toast("Request deleted.", "success");
+          await loadAdminTestRequests();
+        }
+      }),
+    );
   }
 }
 
@@ -3581,7 +5159,9 @@ function renderPracticeButton(enabled) {
   btn.classList.toggle("is-hidden", !enabled);
   btn.setAttribute("aria-pressed", String(enabled));
   btn.querySelector(".visibility-btn-icon").textContent = enabled ? "👁" : "🚫";
-  btn.querySelector(".visibility-btn-label").textContent = enabled ? "Shown" : "Hidden";
+  btn.querySelector(".visibility-btn-label").textContent = enabled
+    ? "Shown"
+    : "Hidden";
   btn.title = enabled
     ? "Click to hide this test from the lifetime practice library"
     : "Click to publish this test in the lifetime practice library";
@@ -3712,9 +5292,21 @@ function renderAdminSummary() {
     `<div class="insight-tile"><span>${label}</span><strong>${value}</strong>${sub ? `<small>${sub}</small>` : ""}</div>`;
   el.innerHTML =
     tile("Questions", adminQuestionsCache.length, `${marks} total marks`) +
-    tile("Duration", `${currentTest.duration_minutes || "—"} min`, escapeHtml(currentTest.category || "")) +
-    tile("Submissions", adminResultsRows.length, currentTest.result_release_at ? "Results declared" : "Results pending") +
-    tile("Reports", adminReports.length, adminReports.length ? "Need a look" : "All clear");
+    tile(
+      "Duration",
+      `${currentTest.duration_minutes || "—"} min`,
+      escapeHtml(currentTest.category || ""),
+    ) +
+    tile(
+      "Submissions",
+      adminResultsRows.length,
+      currentTest.result_release_at ? "Results declared" : "Results pending",
+    ) +
+    tile(
+      "Reports",
+      adminReports.length,
+      adminReports.length ? "Need a look" : "All clear",
+    );
 }
 
 document.addEventListener("click", (e) => {
@@ -3894,7 +5486,10 @@ async function pvRemoveQuestion(q) {
   const warn = attempts
     ? `\n\n${attempts} student${attempts === 1 ? " has" : "s have"} already submitted this test. Their stored scores stay as they are, but this question will disappear from their review.`
     : "";
-  if (!confirm(`Remove this question from the test? This can't be undone.${warn}`)) return;
+  if (
+    !confirm(`Remove this question from the test? This can't be undone.${warn}`)
+  )
+    return;
   const { error } = await sb.from("questions").delete().eq("id", q.id);
   if (error) {
     toast(friendlyError(error), "error");
@@ -4042,7 +5637,9 @@ function pvRenderQuestion() {
               (r) =>
                 `<li>${escapeHtml(r.reason)}${r.details ? ` — ${escapeHtml(r.details)}` : ""} <small>· ${escapeHtml(r.profiles?.full_name || "Student")}</small></li>`,
             )
-            .join("")}</ul><button type="button" class="btn btn-sm btn-success js-pv-fixed">✓ Mark as fixed</button></div>`
+            .join(
+              "",
+            )}</ul><button type="button" class="btn btn-sm btn-success js-pv-fixed">✓ Mark as fixed</button></div>`
         : ""
     }
     ${questionImageHtml(q.image_url)}
@@ -4184,7 +5781,10 @@ function buildPrintPaperHtml(questions, meta) {
   for (let i = 0; i < answerKey.length; i += PER_BLOCK) {
     const cells = answerKey
       .slice(i, i + PER_BLOCK)
-      .map((a) => `<div class="print-answer-cell"><b>${a.n}.</b> ${escapeHtml(String(a.ans))}</div>`)
+      .map(
+        (a) =>
+          `<div class="print-answer-cell"><b>${a.n}.</b> ${escapeHtml(String(a.ans))}</div>`,
+      )
       .join("");
     blocks.push({
       html: `${i === 0 ? '<h3 class="print-key-title">Answer Key</h3>' : ""}<div class="print-answer-grid">${cells}</div>`,
@@ -4211,7 +5811,10 @@ async function waitForPaperAssets(root) {
     ),
   );
   if (document.fonts?.ready)
-    await Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 1500))]);
+    await Promise.race([
+      document.fonts.ready,
+      new Promise((r) => setTimeout(r, 1500)),
+    ]);
 }
 
 function packPaperPages(items, bodyH) {
@@ -4240,7 +5843,9 @@ async function paginatePaper(blocks) {
   const measure = document.createElement("div");
   measure.className = "print-measure";
   measure.style.width = `${PAPER.W - PAPER.X * 2}px`;
-  measure.innerHTML = blocks.map((b) => `<div class="print-block">${b.html}</div>`).join("");
+  measure.innerHTML = blocks
+    .map((b) => `<div class="print-block">${b.html}</div>`)
+    .join("");
   document.body.appendChild(measure);
   try {
     renderMath(measure); // maths first — it changes the heights
@@ -4343,7 +5948,9 @@ function concatBytes(chunks) {
 
 async function deflateBytes(bytes) {
   if (typeof CompressionStream !== "function") return null;
-  const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream("deflate"));
+  const stream = new Blob([bytes])
+    .stream()
+    .pipeThrough(new CompressionStream("deflate"));
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
@@ -4359,7 +5966,12 @@ function runLengthBytes(src) {
       i += run;
     } else {
       let j = i + 1;
-      while (j < src.length && j - i < 128 && !(j + 1 < src.length && src[j] === src[j + 1])) j++;
+      while (
+        j < src.length &&
+        j - i < 128 &&
+        !(j + 1 < src.length && src[j] === src[j + 1])
+      )
+        j++;
       out.push(j - i - 1);
       for (let k = i; k < j; k++) out.push(src[k]);
       i = j;
@@ -4388,13 +6000,20 @@ function canvasToBilevel(canvas, threshold = 185) {
 }
 
 async function canvasToJpegBytes(canvas, quality = 0.55) {
-  const blob = await new Promise((res) => canvas.toBlob(res, "image/jpeg", quality));
+  const blob = await new Promise((res) =>
+    canvas.toBlob(res, "image/jpeg", quality),
+  );
   return new Uint8Array(await blob.arrayBuffer());
 }
 
 async function encodePdfPage(canvas, hasPicture) {
   if (hasPicture) {
-    return { kind: "jpeg", w: canvas.width, h: canvas.height, bytes: await canvasToJpegBytes(canvas) };
+    return {
+      kind: "jpeg",
+      w: canvas.width,
+      h: canvas.height,
+      bytes: await canvasToJpegBytes(canvas),
+    };
   }
   const { bits, w, h } = canvasToBilevel(canvas);
   let bytes = await deflateBytes(bits);
@@ -4429,13 +6048,22 @@ function buildPdfFile(pages, title) {
   const contentId = (i) => first + i * 3 + 1;
   const imageId = (i) => first + i * 3 + 2;
 
-  push(Uint8Array.from([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34, 0x0a, 0x25, 0xe2, 0xe3, 0xcf, 0xd3, 0x0a])); // %PDF-1.4 + binary marker
+  push(
+    Uint8Array.from([
+      0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34, 0x0a, 0x25, 0xe2, 0xe3,
+      0xcf, 0xd3, 0x0a,
+    ]),
+  ); // %PDF-1.4 + binary marker
   startObj(1);
   push("<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
   startObj(2);
-  push(`<< /Type /Pages /Kids [${pages.map((_, i) => `${pageId(i)} 0 R`).join(" ")}] /Count ${pages.length} >>\nendobj\n`);
+  push(
+    `<< /Type /Pages /Kids [${pages.map((_, i) => `${pageId(i)} 0 R`).join(" ")}] /Count ${pages.length} >>\nendobj\n`,
+  );
   startObj(3);
-  push(`<< /Title (${safeTitle}) /Producer (Examle) /Creator (Examle) >>\nendobj\n`);
+  push(
+    `<< /Title (${safeTitle}) /Producer (Examle) /Creator (Examle) >>\nendobj\n`,
+  );
 
   pages.forEach((pg, i) => {
     startObj(pageId(i));
@@ -4450,7 +6078,9 @@ function buildPdfFile(pages, title) {
       pg.kind === "jpeg"
         ? `/ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode`
         : `/ColorSpace /DeviceGray /BitsPerComponent 1 /Interpolate true /Filter ${pg.filter}`;
-    push(`<< /Type /XObject /Subtype /Image /Width ${pg.w} /Height ${pg.h} ${dict} /Length ${pg.bytes.length} >>\nstream\n`);
+    push(
+      `<< /Type /XObject /Subtype /Image /Width ${pg.w} /Height ${pg.h} ${dict} /Length ${pg.bytes.length} >>\nstream\n`,
+    );
     push(pg.bytes);
     push("\nendstream\nendobj\n");
   });
@@ -4458,9 +6088,12 @@ function buildPdfFile(pages, title) {
   const count = first + pages.length * 3;
   const xrefAt = offset;
   let xref = `xref\n0 ${count}\n0000000000 65535 f \n`;
-  for (let id = 1; id < count; id++) xref += `${String(offsets[id]).padStart(10, "0")} 00000 n \n`;
+  for (let id = 1; id < count; id++)
+    xref += `${String(offsets[id]).padStart(10, "0")} 00000 n \n`;
   push(xref);
-  push(`trailer\n<< /Size ${count} /Root 1 0 R /Info 3 0 R >>\nstartxref\n${xrefAt}\n%%EOF\n`);
+  push(
+    `trailer\n<< /Size ${count} /Root 1 0 R /Info 3 0 R >>\nstartxref\n${xrefAt}\n%%EOF\n`,
+  );
   return concatBytes(chunks);
 }
 
@@ -4491,7 +6124,10 @@ async function downloadPaperPdf(title, button) {
   const state = printPreviewState;
   if (!state?.pages?.length) return;
   if (typeof window.html2canvas !== "function") {
-    toast("PDF engine unavailable — opening the print dialog instead. Choose “Save as PDF”.", "error");
+    toast(
+      "PDF engine unavailable — opening the print dialog instead. Choose “Save as PDF”.",
+      "error",
+    );
     window.print();
     return;
   }
@@ -4514,7 +6150,10 @@ async function downloadPaperPdf(title, button) {
     const encoded = [];
     for (let i = 0; i < state.pages.length; i++) {
       progress.set(`Page ${i + 1} of ${state.pages.length}…`);
-      stage.innerHTML = paperPagesHtml(state.pages, state.title, { wrap: false, only: i });
+      stage.innerHTML = paperPagesHtml(state.pages, state.title, {
+        wrap: false,
+        only: i,
+      });
       const sheet = stage.querySelector(".print-page");
       const hasPicture = /<img\b/i.test(state.pages[i].join(""));
       await waitForPaperAssets(sheet);
@@ -4534,8 +6173,14 @@ async function downloadPaperPdf(title, button) {
     progress.set("Saving…");
     const pdf = buildPdfFile(encoded, state.title);
     saveBytesAsFile(pdf, `${slug}-questions.pdf`, "application/pdf");
-    const size = pdf.length < 1024 * 1024 ? `${Math.max(1, Math.round(pdf.length / 1024))} KB` : `${(pdf.length / 1048576).toFixed(1)} MB`;
-    toast(`PDF downloaded · ${encoded.length} page${encoded.length === 1 ? "" : "s"} · ${size}`, "success");
+    const size =
+      pdf.length < 1024 * 1024
+        ? `${Math.max(1, Math.round(pdf.length / 1024))} KB`
+        : `${(pdf.length / 1048576).toFixed(1)} MB`;
+    toast(
+      `PDF downloaded · ${encoded.length} page${encoded.length === 1 ? "" : "s"} · ${size}`,
+      "success",
+    );
   } catch (err) {
     console.error("PDF export failed:", err);
     toast("Couldn't create the PDF. Please try again.", "error");
@@ -4690,7 +6335,9 @@ function analyseTimeFlags(rows) {
   const bySubject = {};
   eligible.forEach((r) =>
     (r.subject_times || []).forEach((s) => {
-      (bySubject[s.subject] = bySubject[s.subject] || []).push(chNum(s.seconds));
+      (bySubject[s.subject] = bySubject[s.subject] || []).push(
+        chNum(s.seconds),
+      );
     }),
   );
   Object.keys(bySubject).forEach((k) => {
@@ -4707,12 +6354,22 @@ function analyseTimeFlags(rows) {
     const reasons = [];
     let level = null;
 
-    if (stats.ready && sc > 0 && sc >= stats.medianScore && t < stats.medianTime * 0.4) {
+    if (
+      stats.ready &&
+      sc > 0 &&
+      sc >= stats.medianScore &&
+      t < stats.medianTime * 0.4
+    ) {
       reasons.push(
         `Finished in ${Math.round((t / stats.medianTime) * 100)}% of the median time (${chMinutesLabel(stats.medianTime)}) with an above-median score.`,
       );
       level = "high";
-    } else if (eligible.length >= 4 && sc > 0 && sc >= p75Score && t <= p25Time) {
+    } else if (
+      eligible.length >= 4 &&
+      sc > 0 &&
+      sc >= p75Score &&
+      t <= p25Time
+    ) {
       reasons.push("Top-quartile score achieved in bottom-quartile time.");
       level = "med";
     }
@@ -4733,8 +6390,12 @@ function resultsInsightsHtml() {
   const eligible = rows.filter((r) => chNum(r.total_time_seconds) > 0);
   if (!eligible.length) return "";
   const live = eligible.filter((r) => !r.disqualified_at);
-  const fastest = live.slice().sort((a, b) => a.total_time_seconds - b.total_time_seconds)[0];
-  const slowest = live.slice().sort((a, b) => b.total_time_seconds - a.total_time_seconds)[0];
+  const fastest = live
+    .slice()
+    .sort((a, b) => a.total_time_seconds - b.total_time_seconds)[0];
+  const slowest = live
+    .slice()
+    .sort((a, b) => b.total_time_seconds - a.total_time_seconds)[0];
   const flaggedCount = adminResultsFlags.size;
   const dqCount = rows.filter((r) => r.disqualified_at).length;
 
@@ -4876,14 +6537,20 @@ function syncResultsScrollWidth() {
   const scroller = document
     .getElementById("studentResultsTable")
     ?.closest(".table-scroll");
-  if (scroller) scroller.style.setProperty("--scroll-w", `${scroller.clientWidth}px`);
+  if (scroller)
+    scroller.style.setProperty("--scroll-w", `${scroller.clientWidth}px`);
 }
 window.addEventListener("resize", syncResultsScrollWidth);
 
 function formatShortDateTime(iso) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+  return d.toLocaleString(undefined, {
+    day: "numeric",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 function renderStudentResultsTable() {
@@ -4892,7 +6559,8 @@ function renderStudentResultsTable() {
   const { q, filter, sort } = adminResultsView;
   const needle = q.trim().toLowerCase();
   let rows = adminResultsRows.filter((r) => {
-    if (needle && !(r.full_name || "").toLowerCase().includes(needle)) return false;
+    if (needle && !(r.full_name || "").toLowerCase().includes(needle))
+      return false;
     if (filter === "flagged") return adminResultsFlags.has(r.attempt_id);
     if (filter === "dq") return !!r.disqualified_at;
     return true;
@@ -4901,10 +6569,14 @@ function renderStudentResultsTable() {
     rank: (a, b) =>
       (a.rnk ?? 1e9) - (b.rnk ?? 1e9) ||
       (a.full_name || "").localeCompare(b.full_name || ""),
-    recent: (a, b) => new Date(b.submitted_at || 0) - new Date(a.submitted_at || 0),
+    recent: (a, b) =>
+      new Date(b.submitted_at || 0) - new Date(a.submitted_at || 0),
     score: (a, b) => chNum(b.total_score) - chNum(a.total_score),
-    fastest: (a, b) => (chNum(a.total_time_seconds) || 1e12) - (chNum(b.total_time_seconds) || 1e12),
-    slowest: (a, b) => chNum(b.total_time_seconds) - chNum(a.total_time_seconds),
+    fastest: (a, b) =>
+      (chNum(a.total_time_seconds) || 1e12) -
+      (chNum(b.total_time_seconds) || 1e12),
+    slowest: (a, b) =>
+      chNum(b.total_time_seconds) - chNum(a.total_time_seconds),
     name: (a, b) => (a.full_name || "").localeCompare(b.full_name || ""),
   }[sort];
   rows = rows.slice().sort(by);
@@ -5002,7 +6674,8 @@ function bindResultsControls() {
       return;
     }
     const dqBtn = e.target.closest(".js-dq");
-    if (dqBtn) return removeAttempt(dqBtn.dataset.id, dqBtn, dqBtn.dataset.name);
+    if (dqBtn)
+      return removeAttempt(dqBtn.dataset.id, dqBtn, dqBtn.dataset.name);
     const reBtn = e.target.closest(".js-reinstate");
     if (reBtn) return reinstateAttempt(reBtn.dataset.id, reBtn);
   });
@@ -5086,7 +6759,6 @@ async function loadStudentResults() {
   renderAdminSummary();
 }
 
-
 /* ---- Disqualify / reinstate ---- */
 function askDisqualify(name) {
   return new Promise((resolve) => {
@@ -5109,7 +6781,8 @@ function askDisqualify(name) {
       if (e.key === "Escape") finish({ confirmed: false });
     };
     document.addEventListener("keydown", onKey);
-    okBtn.onclick = () => finish({ confirmed: true, reason: reasonEl.value.trim() });
+    okBtn.onclick = () =>
+      finish({ confirmed: true, reason: reasonEl.value.trim() });
     cancelBtn.onclick = () => finish({ confirmed: false });
     backdrop.onclick = (e) => {
       if (e.target === backdrop) finish({ confirmed: false });
@@ -5148,7 +6821,10 @@ async function removeAttempt(id, button, name = "this student") {
       toast(friendlyError(error), "error");
       return;
     }
-    toast(`${name} was disqualified and removed from the leaderboard`, "success");
+    toast(
+      `${name} was disqualified and removed from the leaderboard`,
+      "success",
+    );
     await refreshAdminResultViews();
   } catch (err) {
     console.error("Unexpected remove attempt error:", err);
@@ -5172,7 +6848,9 @@ async function reinstateAttempt(id, button) {
     button.disabled = true;
     button.textContent = "Reinstating…";
   }
-  const { error } = await sb.rpc("admin_reinstate_attempt", { p_attempt_id: id });
+  const { error } = await sb.rpc("admin_reinstate_attempt", {
+    p_attempt_id: id,
+  });
   if (error) {
     toast(friendlyError(error), "error");
     if (button) {
@@ -5189,7 +6867,11 @@ function groupedReports() {
   const groups = new Map();
   adminReports.forEach((report) => {
     if (!groups.has(report.question_id))
-      groups.set(report.question_id, { questionId: report.question_id, question: report.questions, items: [] });
+      groups.set(report.question_id, {
+        questionId: report.question_id,
+        question: report.questions,
+        items: [],
+      });
     groups.get(report.question_id).items.push(report);
   });
   return [...groups.values()];
@@ -5204,14 +6886,19 @@ async function resolveQuestionReports(questionId) {
     toast(friendlyError(error), "error");
     return false;
   }
-  toast(`Marked as resolved (${data?.resolved ?? 0} report${data?.resolved === 1 ? "" : "s"})`, "success");
+  toast(
+    `Marked as resolved (${data?.resolved ?? 0} report${data?.resolved === 1 ? "" : "s"})`,
+    "success",
+  );
   await loadReports();
   return true;
 }
 
 function reportCardHtml(group) {
   const question = group.question;
-  const exists = adminQuestionsCache.some((item) => item.id === group.questionId);
+  const exists = adminQuestionsCache.some(
+    (item) => item.id === group.questionId,
+  );
   const reasons = group.items
     .map(
       (report) =>
@@ -5262,11 +6949,13 @@ async function loadReports() {
 
 document.addEventListener("click", async (event) => {
   const preview = event.target.closest(".js-report-preview");
-  if (preview && !preview.disabled) return openTestPreview(preview.dataset.question);
+  if (preview && !preview.disabled)
+    return openTestPreview(preview.dataset.question);
   const fixed = event.target.closest(".js-report-fixed");
   if (!fixed) return;
   fixed.disabled = true;
-  if (!(await resolveQuestionReports(fixed.dataset.question))) fixed.disabled = false;
+  if (!(await resolveQuestionReports(fixed.dataset.question)))
+    fixed.disabled = false;
 });
 
 /* =========================================================================
@@ -5412,13 +7101,16 @@ async function flushTimeDeltas({ awaitCompletion = false } = {}) {
 
 function setupExamStaticListeners() {
   document.getElementById("beginBtn").addEventListener("click", onBegin);
-  document.getElementById("beginEnableNotificationsBtn").addEventListener("click", async () => {
-    const current = await pushNotifications.request();
-    const status = document.getElementById("beginNotificationStatus");
-    status.textContent = current === "granted"
-      ? "Notifications enabled successfully. You can start the test now."
-      : NOTIFICATION_BLOCKED_HELP;
-  });
+  document
+    .getElementById("beginEnableNotificationsBtn")
+    .addEventListener("click", async () => {
+      const current = await pushNotifications.request();
+      const status = document.getElementById("beginNotificationStatus");
+      status.textContent =
+        current === "granted"
+          ? "Notifications enabled successfully. You can start the test now."
+          : NOTIFICATION_BLOCKED_HELP;
+    });
   document
     .getElementById("submitTestBtn")
     .addEventListener("click", openSubmitModal);
@@ -5472,7 +7164,8 @@ function showTerminal(title, text, href, label) {
 // must be ticked before Begin Test can be clicked.
 async function loadTestStartInfo(testId) {
   let res = await sb.rpc("get_test_start_info", { p_test_id: testId });
-  if (res.error) res = await sb.rpc("get_student_test_details", { p_test_id: testId });
+  if (res.error)
+    res = await sb.rpc("get_student_test_details", { p_test_id: testId });
   return res.error ? null : res.data;
 }
 
@@ -5482,19 +7175,39 @@ async function renderBeginInstructions() {
   const box = document.getElementById("declarationCheckbox");
   box.checked = false;
   beginBtn.disabled = true;
-  beginBtn.textContent = previousAttemptInProgress ? "Resume Test" : "Begin Test";
-  box.onchange = () => { beginBtn.disabled = !box.checked; };
+  beginBtn.textContent = previousAttemptInProgress
+    ? "Resume Test"
+    : "Begin Test";
+  box.onchange = () => {
+    beginBtn.disabled = !box.checked;
+  };
   body.scrollTop = 0;
   body.innerHTML = `<div class="empty-state">Loading instructions…</div>`;
 
   const [info, modeRow] = await Promise.all([
     loadTestStartInfo(pendingTestId),
-    sb.from("tests").select("test_mode, custom_mode, owner_id").eq("id", pendingTestId).maybeSingle(),
+    sb
+      .from("tests")
+      .select("test_mode, custom_mode, owner_id")
+      .eq("id", pendingTestId)
+      .maybeSingle(),
   ]);
-  const kind = pendingIsPractice ? (modeRow.data?.test_mode === "practice" ? "infinite" : "reattempt") : "live";
-  const practiceFree = pendingIsPractice && (pendingMode ? pendingMode === "practice" : modeRow.data?.custom_mode === "practice");
+  const kind = pendingIsPractice
+    ? modeRow.data?.test_mode === "practice"
+      ? "infinite"
+      : "reattempt"
+    : "live";
+  const practiceFree =
+    pendingIsPractice &&
+    (pendingMode
+      ? pendingMode === "practice"
+      : modeRow.data?.custom_mode === "practice");
   pendingFeedback = practiceFree;
-  const kindLabel = { live: "🔴 Live test", infinite: "Practice", reattempt: "🔁 Re-attempt" }[kind];
+  const kindLabel = {
+    live: "🔴 Live test",
+    infinite: "Practice",
+    reattempt: "🔁 Re-attempt",
+  }[kind];
   const qCount = info?.question_count ?? "—";
   const totalMarks = info?.total_marks ?? "—";
   const e = escapeHtml;
@@ -5513,13 +7226,29 @@ async function renderBeginInstructions() {
     : `<p class="ins-muted">The syllabus is not listed for this test.</p>`;
 
   // ---- marking scheme, taken from the questions in this test
-  const typeName = (t) => (String(t).toLowerCase() === "integer" ? "Numerical / integer" : "Multiple choice (one correct)");
+  const typeName = (t) =>
+    String(t).toLowerCase() === "integer"
+      ? "Numerical / integer"
+      : "Multiple choice (one correct)";
   const rows = info?.scheme?.length
-    ? info.scheme.map((r) => ({ label: typeName(r.question_type), pos: r.positive_marks, neg: r.negative_marks, n: r.count }))
-    : (info?.marking_scheme || []).map((r) => ({ label: "Questions", pos: r.positive_marks, neg: r.negative_marks, n: null }));
+    ? info.scheme.map((r) => ({
+        label: typeName(r.question_type),
+        pos: r.positive_marks,
+        neg: r.negative_marks,
+        n: r.count,
+      }))
+    : (info?.marking_scheme || []).map((r) => ({
+        label: "Questions",
+        pos: r.positive_marks,
+        neg: r.negative_marks,
+        n: null,
+      }));
   const marking = rows.length
     ? `<table class="ins-table"><thead><tr><th>Type</th><th>Correct</th><th>Wrong</th>${rows.some((r) => r.n != null) ? "<th>Qs</th>" : ""}</tr></thead><tbody>${rows
-        .map((r) => `<tr><td>${e(r.label)}</td><td class="ins-pos">+${r.pos}</td><td class="ins-neg">${Number(r.neg) ? "−" + r.neg : "0"}</td>${r.n != null ? `<td>${r.n}</td>` : ""}</tr>`)
+        .map(
+          (r) =>
+            `<tr><td>${e(r.label)}</td><td class="ins-pos">+${r.pos}</td><td class="ins-neg">${Number(r.neg) ? "−" + r.neg : "0"}</td>${r.n != null ? `<td>${r.n}</td>` : ""}</tr>`,
+        )
         .join("")}</tbody></table>`
     : `<p class="ins-muted">Marks are shown beside each question.</p>`;
 
@@ -5599,7 +7328,10 @@ async function renderBeginInstructions() {
           <li>Numerical questions: type the value, for example <code>5</code> or <code>-2.5</code>.</li>
         </ul></section>
 
-        ${practiceFree ? `<section class="ins-card span-2"><h4>🔓 No restrictions</h4><ul><li>Practice mode has no warnings and no full-screen rule.</li><li>You can switch tabs or apps freely, for example to open an explanation.</li><li>Leaving the page never submits your test. Only the Submit button or the time limit ends it.</li></ul></section>` : `<section class="ins-card ins-warn span-2">
+        ${
+          practiceFree
+            ? `<section class="ins-card span-2"><h4>🔓 No restrictions</h4><ul><li>Practice mode has no warnings and no full-screen rule.</li><li>You can switch tabs or apps freely, for example to open an explanation.</li><li>Leaving the page never submits your test. Only the Submit button or the time limit ends it.</li></ul></section>`
+            : `<section class="ins-card ins-warn span-2">
           <h4>🚨 Warning system</h4>
           <ul>
             <li>The test runs in <strong>full screen</strong>. Keep it that way until you submit.</li>
@@ -5608,7 +7340,8 @@ async function renderBeginInstructions() {
             <li><strong>Second violation:</strong> your test is submitted automatically and cannot be restarted.</li>
             <li>Keep browser notifications enabled and do not refresh or close this page during the test.</li>
           </ul>
-        </section>`}
+        </section>`
+        }
 
         <section class="ins-card span-2">
           <h4>✅ After you submit</h4>
@@ -5700,7 +7433,12 @@ async function enterExamView() {
   // A practice re-attempt is personal revision: it isn't bound by the
   // test's publish/close window (the student already completed the real,
   // scheduled attempt to unlock it in the first place).
-  if (!testMetaError && testMeta && pendingIsPractice && testMeta.practice_enabled === false) {
+  if (
+    !testMetaError &&
+    testMeta &&
+    pendingIsPractice &&
+    testMeta.practice_enabled === false
+  ) {
     showTerminal(
       "Practice isn't available",
       "Practice mode has been switched off for this test.",
@@ -5938,23 +7676,34 @@ function explainPrompt(q) {
   const meta = [q.subject, q.chapter].filter(Boolean).join(" | ");
   if (meta) lines.push(meta);
   lines.push(`Question: ${String(q.question_text || "").trim()}`);
-  if (q.image_url) lines.push(`(The question also has an image: ${q.image_url})`);
+  if (q.image_url)
+    lines.push(`(The question also has an image: ${q.image_url})`);
   (q.options || []).forEach((o) => lines.push(`${o.id}) ${o.text}`));
-  const answer = q.correct_option != null && q.correct_option !== "" ? q.correct_option : q.correct_integer_value;
-  if (answer != null && answer !== "") lines.push("", `Correct answer: ${answer}`);
+  const answer =
+    q.correct_option != null && q.correct_option !== ""
+      ? q.correct_option
+      : q.correct_integer_value;
+  if (answer != null && answer !== "")
+    lines.push("", `Correct answer: ${answer}`);
   return lines.join("\n").slice(0, 3200);
 }
 
 function explainMenuHtml(q) {
   const text = explainPrompt(q);
-  const short = `${String(q.question_text || "").replace(/\s+/g, " ").trim().slice(0, 280)} solution explanation`;
+  const short = `${String(q.question_text || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 280)} solution explanation`;
   const links = [
     ["ChatGPT", `https://chatgpt.com/?q=${encodeURIComponent(text)}`],
     ["Claude", `https://claude.ai/new?q=${encodeURIComponent(text)}`],
     ["Google", `https://www.google.com/search?q=${encodeURIComponent(short)}`],
   ];
   return `<details class="explain-menu"><summary>💡 View explanation</summary><div class="explain-pop"><span>Open the question in</span>${links
-    .map(([name, href]) => `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${name}</a>`)
+    .map(
+      ([name, href]) =>
+        `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${name}</a>`,
+    )
     .join("")}</div></details>`;
 }
 
@@ -5969,7 +7718,8 @@ function fbOptionClass(q, id) {
 function fbBoxHtml(q) {
   const f = q.feedback;
   if (!f) return "";
-  const answer = q.question_type === "mcq" ? f.correct_option : f.correct_integer_value;
+  const answer =
+    q.question_type === "mcq" ? f.correct_option : f.correct_integer_value;
   return `<div class="fb-box ${f.is_correct ? "ok" : "bad"}">
     <div class="fb-head">${f.is_correct ? "✅ Correct!" : "❌ Not quite"}</div>
     <div class="fb-ans">Correct answer: <b>${escapeHtml(String(answer ?? ""))}</b></div>
@@ -6030,7 +7780,7 @@ function renderQuestion() {
   card.innerHTML = `
     <div class="question-meta">
       <span class="question-number-badge">${subjectDot(q.subject)}${escapeHtml(q.subject)} · Question ${currentLocalIndex + 1}</span>
-      <span class="question-meta-right"><span class="question-time">Recommended: 3 min/q</span><span class="question-marks">+${q.positive_marks} / -${q.negative_marks}</span></span>
+      <span class="question-meta-right"><span class="question-time">Recommended: ${({ easy: 2, medium: 3, hard: 5 })[String(q.difficulty || "").toLowerCase()] || 3} min/q</span><span class="question-marks">+${q.positive_marks} / -${q.negative_marks}</span></span>
     </div>
     ${questionImageHtml(q.image_url)}
     <div class="question-text">${escapeHtml(q.question_text)}</div>
@@ -6078,7 +7828,10 @@ function renderQuestion() {
         toast("Enter a value first.", "error");
         return;
       }
-      q.status = q.status === "marked" || q.status === "answered_marked" ? "answered_marked" : "answered";
+      q.status =
+        q.status === "marked" || q.status === "answered_marked"
+          ? "answered_marked"
+          : "answered";
       persistAnswer(q);
       renderPalette();
       revealFeedback(q);
@@ -6280,8 +8033,13 @@ async function onBegin() {
   // This is the moment the exam clock actually starts — start_attempt
   // stamps started_at server-side right now, not back when the page loaded.
   const { data, error } = pendingIsPractice
-    ? (invalidateRpcCache(), await sb.rpc("start_practice_attempt", { p_test_id: pendingTestId, p_feedback: pendingMode ? pendingMode === "practice" : null }))
-    : (invalidateRpcCache(), await sb.rpc("start_attempt_by_test", { p_test_id: pendingTestId }));
+    ? (invalidateRpcCache(),
+      await sb.rpc("start_practice_attempt", {
+        p_test_id: pendingTestId,
+        p_feedback: pendingMode ? pendingMode === "practice" : null,
+      }))
+    : (invalidateRpcCache(),
+      await sb.rpc("start_attempt_by_test", { p_test_id: pendingTestId }));
 
   if (error) {
     closeModal("beginModal");
@@ -6351,6 +8109,8 @@ async function onBegin() {
   closeModal("beginModal");
 
   examStarted = true;
+
+  appEnterFullscreen();
   examLocked = true;
 
   // Start timer ONLY after clicking Begin Test
@@ -6541,14 +8301,19 @@ function chartTrendBars(rows, { avgLine = null } = {}) {
   const axis = [100, 75, 50, 25, 0].map((g) => `<span>${g}%</span>`).join("");
   const cols = rows
     .map(
-      (r) => `<div class="tb-col" title="${escapeHtml(r.tip || "")}" style="--v:${chClamp(r.value, 0, 100)}">
+      (
+        r,
+      ) => `<div class="tb-col" title="${escapeHtml(r.tip || "")}" style="--v:${chClamp(r.value, 0, 100)}">
         <span class="tb-val">${Math.round(r.value)}%</span>
         <div class="tb-bar ${r.latest ? "latest" : ""}"></div>
       </div>`,
     )
     .join("");
   const labels = rows
-    .map((r) => `<span><b>${escapeHtml(r.label)}</b>${escapeHtml(r.sub || "")}</span>`)
+    .map(
+      (r) =>
+        `<span><b>${escapeHtml(r.label)}</b>${escapeHtml(r.sub || "")}</span>`,
+    )
     .join("");
   return `<div class="tb-chart" role="img" aria-label="Score trend bar chart">
     <div class="tb-axis">${axis}</div>
@@ -6563,7 +8328,10 @@ function chartTrendBars(rows, { avgLine = null } = {}) {
 }
 
 /* Donut. segments: [{value,color,label}] */
-function chartDonut(segments, { size = 176, stroke = 22, centerValue = "", centerLabel = "" } = {}) {
+function chartDonut(
+  segments,
+  { size = 176, stroke = 22, centerValue = "", centerLabel = "" } = {},
+) {
   const total = segments.reduce((s, x) => s + chNum(x.value), 0);
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
@@ -6614,11 +8382,20 @@ function chartQuestionTimeline(items) {
   const pb = 46;
   const iw = W - pl - pr;
   const ih = H - pt - pb;
-  const maxSec = Math.max(30, Math.ceil((Math.max(...items.map((i) => chNum(i.seconds)), 10) * 1.1) / 30) * 30);
+  const maxSec = Math.max(
+    30,
+    Math.ceil(
+      (Math.max(...items.map((i) => chNum(i.seconds)), 10) * 1.1) / 30,
+    ) * 30,
+  );
   const slot = iw / n;
   const bw = Math.max(3, Math.min(20, slot * 0.68));
   const y = (v) => pt + ih - (chNum(v) / maxSec) * ih;
-  const colour = { correct: "var(--success)", wrong: "var(--danger)", skipped: "var(--not-visited)" };
+  const colour = {
+    correct: "var(--success)",
+    wrong: "var(--danger)",
+    skipped: "var(--not-visited)",
+  };
   const avg = items.reduce((s, i) => s + chNum(i.seconds), 0) / n;
 
   const grid = [0, 0.5, 1]
@@ -6672,7 +8449,12 @@ function outcomeLegend(correct, wrong, skipped) {
   return chartLegend([
     { label: "Correct", value: correct, color: "var(--success)", round: true },
     { label: "Wrong", value: wrong, color: "var(--danger)", round: true },
-    { label: "Unattempted", value: skipped, color: "var(--not-visited)", round: true },
+    {
+      label: "Unattempted",
+      value: skipped,
+      color: "var(--not-visited)",
+      round: true,
+    },
   ]);
 }
 
@@ -6706,7 +8488,10 @@ function buildQueryUrl(report) {
 }
 
 function renderReportAnalysis(report, subjectRows, review) {
-  const totalMax = subjectRows.reduce((sum, row) => sum + Number(row.total || 0), 0);
+  const totalMax = subjectRows.reduce(
+    (sum, row) => sum + Number(row.total || 0),
+    0,
+  );
   const scorePct =
     totalMax > 0
       ? chClamp((Number(report.total_score || 0) / totalMax) * 100, 0, 100)
@@ -6716,7 +8501,10 @@ function renderReportAnalysis(report, subjectRows, review) {
   const skipped = Math.max(0, review.length - correct - wrong);
   const attempted = correct + wrong;
   const accuracy = attempted ? (correct / attempted) * 100 : 0;
-  const totalTime = subjectRows.reduce((s, r) => s + chNum(r.time_spent_seconds), 0);
+  const totalTime = subjectRows.reduce(
+    (s, r) => s + chNum(r.time_spent_seconds),
+    0,
+  );
 
   const subjectBreakdown = subjectRows
     .map((row) => {
@@ -6760,7 +8548,12 @@ function renderReportAnalysis(report, subjectRows, review) {
       n: i + 1,
       seconds: chNum(r.time_spent_seconds),
       subject: r.subject,
-      state: r.is_correct === true ? "correct" : r.is_correct === false ? "wrong" : "skipped",
+      state:
+        r.is_correct === true
+          ? "correct"
+          : r.is_correct === false
+            ? "wrong"
+            : "skipped",
     }));
   const hasTiming = totalTime > 0 && ordered.length > 0;
 
@@ -6780,7 +8573,11 @@ function renderReportAnalysis(report, subjectRows, review) {
           [
             { value: correct, color: "var(--success)", label: "Correct" },
             { value: wrong, color: "var(--danger)", label: "Wrong" },
-            { value: skipped, color: "var(--not-visited)", label: "Unattempted" },
+            {
+              value: skipped,
+              color: "var(--not-visited)",
+              label: "Unattempted",
+            },
           ],
           { centerValue: `${Math.round(accuracy)}%`, centerLabel: "accuracy" },
         )}
@@ -6802,18 +8599,26 @@ function renderReportAnalysis(report, subjectRows, review) {
       <div class="section-title"><h2>Time per question</h2><span class="text-muted">Where your time went</span></div>
       ${
         hasTiming
-          ? chartQuestionTimeline(ordered) + chartLegend([
+          ? chartQuestionTimeline(ordered) +
+            chartLegend([
               { label: "Correct", color: "var(--success)", round: true },
               { label: "Wrong", color: "var(--danger)", round: true },
-              { label: "Unattempted", color: "var(--not-visited)", round: true },
-              { label: `Average ${chMinutesLabel(totalTime / Math.max(1, ordered.length))} / question`, color: "var(--muted)", dashed: true },
+              {
+                label: "Unattempted",
+                color: "var(--not-visited)",
+                round: true,
+              },
+              {
+                label: `Average ${chMinutesLabel(totalTime / Math.max(1, ordered.length))} / question`,
+                color: "var(--muted)",
+                dashed: true,
+              },
             ])
           : `<div class="empty-state">Question timing wasn't recorded for this attempt.</div>`
       }
     </div>
   </section>`;
 }
-
 
 let reviewQuestions = [];
 let reviewBySubject = {};
@@ -6879,9 +8684,18 @@ function renderReviewQuestionCard() {
       : question.correct_integer_value;
   card.innerHTML = `<div class="review-question-heading"><div class="question-number-badge">${subjectDot(question.subject)}${escapeHtml(question.subject)} · Question ${reviewQuestions.indexOf(question) + 1}</div><span class="review-result-pill ${reviewState(question) === "correct" ? "review-result-correct" : reviewState(question) === "wrong" ? "review-result-wrong" : "review-result-skipped"}">${reviewState(question)} · ${question.marks_obtained || 0} marks</span></div>${questionImageHtml(question.image_url)}<div class="question-text">${escapeHtml(question.question_text)}</div>${question.question_type === "mcq" ? `<div class="option-list">${options}</div>` : `<div class="review-integer-answer"><span class="${question.is_correct ? "answer-good" : "answer-bad"}">Your answer: ${escapeHtml(String(integerAnswer))}</span><span class="answer-good">Correct answer: ${escapeHtml(String(correctInteger))}</span></div>`}${explainMenuHtml(question)}<div class="review-error-action"><button type="button" class="btn btn-sm" id="addReviewErrorBtn">Add to Error Book</button><span id="reviewErrorStatus" class="text-muted"></span></div>`;
   document.getElementById("addReviewErrorBtn").addEventListener("click", () =>
-    openErrorBookModal({ ...question, id: question.id || question.question_id, chapter: question.chapter || null }, qs("attempt"), () => {
-      document.getElementById("reviewErrorStatus").textContent = "Saved in your Error Book.";
-    }),
+    openErrorBookModal(
+      {
+        ...question,
+        id: question.id || question.question_id,
+        chapter: question.chapter || null,
+      },
+      qs("attempt"),
+      () => {
+        document.getElementById("reviewErrorStatus").textContent =
+          "Saved in your Error Book.";
+      },
+    ),
   );
   document.getElementById("reviewProgressLabel").textContent =
     `${reviewQuestions.indexOf(question) + 1} of ${reviewQuestions.length}`;
@@ -7019,7 +8833,11 @@ async function enterResultView() {
   const isPractice = !!report.is_practice;
   let isInfinite = false;
   if (isPractice) {
-    const { data: tm } = await sb.from("tests").select("test_mode").eq("id", report.test_id).maybeSingle();
+    const { data: tm } = await sb
+      .from("tests")
+      .select("test_mode")
+      .eq("id", report.test_id)
+      .maybeSingle();
     isInfinite = tm?.test_mode === "practice";
   }
   // An attempt the admin disqualified is never ranked: no rank, no percentile,
@@ -7099,11 +8917,15 @@ async function enterResultView() {
 
     <div class="stat-grid">
       <div class="stat-card"><div class="val">${report.total_score} / ${totalMax}</div><div class="lbl">Score</div></div>
-${isPractice ? `<div class="stat-card"><div class="val">${practiceAccuracyLabel(subjectRows)}</div><div class="lbl">Accuracy</div></div>` : `<div class="stat-card">
+${
+  isPractice
+    ? `<div class="stat-card"><div class="val">${practiceAccuracyLabel(subjectRows)}</div><div class="lbl">Accuracy</div></div>`
+    : `<div class="stat-card">
   <div class="val">${isPractice ? "—" : isDisqualified ? "🚫" : declared ? `${medalFor(report.rank)}#${report.rank}` : "🔒"}</div>
   <div class="lbl">Rank${isDisqualified ? " · withheld" : ""}</div>
 </div>
-      <div class="stat-card"><div class="val">${isPractice ? "—" : isDisqualified ? "🚫" : declared ? report.percentile + "%" : "🔒"}</div><div class="lbl">Percentile${isDisqualified ? " · withheld" : ""}</div></div>`}
+      <div class="stat-card"><div class="val">${isPractice ? "—" : isDisqualified ? "🚫" : declared ? report.percentile + "%" : "🔒"}</div><div class="lbl">Percentile${isDisqualified ? " · withheld" : ""}</div></div>`
+}
       <div class="stat-card"><div class="val">${formatDurationPrecise(timeTakenSec)}</div><div class="lbl">Time taken</div></div>
     </div>
 
@@ -7145,18 +8967,21 @@ ${isPractice ? `<div class="stat-card"><div class="val">${practiceAccuracyLabel(
 
     ${report.is_owner || report.is_public_top3 ? `<div class="card report-review-cta"><div><span class="eyebrow-label">Detailed review</span><h2>Review every answer</h2><p class="text-muted">Open the exam-style review to see selected answers, correct answers and question status.</p></div><a class="btn btn-primary" href="#/review?attempt=${encodeURIComponent(attemptIdParam)}">Review answers</a></div>` : ""}
 
-    ${isPractice ? "" : `<div class="card">
+    ${
+      isPractice
+        ? ""
+        : `<div class="card">
       <h2 style="font-size:16px;">Top 10</h2>
       ${
         isPractice
           ? `<div class="empty-state">Practice re-attempts don't appear on the leaderboard. Your real attempt's rank and percentile are on that report.</div>`
           : isDisqualified
             ? `<div class="empty-state">This attempt is not ranked, so it can't be shown on the leaderboard.</div>`
-          : !declared
-            ? `<div class="empty-state">Rank and percentile will be announced when the test gets over.</div>`
-            : board.length === 0
-              ? `<div class="empty-state">No submissions yet.</div>`
-              : `
+            : !declared
+              ? `<div class="empty-state">Rank and percentile will be announced when the test gets over.</div>`
+              : board.length === 0
+                ? `<div class="empty-state">No submissions yet.</div>`
+                : `
       <div class="table-scroll">
         <table class="report-table">
           <thead><tr><th>Rank</th><th>Student</th><th>Score</th><th>Percentile</th></tr></thead>
@@ -7186,7 +9011,8 @@ ${isPractice ? `<div class="stat-card"><div class="val">${practiceAccuracyLabel(
       }
       `
       }
-    </div>`}
+    </div>`
+    }
   `;
   renderMath(content);
   animateRadialProgress(content);
@@ -7263,40 +9089,59 @@ function parseBulkQuestions(source) {
   });
 }
 
-
-
-
-
-
 /* ---------------------------------------------------------------------------
    Bulk import helpers
    --------------------------------------------------------------------------- */
 const BULK_SUBJECTS = ["Physics", "Chemistry", "Mathematics", "Biology"];
 const bulkNormType = (t) => {
-  const v = String(t || "").trim().toLowerCase().replace(/[\s/_-]+/g, "");
-  return v === "mcq" ? "mcq" : v === "integer" || v === "numerical" ? "integer" : "";
+  const v = String(t || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s/_-]+/g, "");
+  return v === "mcq"
+    ? "mcq"
+    : v === "integer" || v === "numerical"
+      ? "integer"
+      : "";
 };
 
-const bulkDest = () => document.querySelector('input[name="bulkDest"]:checked')?.value || "bank";
+const bulkDest = () =>
+  document.querySelector('input[name="bulkDest"]:checked')?.value || "bank";
 const bulkDiff = (v) => {
-  const x = String(v || "").trim().toLowerCase();
+  const x = String(v || "")
+    .trim()
+    .toLowerCase();
   return ["easy", "medium", "hard"].includes(x) ? x : "";
 };
 
 function snapBulkChapter(value) {
   const v = String(value || "").trim();
   if (!v) return "";
-  const loose = (t) => String(t).toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, " ").replace(/\b(the|of)\b/g, " ").replace(/\s+/g, " ").trim();
+  const loose = (t) =>
+    String(t)
+      .toLowerCase()
+      .replace(/&/g, "and")
+      .replace(/[^a-z0-9]+/g, " ")
+      .replace(/\b(the|of)\b/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
   const all = CHAPTER_GROUPS.flatMap((g) => g.chapters);
   const key = loose(v);
   const exact = all.find((c) => loose(c) === key);
   if (exact) return exact;
-  const near = all.filter((c) => key.includes(loose(c)) || loose(c).includes(key));
+  const near = all.filter(
+    (c) => key.includes(loose(c)) || loose(c).includes(key),
+  );
   return near.length === 1 ? near[0] : v;
 }
 
 function bulkChapterListText() {
-  return BULK_SUBJECTS.map((sub) => `${sub}: ${CHAPTER_GROUPS.filter((g) => g.subject === sub).flatMap((g) => g.chapters).join("; ")}`).join("\n");
+  return BULK_SUBJECTS.map(
+    (sub) =>
+      `${sub}: ${CHAPTER_GROUPS.filter((g) => g.subject === sub)
+        .flatMap((g) => g.chapters)
+        .join("; ")}`,
+  ).join("\n");
 }
 
 function buildBulkPrompt() {
@@ -7422,20 +9267,32 @@ function validateBulkQuestion(question) {
     bad.add(field);
   };
   if (!question.question.trim()) fail("question", "Question text is missing.");
-  if (!canonicalSubject(question.subject)) fail("subject", "Subject must be Physics, Chemistry, Mathematics or Biology.");
+  if (!canonicalSubject(question.subject))
+    fail(
+      "subject",
+      "Subject must be Physics, Chemistry, Mathematics or Biology.",
+    );
   if (!question.chapter.trim()) fail("chapter", "Chapter is missing.");
   if (!type) fail("type", "TYPE must be MCQ or Integer.");
   if (type === "mcq") {
     ["A", "B", "C", "D"].forEach((letter) => {
-      if (!question[`option${letter}`].trim()) fail(`option${letter}`, `OPTION_${letter} is missing.`);
+      if (!question[`option${letter}`].trim())
+        fail(`option${letter}`, `OPTION_${letter} is missing.`);
     });
-    if (!["A", "B", "C", "D"].includes(question.answer.trim().toUpperCase())) fail("answer", "Mark the correct option (A, B, C or D).");
+    if (!["A", "B", "C", "D"].includes(question.answer.trim().toUpperCase()))
+      fail("answer", "Mark the correct option (A, B, C or D).");
   } else if (type === "integer") {
-    if (!question.answer.trim() || !Number.isFinite(Number(question.answer.trim()))) fail("answer", "ANSWER must be a number for Integer questions.");
+    if (
+      !question.answer.trim() ||
+      !Number.isFinite(Number(question.answer.trim()))
+    )
+      fail("answer", "ANSWER must be a number for Integer questions.");
   }
   if (bulkDest() === "bank") {
-    if (!String(question.topic || "").trim()) fail("topic", "Topic is missing.");
-    if (!bulkDiff(question.difficulty)) fail("difficulty", "Difficulty must be Easy, Medium or Hard.");
+    if (!String(question.topic || "").trim())
+      fail("topic", "Topic is missing.");
+    if (!bulkDiff(question.difficulty))
+      fail("difficulty", "Difficulty must be Easy, Medium or Hard.");
   }
   question.errors = errors;
   question.badFields = bad;
@@ -7448,9 +9305,14 @@ function bulkChapterOptions(subject, current) {
   const inList = groups.some((g) => g.chapters.includes(current));
   return (
     `<option value="">Select chapter</option>` +
-    (current && !inList ? `<option value="${escapeHtml(current)}" selected>${escapeHtml(current)} (custom)</option>` : "") +
+    (current && !inList
+      ? `<option value="${escapeHtml(current)}" selected>${escapeHtml(current)} (custom)</option>`
+      : "") +
     groups
-      .map((g) => `<optgroup label="${escapeHtml(g.group)}">${g.chapters.map((c) => `<option value="${escapeHtml(c)}" ${c === current ? "selected" : ""}>${escapeHtml(c)}</option>`).join("")}</optgroup>`)
+      .map(
+        (g) =>
+          `<optgroup label="${escapeHtml(g.group)}">${g.chapters.map((c) => `<option value="${escapeHtml(c)}" ${c === current ? "selected" : ""}>${escapeHtml(c)}</option>`).join("")}</optgroup>`,
+      )
       .join("")
   );
 }
@@ -7461,7 +9323,10 @@ function bulkRenderedHtml(question) {
   const body =
     type === "mcq"
       ? ["A", "B", "C", "D"]
-          .map((l) => `<div class="bulk-render-option ${ans === l ? "is-correct" : ""}"><strong>${l}</strong><span>${escapeHtml(question[`option${l}`])}</span></div>`)
+          .map(
+            (l) =>
+              `<div class="bulk-render-option ${ans === l ? "is-correct" : ""}"><strong>${l}</strong><span>${escapeHtml(question[`option${l}`])}</span></div>`,
+          )
           .join("")
       : `<div class="bulk-render-answer">Correct numerical answer: <strong>${escapeHtml(question.answer)}</strong></div>`;
   return `<div class="question-text">${escapeHtml(question.question)}</div>${body}`;
@@ -7478,13 +9343,17 @@ function bulkCardHtml(question, index) {
     type === "mcq"
       ? `<div class="bq-options">${["A", "B", "C", "D"]
           .map(
-            (l) => `<div class="bq-opt ${ans === l ? "is-correct" : ""}" data-bq-wrap="option${l}">
+            (
+              l,
+            ) => `<div class="bq-opt ${ans === l ? "is-correct" : ""}" data-bq-wrap="option${l}">
               <span class="bq-letter">${l}</span>
               <textarea rows="2" data-bulk-field="option${l}" placeholder="Option ${l}">${e(question[`option${l}`])}</textarea>
               <button type="button" class="bq-mark" data-bq-answer="${l}" aria-label="Mark option ${l} as correct" title="Mark as the correct answer">${ans === l ? "✔" : ""}</button>
             </div>`,
           )
-          .join("")}</div><div class="bq-hint">Tap the circle next to the correct option.</div>`
+          .join(
+            "",
+          )}</div><div class="bq-hint">Tap the circle next to the correct option.</div>`
       : type === "integer"
         ? `<label class="bq-f" data-bq-wrap="answer">Correct numerical answer<input type="text" inputmode="decimal" data-bulk-field="answer" value="${e(question.answer)}" placeholder="e.g. 7 or -2.5"></label>`
         : `<div class="bq-hint">Choose the question type above to continue.</div>`;
@@ -7505,11 +9374,15 @@ function bulkCardHtml(question, index) {
       <label class="bq-f" data-bq-wrap="chapter">Chapter
         <select class="ui-select" data-bulk-field="chapter">${bulkChapterOptions(question.subject, question.chapter.trim())}</select></label>
     </div>
-    ${bank ? `<div class="bq-meta">
+    ${
+      bank
+        ? `<div class="bq-meta">
       <label class="bq-f" data-bq-wrap="topic">Topic<input type="text" data-bulk-field="topic" value="${e(question.topic || "")}" placeholder="e.g. Projectile motion"></label>
       <label class="bq-f" data-bq-wrap="difficulty">Difficulty
         <select class="ui-select" data-bulk-field="difficulty"><option value="">Select</option>${["Easy", "Medium", "Hard"].map((d) => `<option ${bulkDiff(question.difficulty) === d.toLowerCase() ? "selected" : ""}>${d}</option>`).join("")}</select></label>
-    </div>` : ""}
+    </div>`
+        : ""
+    }
     <label class="bq-f" data-bq-wrap="question">Question<textarea rows="4" data-bulk-field="question">${e(question.question)}</textarea></label>
     ${options}
 
@@ -7521,12 +9394,16 @@ function refreshBulkSummary() {
   const active = bulkQuestions.filter((q) => !q.removed);
   active.forEach(validateBulkQuestion);
   const validCount = active.filter((q) => !q.errors.length).length;
-  document.getElementById("bulkImportSummary").textContent = `${validCount} valid / ${active.length} questions`;
-  document.getElementById("importAllValidQuestionsBtn").disabled = validCount === 0;
+  document.getElementById("bulkImportSummary").textContent =
+    `${validCount} valid / ${active.length} questions`;
+  document.getElementById("importAllValidQuestionsBtn").disabled =
+    validCount === 0;
   const banner = document.getElementById("bulkImportErrors");
   const anyBad = active.some((q) => q.errors.length);
   banner.style.display = anyBad ? "block" : "none";
-  banner.textContent = anyBad ? "Fix the highlighted questions before importing. Questions with problems are skipped." : "";
+  banner.textContent = anyBad
+    ? "Fix the highlighted questions before importing. Questions with problems are skipped."
+    : "";
 }
 
 function refreshBulkCard(index) {
@@ -7536,11 +9413,22 @@ function refreshBulkCard(index) {
   validateBulkQuestion(question);
   card.classList.toggle("has-errors", question.errors.length > 0);
   card.classList.toggle("is-valid", question.errors.length === 0);
-  card.querySelector("[data-bq-status]").textContent = question.errors.length ? `${question.errors.length} to fix` : "✓ Ready";
+  card.querySelector("[data-bq-status]").textContent = question.errors.length
+    ? `${question.errors.length} to fix`
+    : "✓ Ready";
   const box = card.querySelector("[data-bq-errors]");
   box.hidden = !question.errors.length;
-  box.innerHTML = question.errors.map((m) => `<div>${escapeHtml(m)}</div>`).join("");
-  card.querySelectorAll("[data-bq-wrap]").forEach((wrap) => wrap.classList.toggle("is-invalid", question.badFields.has(wrap.dataset.bqWrap)));
+  box.innerHTML = question.errors
+    .map((m) => `<div>${escapeHtml(m)}</div>`)
+    .join("");
+  card
+    .querySelectorAll("[data-bq-wrap]")
+    .forEach((wrap) =>
+      wrap.classList.toggle(
+        "is-invalid",
+        question.badFields.has(wrap.dataset.bqWrap),
+      ),
+    );
   const rendered = card.querySelector("[data-bq-rendered]");
   rendered.innerHTML = bulkRenderedHtml(question);
   renderMath(rendered);
@@ -7555,7 +9443,14 @@ function renderBulkImportPreview() {
     : `<div class="empty-state">All parsed questions were removed.</div>`;
   preview.querySelectorAll("[data-bulk-card]").forEach((card) => {
     const question = bulkQuestions[Number(card.dataset.bulkCard)];
-    card.querySelectorAll("[data-bq-wrap]").forEach((wrap) => wrap.classList.toggle("is-invalid", question.badFields.has(wrap.dataset.bqWrap)));
+    card
+      .querySelectorAll("[data-bq-wrap]")
+      .forEach((wrap) =>
+        wrap.classList.toggle(
+          "is-invalid",
+          question.badFields.has(wrap.dataset.bqWrap),
+        ),
+      );
   });
   refreshBulkSummary();
   renderMath(preview);
@@ -7567,7 +9462,8 @@ function bindBulkPreviewEvents() {
   if (bulkPreviewBound) return;
   bulkPreviewBound = true;
   const preview = document.getElementById("bulkImportPreview");
-  const indexOf = (el) => Number(el.closest("[data-bulk-card]")?.dataset.bulkCard);
+  const indexOf = (el) =>
+    Number(el.closest("[data-bulk-card]")?.dataset.bulkCard);
   preview.addEventListener("input", (event) => {
     const field = event.target.closest("[data-bulk-field]");
     if (!field || field.tagName === "SELECT") return;
@@ -7576,7 +9472,10 @@ function bindBulkPreviewEvents() {
     if (!question) return;
     question[field.dataset.bulkField] = field.value;
     clearTimeout(bulkTimers.get(index));
-    bulkTimers.set(index, setTimeout(() => refreshBulkCard(index), 250));
+    bulkTimers.set(
+      index,
+      setTimeout(() => refreshBulkCard(index), 250),
+    );
   });
   preview.addEventListener("change", (event) => {
     const field = event.target.closest("select[data-bulk-field]");
@@ -7586,8 +9485,11 @@ function bindBulkPreviewEvents() {
     if (!question) return;
     question[field.dataset.bulkField] = field.value;
     if (field.dataset.bulkField === "subject") {
-      const allowed = CHAPTER_GROUPS.filter((g) => g.subject === field.value).flatMap((g) => g.chapters);
-      if (question.chapter && !allowed.includes(question.chapter)) question.chapter = "";
+      const allowed = CHAPTER_GROUPS.filter(
+        (g) => g.subject === field.value,
+      ).flatMap((g) => g.chapters);
+      if (question.chapter && !allowed.includes(question.chapter))
+        question.chapter = "";
       renderBulkImportPreview();
     } else refreshBulkCard(index);
   });
@@ -7616,8 +9518,13 @@ function bindBulkPreviewEvents() {
       const question = bulkQuestions[indexOf(type)];
       question.type = type.dataset.bqType;
       const ans = question.answer.trim();
-      if (type.dataset.bqType === "Integer" && !Number.isFinite(Number(ans))) question.answer = "";
-      if (type.dataset.bqType === "MCQ" && !["A", "B", "C", "D"].includes(ans.toUpperCase())) question.answer = "";
+      if (type.dataset.bqType === "Integer" && !Number.isFinite(Number(ans)))
+        question.answer = "";
+      if (
+        type.dataset.bqType === "MCQ" &&
+        !["A", "B", "C", "D"].includes(ans.toUpperCase())
+      )
+        question.answer = "";
       renderBulkImportPreview();
       return;
     }
@@ -7634,6 +9541,7 @@ async function loadBulkImportTests() {
   const { data, error } = await sb
     .from("tests")
     .select("id,title,test_code,is_published,test_mode")
+    .is("owner_id", null)
     .order("created_at", { ascending: false });
   if (error) {
     select.innerHTML = `<option value="">${escapeHtml(friendlyError(error))}</option>`;
@@ -7645,8 +9553,12 @@ async function loadBulkImportTests() {
   const practice = (data || []).filter((t) => t.test_mode === "practice");
   select.innerHTML =
     `<option value="">Select an existing test…</option>` +
-    (live.length ? `<optgroup label="🔴 Live tests">${live.map(opt).join("")}</optgroup>` : "") +
-    (practice.length ? `<optgroup label="Practice tests">${practice.map(opt).join("")}</optgroup>` : "");
+    (live.length
+      ? `<optgroup label="🔴 Live tests">${live.map(opt).join("")}</optgroup>`
+      : "") +
+    (practice.length
+      ? `<optgroup label="Practice tests">${practice.map(opt).join("")}</optgroup>`
+      : "");
 }
 
 async function importBulkQuestions() {
@@ -7678,7 +9590,12 @@ async function importBulkQuestions() {
         difficulty: bulkDiff(question.difficulty),
         question_type: isMcq ? "mcq" : "integer",
         question_text: question.question.trim(),
-        options: isMcq ? ["A", "B", "C", "D"].map((id) => ({ id, text: question[`option${id}`].trim() })) : null,
+        options: isMcq
+          ? ["A", "B", "C", "D"].map((id) => ({
+              id,
+              text: question[`option${id}`].trim(),
+            }))
+          : null,
         correct_option: isMcq ? question.answer.trim().toUpperCase() : null,
         correct_integer_value: isMcq ? null : Number(question.answer.trim()),
         explanation: null,
@@ -7688,8 +9605,13 @@ async function importBulkQuestions() {
     });
     let failed = null;
     for (let i = 0; i < bankRows.length; i += 200) {
-      const { error } = await sb.from("questions").insert(bankRows.slice(i, i + 200));
-      if (error) { failed = error; break; }
+      const { error } = await sb
+        .from("questions")
+        .insert(bankRows.slice(i, i + 200));
+      if (error) {
+        failed = error;
+        break;
+      }
     }
     button.disabled = false;
     if (failed) {
@@ -7779,30 +9701,42 @@ async function enterAdminReportsView() {
   if (!ok) return;
   if (!arBound) {
     arBound = true;
-    document.querySelector("#arContent .an-tabs").addEventListener("click", (e) => {
-      const b = e.target.closest("[data-ar]");
-      if (!b) return;
-      arTab = b.dataset.ar;
-      document.querySelectorAll("#arContent .an-tab").forEach((x) => x.classList.toggle("active", x === b));
-      loadAdminReportsInbox();
-    });
+    document
+      .querySelector("#arContent .an-tabs")
+      .addEventListener("click", (e) => {
+        const b = e.target.closest("[data-ar]");
+        if (!b) return;
+        arTab = b.dataset.ar;
+        document
+          .querySelectorAll("#arContent .an-tab")
+          .forEach((x) => x.classList.toggle("active", x === b));
+        loadAdminReportsInbox();
+      });
     document.getElementById("arList").addEventListener("click", async (e) => {
       const btn = e.target.closest("[data-ar-act]");
       if (!btn) return;
       btn.disabled = true;
-      const fn = btn.dataset.arAct === "resolve" ? "admin_resolve_question_reports" : "admin_reopen_question_reports";
+      const fn =
+        btn.dataset.arAct === "resolve"
+          ? "admin_resolve_question_reports"
+          : "admin_reopen_question_reports";
       const { error } = await sb.rpc(fn, { p_question_id: btn.dataset.q });
       if (error) {
         toast(friendlyError(error), "error");
         btn.disabled = false;
         return;
       }
-      toast(btn.dataset.arAct === "resolve" ? "Marked as resolved" : "Reopened", "success");
+      toast(
+        btn.dataset.arAct === "resolve" ? "Marked as resolved" : "Reopened",
+        "success",
+      );
       await loadAdminReportsInbox();
     });
   }
   arTab = "open";
-  document.querySelectorAll("#arContent .an-tab").forEach((x) => x.classList.toggle("active", x.dataset.ar === "open"));
+  document
+    .querySelectorAll("#arContent .an-tab")
+    .forEach((x) => x.classList.toggle("active", x.dataset.ar === "open"));
   await loadAdminReportsInbox();
 }
 
@@ -7811,23 +9745,36 @@ async function loadAdminReportsInbox() {
   list.innerHTML = `<div class="empty-state">Loading…</div>`;
   const { data, error } = await sb
     .from("question_reports")
-    .select("id, test_id, question_id, reason, details, created_at, resolved_at, questions(question_text, subject, question_type), profiles(full_name)")
+    .select(
+      "id, test_id, question_id, reason, details, created_at, resolved_at, questions(question_text, subject, question_type), profiles(full_name)",
+    )
     .order("created_at", { ascending: false });
   if (error) {
     list.innerHTML = `<div class="error-box">${escapeHtml(/resolved_at/.test(error.message || "") ? "Run the latest migration.sql to enable resolved reports." : friendlyError(error))}</div>`;
     return;
   }
   const wantResolved = arTab === "resolved";
-  const rows = (data || []).filter((r) => (wantResolved ? !!r.resolved_at : !r.resolved_at));
+  const rows = (data || []).filter((r) =>
+    wantResolved ? !!r.resolved_at : !r.resolved_at,
+  );
   const groups = new Map();
   rows.forEach((r) => {
-    if (!groups.has(r.question_id)) groups.set(r.question_id, { q: r.question_id, test: r.test_id, question: r.questions, items: [] });
+    if (!groups.has(r.question_id))
+      groups.set(r.question_id, {
+        q: r.question_id,
+        test: r.test_id,
+        question: r.questions,
+        items: [],
+      });
     groups.get(r.question_id).items.push(r);
   });
   const testIds = [...new Set(rows.map((r) => r.test_id))];
   const titles = new Map();
   if (testIds.length) {
-    const { data: tests } = await sb.from("tests").select("id, title, test_mode").in("id", testIds);
+    const { data: tests } = await sb
+      .from("tests")
+      .select("id, title, test_mode")
+      .in("id", testIds);
     (tests || []).forEach((t) => titles.set(t.id, t));
   }
   if (!groups.size) {
@@ -7838,7 +9785,10 @@ async function loadAdminReportsInbox() {
     .map((g) => {
       const t = titles.get(g.test);
       const reasons = g.items
-        .map((r) => `<li><b>${escapeHtml(r.reason)}</b>${r.details ? ` · ${escapeHtml(r.details)}` : ""} <small>${escapeHtml(r.profiles?.full_name || "Student")} · ${formatDateTime(r.created_at)}</small></li>`)
+        .map(
+          (r) =>
+            `<li><b>${escapeHtml(r.reason)}</b>${r.details ? ` · ${escapeHtml(r.details)}` : ""} <small>${escapeHtml(r.profiles?.full_name || "Student")} · ${formatDateTime(r.created_at)}</small></li>`,
+        )
         .join("");
       return `<article class="report-card">
         <div class="report-card-head"><strong>${escapeHtml(t?.title || "Test")}</strong><span class="status-tag ${t?.test_mode === "practice" ? "is-on" : "locked"}">${t?.test_mode === "practice" ? "♾️ Infinite" : "🔴 Live"}</span><span class="status-tag dq-tag">${g.items.length} report${g.items.length === 1 ? "" : "s"}</span></div>
@@ -7853,7 +9803,6 @@ async function loadAdminReportsInbox() {
     .join("");
   renderMath(list);
 }
-
 
 async function enterBulkImportView() {
   myProfile = myProfile || (await getMyProfile());
@@ -7981,11 +9930,14 @@ function renderAnalyticsCharts(data) {
   const wrong = chNum(outcomes.wrong);
   const skipped = chNum(outcomes.unattempted);
   const totalOutcome = correct + wrong + skipped;
-  const acc = correct + wrong ? Math.round((correct / (correct + wrong)) * 100) : 0;
+  const acc =
+    correct + wrong ? Math.round((correct / (correct + wrong)) * 100) : 0;
 
   const barRows = trend.map((t, i) => ({
     label: new Date(t.submitted_at).getDate(),
-    sub: new Date(t.submitted_at).toLocaleDateString(undefined, { month: "short" }),
+    sub: new Date(t.submitted_at).toLocaleDateString(undefined, {
+      month: "short",
+    }),
     value: chNum(t.percentage),
     latest: i === trend.length - 1,
     tip: `${t.title} · ${chShortDate(t.submitted_at)} — ${t.total_score}/${t.total_marks} (${chNum(t.percentage)}%)${t.accuracy === null || t.accuracy === undefined ? "" : " · accuracy " + chNum(t.accuracy) + "%"}`,
@@ -7993,7 +9945,10 @@ function renderAnalyticsCharts(data) {
   const latest = trend[trend.length - 1];
   const prev = trend[trend.length - 2];
   const delta =
-    latest && prev ? Math.round((chNum(latest.percentage) - chNum(prev.percentage)) * 10) / 10 : null;
+    latest && prev
+      ? Math.round((chNum(latest.percentage) - chNum(prev.percentage)) * 10) /
+        10
+      : null;
   const deltaHtml =
     delta === null
       ? ""
@@ -8037,7 +9992,11 @@ function renderAnalyticsCharts(data) {
             chartLegend([
               { label: "Score %", color: "var(--brand)", round: true },
               { label: "Latest test", color: "var(--brand-dark)", round: true },
-              { label: `Average ${chNum(summary.average_score)}%`, color: "var(--muted)", dashed: true },
+              {
+                label: `Average ${chNum(summary.average_score)}%`,
+                color: "var(--muted)",
+                dashed: true,
+              },
             ])
           : `<div class="empty-state">Submit a test to start your trend.</div>`
       }
@@ -8051,7 +10010,11 @@ function renderAnalyticsCharts(data) {
             [
               { value: correct, color: "var(--success)", label: "Correct" },
               { value: wrong, color: "var(--danger)", label: "Wrong" },
-              { value: skipped, color: "var(--not-visited)", label: "Unattempted" },
+              {
+                value: skipped,
+                color: "var(--not-visited)",
+                label: "Unattempted",
+              },
             ],
             { centerValue: `${acc}%`, centerLabel: "accuracy" },
           )}
@@ -8065,7 +10028,6 @@ function renderAnalyticsCharts(data) {
     </div>`;
 }
 
-
 /* =========================================================================
    ANALYTICS — one page for Live + Practice (tabs: Overall / Live / Practice)
    ========================================================================= */
@@ -8074,8 +10036,13 @@ function practiceStatsHtml(data) {
   if (!t.attempts) {
     return `<div class="card analytics-empty-card"><span class="analytics-empty-icon">♾️</span><h2>No practice yet</h2><p class="text-muted">Finish a practice test and your progress will show here.</p><a href="#/practice" class="btn btn-primary">Start practising</a></div>`;
   }
-  const subjects = (data.subjects || []).map((x) => prBar(x.subject, x.accuracy, `${x.correct} right · ${x.wrong} wrong`)).join("");
-  const chap = (list) => (list || []).map((x) => prBar(x.chapter, x.accuracy, x.subject)).join("");
+  const subjects = (data.subjects || [])
+    .map((x) =>
+      prBar(x.subject, x.accuracy, `${x.correct} right · ${x.wrong} wrong`),
+    )
+    .join("");
+  const chap = (list) =>
+    (list || []).map((x) => prBar(x.chapter, x.accuracy, x.subject)).join("");
   return `
     <div class="pr-stat-row">
       ${prStat(t.attempts, "Practice attempts")}
@@ -8099,14 +10066,24 @@ function practiceStatsHtml(data) {
 
 function activityHtml(daily) {
   const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" });
-  const byDay = new Map((daily || []).map((d) => [String(d.day).slice(0, 10), Number(d.questions || 0)]));
+  const byDay = new Map(
+    (daily || []).map((d) => [
+      String(d.day).slice(0, 10),
+      Number(d.questions || 0),
+    ]),
+  );
   const days = [];
   for (let i = 29; i >= 0; i--) {
     const key = fmt.format(new Date(Date.now() - i * 86400000));
     days.push({ key, n: byDay.get(key) || 0 });
   }
   const maxN = Math.max(1, ...days.map((d) => d.n));
-  const bars = days.map((d) => `<i title="${d.key}: ${d.n} questions" style="height:${d.n ? Math.max(8, (d.n / maxN) * 100) : 3}%" class="${d.n ? "on" : ""}"></i>`).join("");
+  const bars = days
+    .map(
+      (d) =>
+        `<i title="${d.key}: ${d.n} questions" style="height:${d.n ? Math.max(8, (d.n / maxN) * 100) : 3}%" class="${d.n ? "on" : ""}"></i>`,
+    )
+    .join("");
   const active = days.filter((d) => d.n).length;
   return `<section class="card pr-section"><h2>Last 30 days</h2><div class="pr-activity">${bars}</div><p class="text-muted pr-note">You studied on ${active} of the last 30 days.</p></section>`;
 }
@@ -8117,9 +10094,15 @@ function overallStatsHtml(o) {
     return `<div class="card analytics-empty-card"><span class="analytics-empty-icon">📊</span><h2>No analytics yet</h2><p class="text-muted">Attempt a live test or a practice test to see your analytics.</p><a href="#/practice" class="btn btn-primary">Start practising</a></div>`;
   }
   const hrs = Number(t.total_time_seconds || 0);
-  const timeLabel = hrs >= 3600 ? `${(hrs / 3600).toFixed(1)}h` : `${Math.round(hrs / 60)}m`;
-  const subjects = (o.subjects || []).map((x) => prBar(x.subject, x.accuracy, `${x.correct} right · ${x.wrong} wrong`)).join("");
-  const chap = (list) => (list || []).map((x) => prBar(x.chapter, x.accuracy, x.subject)).join("");
+  const timeLabel =
+    hrs >= 3600 ? `${(hrs / 3600).toFixed(1)}h` : `${Math.round(hrs / 60)}m`;
+  const subjects = (o.subjects || [])
+    .map((x) =>
+      prBar(x.subject, x.accuracy, `${x.correct} right · ${x.wrong} wrong`),
+    )
+    .join("");
+  const chap = (list) =>
+    (list || []).map((x) => prBar(x.chapter, x.accuracy, x.subject)).join("");
   return `
     <div class="pr-stat-row">
       ${prStat(t.questions_attempted, "Questions attempted")}
@@ -8157,7 +10140,9 @@ async function enterAnalyticsView() {
     cachedRpc("get_combined_overview"),
     cachedRpc("get_practice_overall_report"),
   ]);
-  const tab = ["overall", "live", "practice"].includes(qs("tab")) ? qs("tab") : "overall";
+  const tab = ["overall", "live", "practice"].includes(qs("tab"))
+    ? qs("tab")
+    : "overall";
   content.innerHTML = `
     <div class="an-tabs" role="tablist">
       <button type="button" class="an-tab" data-tab="overall">All</button>
@@ -8167,12 +10152,19 @@ async function enterAnalyticsView() {
     <div id="anPane"></div>`;
   const pane = document.getElementById("anPane");
   const show = async (name) => {
-    content.querySelectorAll(".an-tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
-    if (historyContainer) historyContainer.style.display = name === "live" ? "" : "none";
+    content
+      .querySelectorAll(".an-tab")
+      .forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
+    if (historyContainer)
+      historyContainer.style.display = name === "live" ? "" : "none";
     if (name === "overall") {
-      pane.innerHTML = overall.error ? `<div class="error-box">${escapeHtml(prDeploymentHint(overall.error))}</div>` : overallStatsHtml(overall.data);
+      pane.innerHTML = overall.error
+        ? `<div class="error-box">${escapeHtml(prDeploymentHint(overall.error))}</div>`
+        : overallStatsHtml(overall.data);
     } else if (name === "practice") {
-      pane.innerHTML = practice.error ? `<div class="error-box">${escapeHtml(prDeploymentHint(practice.error))}</div>` : practiceStatsHtml(practice.data);
+      pane.innerHTML = practice.error
+        ? `<div class="error-box">${escapeHtml(prDeploymentHint(practice.error))}</div>`
+        : practiceStatsHtml(practice.data);
     } else if (live.error || !live.data) {
       pane.innerHTML = `<div class="error-box">${escapeHtml(friendlyError(live.error) || "Analytics could not be loaded.")}</div>`;
     } else if (!Number(live.data.summary?.completed_tests || 0)) {
@@ -8189,24 +10181,28 @@ async function enterAnalyticsView() {
   await show(tab);
 }
 
-  function localDateTimeValue(date) {
-    const pad = (value) => String(value).padStart(2, "0");
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-  }
+function localDateTimeValue(date) {
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
 
-  function requestMinimumDate() {
-    const date = new Date();
-    date.setHours(0, 0, 0, 0);
-    date.setDate(date.getDate() + 5);
-    return date;
-  }
+function requestMinimumDate() {
+  const date = new Date();
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() + 5);
+  return date;
+}
 
-  function splitRequestLines(value) {
-    return value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
-  }
+function splitRequestLines(value) {
+  return value
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
 
-  function formatRequestStatus(status) {
-    const tone = {
+function formatRequestStatus(status) {
+  const tone =
+    {
       Pending: "locked",
       "Under Review": "review",
       Approved: "is-on",
@@ -8216,138 +10212,180 @@ async function enterAnalyticsView() {
       Rejected: "closed",
       Cancelled: "closed",
     }[status] || "locked";
-    return `<span class="status-tag ${tone}">${escapeHtml(status)}</span>`;
-  }
+  return `<span class="status-tag ${tone}">${escapeHtml(status)}</span>`;
+}
 
-  async function loadTestRequests() {
-    const target = document.getElementById("testRequestsList");
-    if (!target) return;
-    const { data, error } = await sb.from("test_requests")
-      .select("id, exam, subjects, chapters, topics, difficulty, question_source, question_count, duration_minutes, preferred_at, student_note, admin_note, status, created_at")
-      .order("created_at", { ascending: false });
-    if (error) {
-      target.innerHTML = `<div class="error-box">${escapeHtml(friendlyError(error))}</div>`;
-      return;
-    }
-    if (!data?.length) {
-      target.innerHTML = `<div class="empty-state">No test requests yet.</div>`;
-      return;
-    }
-    target.innerHTML = data.map((request) => `
+async function loadTestRequests() {
+  const target = document.getElementById("testRequestsList");
+  if (!target) return;
+  const { data, error } = await sb
+    .from("test_requests")
+    .select(
+      "id, exam, subjects, chapters, topics, difficulty, question_source, question_count, duration_minutes, preferred_at, student_note, admin_note, status, created_at",
+    )
+    .order("created_at", { ascending: false });
+  if (error) {
+    target.innerHTML = `<div class="error-box">${escapeHtml(friendlyError(error))}</div>`;
+    return;
+  }
+  if (!data?.length) {
+    target.innerHTML = `<div class="empty-state">No test requests yet.</div>`;
+    return;
+  }
+  target.innerHTML = data
+    .map(
+      (request) => `
       <article class="request-row">
         <div><strong>${escapeHtml(request.exam)}</strong><div class="text-muted">${escapeHtml((request.subjects || []).join(", ") || "No subjects selected")} · ${Number(request.question_count)} questions · ${Number(request.duration_minutes)} min</div></div>
         <div><strong>${formatDateTime(request.preferred_at)}</strong><div>${formatRequestStatus(request.status)}</div></div>
         <div class="text-muted">${escapeHtml(request.student_note || "No note added")}${request.admin_note ? `<div class="req-admin-reply">💬 Admin: ${escapeHtml(request.admin_note)}</div>` : ""}</div>
-      </article>`).join("");
-  }
+      </article>`,
+    )
+    .join("");
+}
 
-  async function enterErrorBookView() {
-    const list = document.getElementById("errorBookList");
-    const summary = document.getElementById("errorBookSummary");
-    const form = document.getElementById("errorBookForm");
-    if (form && !form.dataset.bound) {
-      form.dataset.bound = "1";
-      initSubjectChapter("errorSubject", "errorChapter");
-      bindImageEditor("errorImage");
-      let voiceRecorder = null;
-      let voiceChunks = [];
-      let recordedVoice = null;
-      const recordButton = document.getElementById("errorVoiceRecord");
-      const stopButton = document.getElementById("errorVoiceStop");
-      const deleteButton = document.getElementById("errorVoiceDelete");
-      const voiceStatus = document.getElementById("errorVoiceStatus");
-      const voicePreview = document.getElementById("errorVoicePreview");
-      const clearRecording = (status = "Recording deleted. You can record again.") => {
-        if (voiceRecorder?.state === "recording") voiceRecorder.stop();
-        if (voicePreview.src) URL.revokeObjectURL(voicePreview.src);
-        recordedVoice = null;
-        voicePreview.hidden = true;
-        voicePreview.removeAttribute("src");
-        deleteButton.disabled = true;
-        voiceStatus.textContent = status;
-      };
-      recordButton.addEventListener("click", async () => {
-        if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
-          voiceStatus.textContent = "Voice recording is not supported in this browser.";
-          return;
-        }
-        try {
-          clearRecording("Starting a new recording…");
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          voiceChunks = [];
-          voiceRecorder = new MediaRecorder(stream, recorderOptions());
-          voiceRecorder.addEventListener("dataavailable", (event) => {
-            if (event.data.size) voiceChunks.push(event.data);
+async function enterErrorBookView() {
+  const list = document.getElementById("errorBookList");
+  const summary = document.getElementById("errorBookSummary");
+  const form = document.getElementById("errorBookForm");
+  if (form && !form.dataset.bound) {
+    form.dataset.bound = "1";
+    initSubjectChapter("errorSubject", "errorChapter");
+    bindImageEditor("errorImage");
+    let voiceRecorder = null;
+    let voiceChunks = [];
+    let recordedVoice = null;
+    const recordButton = document.getElementById("errorVoiceRecord");
+    const stopButton = document.getElementById("errorVoiceStop");
+    const deleteButton = document.getElementById("errorVoiceDelete");
+    const voiceStatus = document.getElementById("errorVoiceStatus");
+    const voicePreview = document.getElementById("errorVoicePreview");
+    const clearRecording = (
+      status = "Recording deleted. You can record again.",
+    ) => {
+      if (voiceRecorder?.state === "recording") voiceRecorder.stop();
+      if (voicePreview.src) URL.revokeObjectURL(voicePreview.src);
+      recordedVoice = null;
+      voicePreview.hidden = true;
+      voicePreview.removeAttribute("src");
+      deleteButton.disabled = true;
+      voiceStatus.textContent = status;
+    };
+    recordButton.addEventListener("click", async () => {
+      if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+        voiceStatus.textContent =
+          "Voice recording is not supported in this browser.";
+        return;
+      }
+      try {
+        clearRecording("Starting a new recording…");
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+        });
+        voiceChunks = [];
+        voiceRecorder = new MediaRecorder(stream, recorderOptions());
+        voiceRecorder.addEventListener("dataavailable", (event) => {
+          if (event.data.size) voiceChunks.push(event.data);
+        });
+        voiceRecorder.addEventListener("stop", () => {
+          stream.getTracks().forEach((track) => track.stop());
+          recordedVoice = new Blob(voiceChunks, {
+            type: cleanMime(voiceRecorder.mimeType) || "audio/webm",
           });
-          voiceRecorder.addEventListener("stop", () => {
-            stream.getTracks().forEach((track) => track.stop());
-            recordedVoice = new Blob(voiceChunks, { type: cleanMime(voiceRecorder.mimeType) || "audio/webm" });
-            voicePreview.src = URL.createObjectURL(recordedVoice);
-            voicePreview.hidden = false;
-            voiceStatus.textContent = "Voice note recorded. You can listen before saving.";
-            recordButton.disabled = false;
-            stopButton.disabled = true;
-            deleteButton.disabled = false;
-          });
-          voiceRecorder.start();
-          recordButton.disabled = true;
-          stopButton.disabled = false;
-          voiceStatus.textContent = "Recording… speak clearly, then press Stop.";
-        } catch (error) {
-          voiceStatus.textContent = error?.name === "NotAllowedError"
+          voicePreview.src = URL.createObjectURL(recordedVoice);
+          voicePreview.hidden = false;
+          voiceStatus.textContent =
+            "Voice note recorded. You can listen before saving.";
+          recordButton.disabled = false;
+          stopButton.disabled = true;
+          deleteButton.disabled = false;
+        });
+        voiceRecorder.start();
+        recordButton.disabled = true;
+        stopButton.disabled = false;
+        voiceStatus.textContent = "Recording… speak clearly, then press Stop.";
+      } catch (error) {
+        voiceStatus.textContent =
+          error?.name === "NotAllowedError"
             ? "Microphone access was denied. Allow microphone access in browser site settings to record."
             : "Could not start recording. Check your microphone and try again.";
+      }
+    });
+    stopButton.addEventListener("click", () => {
+      if (voiceRecorder?.state === "recording") voiceRecorder.stop();
+    });
+    deleteButton.addEventListener("click", () => clearRecording());
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const message = document.getElementById("errorBookFormMessage");
+      const {
+        data: { user },
+      } = await sb.auth.getUser();
+      if (!user) return;
+      const payload = {
+        student_id: user.id,
+        question_text: document
+          .getElementById("errorQuestionText")
+          .value.trim(),
+        category: document.getElementById("errorCategory").value,
+        comment: document.getElementById("errorComment").value.trim() || null,
+        subject: document.getElementById("errorSubject").value || null,
+        chapter: document.getElementById("errorChapter").value || null,
+      };
+      for (const [inputId, column, prefix, blob] of [
+        ["errorImage", "image_path", "images", null],
+        ["errorVoice", "voice_note_path", "voice-notes", recordedVoice],
+      ]) {
+        const file = blob || document.getElementById(inputId)?.files?.[0];
+        if (!file) continue;
+        const uploadFile =
+          file instanceof Blob && !file.name
+            ? new File([file], `voice-${Date.now()}${audioExt(file.type)}`, {
+                type: cleanMime(file.type) || "audio/webm",
+              })
+            : file;
+        const path = `${user.id}/${prefix}/${Date.now()}-${(uploadFile.name || "attachment").replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+        const { error: uploadError } = await sb.storage
+          .from("error-book")
+          .upload(path, uploadFile, {
+            upsert: false,
+            contentType: cleanMime(uploadFile.type),
+          });
+        if (uploadError) {
+          message.textContent = uploadError.message
+            ?.toLowerCase()
+            .includes("bucket not found")
+            ? "Attachment storage is not configured yet. Ask the administrator to apply schema_migration.sql in Supabase."
+            : `Attachment upload failed: ${friendlyError(uploadError)}`;
+          return;
         }
-      });
-      stopButton.addEventListener("click", () => {
-        if (voiceRecorder?.state === "recording") voiceRecorder.stop();
-      });
-      deleteButton.addEventListener("click", () => clearRecording());
-      form.addEventListener("submit", async (event) => {
-        event.preventDefault();
-        const message = document.getElementById("errorBookFormMessage");
-        const { data: { user } } = await sb.auth.getUser();
-        if (!user) return;
-        const payload = {
-          student_id: user.id,
-          question_text: document.getElementById("errorQuestionText").value.trim(),
-          category: document.getElementById("errorCategory").value,
-          comment: document.getElementById("errorComment").value.trim() || null,
-          subject: document.getElementById("errorSubject").value || null,
-          chapter: document.getElementById("errorChapter").value || null,
-        };
-        for (const [inputId, column, prefix, blob] of [["errorImage", "image_path", "images", null], ["errorVoice", "voice_note_path", "voice-notes", recordedVoice]]) {
-          const file = blob || document.getElementById(inputId)?.files?.[0];
-          if (!file) continue;
-          const uploadFile = file instanceof Blob && !file.name ? new File([file], `voice-${Date.now()}${audioExt(file.type)}`, { type: cleanMime(file.type) || "audio/webm" }) : file;
-          const path = `${user.id}/${prefix}/${Date.now()}-${(uploadFile.name || "attachment").replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-          const { error: uploadError } = await sb.storage.from("error-book").upload(path, uploadFile, { upsert: false, contentType: cleanMime(uploadFile.type) });
-          if (uploadError) {
-            message.textContent = uploadError.message?.toLowerCase().includes("bucket not found")
-              ? "Attachment storage is not configured yet. Ask the administrator to apply schema_migration.sql in Supabase."
-              : `Attachment upload failed: ${friendlyError(uploadError)}`;
-            return;
-          }
-          payload[column] = path;
-        }
-        const { error } = await sb.from("error_book_entries").insert(payload);
-        message.textContent = error ? friendlyError(error) : "Saved privately.";
-        if (!error) {
-          form.reset();
-          clearRecording("Your browser will ask for microphone access when you start recording.");
-          await enterErrorBookView();
-        }
-      });
-    }
-    const { data, error } = await sb.from("error_book_entries").select("id, attempt_id, question_id, question_text, category, comment, image_path, voice_note_path, resolved, created_at, subject, chapter").order("created_at", { ascending: false });
-    if (error) {
-      list.innerHTML = `<div class="error-box">${escapeHtml(friendlyError(error))}</div>`;
-      return;
-    }
-    errorBookState.rows = data || [];
-    bindErrorBookToolbar();
-    renderErrorBook();
+        payload[column] = path;
+      }
+      const { error } = await sb.from("error_book_entries").insert(payload);
+      message.textContent = error ? friendlyError(error) : "Saved privately.";
+      if (!error) {
+        form.reset();
+        clearRecording(
+          "Your browser will ask for microphone access when you start recording.",
+        );
+        await enterErrorBookView();
+      }
+    });
   }
+  const { data, error } = await sb
+    .from("error_book_entries")
+    .select(
+      "id, attempt_id, question_id, question_text, category, comment, image_path, voice_note_path, resolved, created_at, subject, chapter",
+    )
+    .order("created_at", { ascending: false });
+  if (error) {
+    list.innerHTML = `<div class="error-box">${escapeHtml(friendlyError(error))}</div>`;
+    return;
+  }
+  errorBookState.rows = data || [];
+  bindErrorBookToolbar();
+  renderErrorBook();
+}
 
 async function finishAnalyticsView(content, data) {
   const completedTests = Number(data.summary?.completed_tests || 0);
@@ -8435,25 +10473,36 @@ function lbPeriodInfo(period, now = new Date()) {
   const year = ist.getUTCFullYear();
   const month = ist.getUTCMonth() - (period === "previous" ? 1 : 0);
   const end = new Date(Date.UTC(year, month + 1, 1) - IST_OFFSET_MS);
-  const monthLabel = new Date(Date.UTC(year, month, 1)).toLocaleDateString("en-IN", {
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC",
-  });
-  const resetLabel = new Date(Date.UTC(year, month + 1, 1)).toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-  });
+  const monthLabel = new Date(Date.UTC(year, month, 1)).toLocaleDateString(
+    "en-IN",
+    {
+      month: "long",
+      year: "numeric",
+      timeZone: "UTC",
+    },
+  );
+  const resetLabel = new Date(Date.UTC(year, month + 1, 1)).toLocaleDateString(
+    "en-IN",
+    {
+      day: "numeric",
+      month: "short",
+      timeZone: "UTC",
+    },
+  );
   return {
     monthLabel,
     resetLabel,
-    daysLeft: Math.max(0, Math.ceil((end.getTime() - now.getTime()) / 86400000)),
+    daysLeft: Math.max(
+      0,
+      Math.ceil((end.getTime() - now.getTime()) / 86400000),
+    ),
   };
 }
 
-const lbCategoryLabel = (key) => LB_CATEGORIES.find((item) => item.key === key)?.label || "Global";
-const lbClassLabel = (key) => (key === "dropper" ? "Dropper" : key ? `Class ${key}` : "");
+const lbCategoryLabel = (key) =>
+  LB_CATEGORIES.find((item) => item.key === key)?.label || "Global";
+const lbClassLabel = (key) =>
+  key === "dropper" ? "Dropper" : key ? `Class ${key}` : "";
 const lbInitial = (name) => (name || "?").trim().charAt(0).toUpperCase() || "?";
 
 function lbStatsLine(row) {
@@ -8492,7 +10541,8 @@ function lbRowHtml(row, myId) {
 }
 
 function lbMyCardHtml(rows, mine) {
-  if (!mine) return `<div class="lb-me is-empty">You are not ranked here yet.</div>`;
+  if (!mine)
+    return `<div class="lb-me is-empty">You are not ranked here yet.</div>`;
   return `<div class="lb-me"><span>Your rank</span><strong>#${mine.rnk}</strong><small>of ${rows.length}</small></div>`;
 }
 
@@ -8511,7 +10561,10 @@ function renderLeaderboard(rows) {
     ${lbMyCardHtml(rows, mine)}
     ${lbPodiumHtml(top.slice(0, 3), myId)}
     <div class="lb-list">
-      ${top.slice(3).map((row) => lbRowHtml(row, myId)).join("")}
+      ${top
+        .slice(3)
+        .map((row) => lbRowHtml(row, myId))
+        .join("")}
       ${outside ? `<div class="lb-gap" aria-hidden="true">•••</div>${lbRowHtml(mine, myId)}` : ""}
     </div>
     <p class="lb-note">Released live tests only. Resets monthly.</p>`;
@@ -8525,12 +10578,19 @@ function renderLeaderboardControls() {
   ).join("");
   document
     .querySelectorAll("#lbPeriod button")
-    .forEach((button) => button.classList.toggle("active", button.dataset.period === lbState.period));
+    .forEach((button) =>
+      button.classList.toggle(
+        "active",
+        button.dataset.period === lbState.period,
+      ),
+    );
   document.getElementById("lbReset").textContent =
     lbState.period === "current"
       ? `🗓 ${info.monthLabel} · resets on ${info.resetLabel} (${info.daysLeft} day${info.daysLeft === 1 ? "" : "s"} left)`
       : `🗓 ${info.monthLabel} · final standings`;
-  document.getElementById("lbSubtitle").textContent = lbCategoryLabel(lbState.category);
+  document.getElementById("lbSubtitle").textContent = lbCategoryLabel(
+    lbState.category,
+  );
 }
 
 async function loadLeaderboard() {
@@ -8572,11 +10632,16 @@ function setupLeaderboardListeners() {
   });
 }
 
-
 /* =========================================================================
    PROFILE — every field is required before a student can start a test
    ========================================================================= */
-const CLASS_OPTIONS = ["Class 9", "Class 10", "Class 11", "Class 12", "Dropper"];
+const CLASS_OPTIONS = [
+  "Class 9",
+  "Class 10",
+  "Class 11",
+  "Class 12",
+  "Dropper",
+];
 const GENDER_OPTIONS = ["Female", "Male", "Non-binary", "Other"];
 const EXAM_OPTIONS = ["JEE", "NEET", "Foundation", "Olympiads", "Other"];
 const examOptionFor = (raw) => (/^jee/i.test(String(raw || "")) ? "JEE" : raw);
@@ -8588,27 +10653,79 @@ function classOptionFor(raw) {
   const text = String(raw || "").trim();
   if (/drop|repeat|gap/i.test(text)) return "Dropper";
   for (const grade of ["12", "11", "10", "9"]) {
-    if (new RegExp(`(^|\\D)${grade}(\\D|$)`).test(text)) return `Class ${grade}`;
+    if (new RegExp(`(^|\\D)${grade}(\\D|$)`).test(text))
+      return `Class ${grade}`;
   }
   return "";
 }
 
 const mobileDigits = (value) =>
-  String(value || "").replace(/\D/g, "").replace(/^91(?=\d{10}$)/, "");
+  String(value || "")
+    .replace(/\D/g, "")
+    .replace(/^91(?=\d{10}$)/, "");
 const isoToday = () => new Date().toISOString().slice(0, 10);
 const oneOf = (list) => (value) => list.includes(value);
 
 // The single source of truth for the profile form, its validation and the
 // "may this student start a test?" gate.
 const PROFILE_FIELDS = [
-  { key: "full_name", id: "profileNameInput", label: "Full name", message: "Enter your full name.", valid: (v) => v.trim().length >= 2 },
-  { key: "email", id: "profileEmailInput", label: "Email", message: "Enter a valid email address.", valid: (v) => /^\S+@\S+\.\S+$/.test(v.trim()) },
-  { key: "mobile_number", id: "profileMobileInput", label: "Mobile number", message: "Enter a 10-digit mobile number.", valid: (v) => /^[6-9]\d{9}$/.test(mobileDigits(v)) },
-  { key: "date_of_birth", id: "profileDobInput", label: "Date of birth", message: "Pick your date of birth.", valid: (v) => v >= "1970-01-01" && v <= isoToday() },
-  { key: "gender", id: "profileGenderInput", label: "Gender", message: "Select your gender.", valid: oneOf(GENDER_OPTIONS) },
-  { key: "class_grade", id: "profileClassInput", label: "Class", message: "Select your class.", valid: oneOf(CLASS_OPTIONS), read: classOptionFor },
-  { key: "target_exam", id: "profileTargetInput", label: "Target exam", message: "Select your target exam.", valid: (v) => EXAM_OPTIONS.includes(examOptionFor(v)) },
-  { key: "board", id: "profileBoardInput", label: "Board", message: "Select your board.", valid: oneOf(BOARD_OPTIONS) },
+  {
+    key: "full_name",
+    id: "profileNameInput",
+    label: "Full name",
+    message: "Enter your full name.",
+    valid: (v) => v.trim().length >= 2,
+  },
+  {
+    key: "email",
+    id: "profileEmailInput",
+    label: "Email",
+    message: "Enter a valid email address.",
+    valid: (v) => /^\S+@\S+\.\S+$/.test(v.trim()),
+  },
+  {
+    key: "mobile_number",
+    id: "profileMobileInput",
+    label: "Mobile number",
+    message: "Enter a 10-digit mobile number.",
+    valid: (v) => /^[6-9]\d{9}$/.test(mobileDigits(v)),
+  },
+  {
+    key: "date_of_birth",
+    id: "profileDobInput",
+    label: "Date of birth",
+    message: "Pick your date of birth.",
+    valid: (v) => v >= "1970-01-01" && v <= isoToday(),
+  },
+  {
+    key: "gender",
+    id: "profileGenderInput",
+    label: "Gender",
+    message: "Select your gender.",
+    valid: oneOf(GENDER_OPTIONS),
+  },
+  {
+    key: "class_grade",
+    id: "profileClassInput",
+    label: "Class",
+    message: "Select your class.",
+    valid: oneOf(CLASS_OPTIONS),
+    read: classOptionFor,
+  },
+  {
+    key: "target_exam",
+    id: "profileTargetInput",
+    label: "Target exam",
+    message: "Select your target exam.",
+    valid: (v) => EXAM_OPTIONS.includes(examOptionFor(v)),
+  },
+  {
+    key: "board",
+    id: "profileBoardInput",
+    label: "Board",
+    message: "Select your board.",
+    valid: oneOf(BOARD_OPTIONS),
+  },
 ];
 
 const storedProfileValue = (profile, field) => {
@@ -8617,7 +10734,9 @@ const storedProfileValue = (profile, field) => {
 };
 
 function missingProfileFields(profile) {
-  return PROFILE_FIELDS.filter((field) => !field.valid(storedProfileValue(profile, field)));
+  return PROFILE_FIELDS.filter(
+    (field) => !field.valid(storedProfileValue(profile, field)),
+  );
 }
 
 // Called when a student presses "Begin". Sends them to the profile page —
@@ -8694,17 +10813,25 @@ function renderProfileNotifyRow(current) {
   const [text, cls] = texts[current] || ["Unavailable on this device", ""];
   status.textContent = text;
   status.className = `pf-notify-status ${cls}`;
-  button.hidden = current === "granted" || current === "unsupported" || current === "unknown";
-  button.textContent = current === "denied" ? "How to unblock" : "Enable notifications";
+  button.hidden =
+    current === "granted" || current === "unsupported" || current === "unknown";
+  button.textContent =
+    current === "denied" ? "How to unblock" : "Enable notifications";
 }
 
 function highlightProfileTarget(targetId) {
-  const label = document.querySelector(`[data-field="${CSS.escape(targetId)}"]`) || document.getElementById("profileNotify");
+  const label =
+    document.querySelector(`[data-field="${CSS.escape(targetId)}"]`) ||
+    document.getElementById("profileNotify");
   if (!label) return;
   label.scrollIntoView({ behavior: "smooth", block: "center" });
   label.querySelector("input, select")?.focus({ preventScroll: true });
   label.classList.add("pf-highlight");
-  label.addEventListener("animationend", () => label.classList.remove("pf-highlight"), { once: true });
+  label.addEventListener(
+    "animationend",
+    () => label.classList.remove("pf-highlight"),
+    { once: true },
+  );
 }
 
 async function enterProfileView() {
@@ -8745,20 +10872,24 @@ async function enterProfileView() {
 
   const afterSave = () => {
     const back = qs("return");
-    if (back && !missingProfileFields(myProfile).length) navigate(back.replace(/^#/, ""));
+    if (back && !missingProfileFields(myProfile).length)
+      navigate(back.replace(/^#/, ""));
     else toast("Profile saved", "success");
   };
   const unsubscribe = pushNotifications.subscribe((current) => {
     if (!document.body.contains(form)) return unsubscribe();
     renderProfileNotifyRow(current);
-    if (current === "granted" && !missingProfileFields(myProfile).length) afterSave();
+    if (current === "granted" && !missingProfileFields(myProfile).length)
+      afterSave();
   });
 
-  document.getElementById("profileNotifyBtn").addEventListener("click", async () => {
-    const current = await pushNotifications.request();
-    renderProfileNotifyRow(current);
-    if (current === "denied") toast(NOTIFICATION_BLOCKED_HELP, "error");
-  });
+  document
+    .getElementById("profileNotifyBtn")
+    .addEventListener("click", async () => {
+      const current = await pushNotifications.request();
+      renderProfileNotifyRow(current);
+      if (current === "denied") toast(NOTIFICATION_BLOCKED_HELP, "error");
+    });
 
   const showError = (field, message) => {
     const label = document.querySelector(`[data-field="${field.id}"]`);
@@ -8773,7 +10904,10 @@ async function enterProfileView() {
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const values = Object.fromEntries(
-      PROFILE_FIELDS.map((field) => [field.key, document.getElementById(field.id).value]),
+      PROFILE_FIELDS.map((field) => [
+        field.key,
+        document.getElementById(field.id).value,
+      ]),
     );
     const invalid = PROFILE_FIELDS.filter((field) => {
       const ok = field.valid(values[field.key]);
@@ -8822,12 +10956,12 @@ async function enterProfileView() {
 
   const { data, error } = await sb.rpc("get_student_test_history");
   if (error) {
-    document.getElementById("profileHistory").innerHTML = `<div class="error-box">${escapeHtml(friendlyError(error))}</div>`;
+    document.getElementById("profileHistory").innerHTML =
+      `<div class="error-box">${escapeHtml(friendlyError(error))}</div>`;
     return;
   }
   renderHistoryCards(data || [], "profileHistory");
 }
-
 
 // Shows/hides the signed-in app shell (sidebar on desktop, bottom nav on
 // mobile) and keeps it in sync with the active view + signed-in user.
@@ -9122,19 +11256,21 @@ function applyTheme(theme) {
 
   localStorage.setItem("jee_theme", safeTheme);
 
-  const btn = document.getElementById("themeToggle");
-
-  if (btn) {
-    btn.textContent = safeTheme === "dark" ? "☀️" : "🌙";
-
+  ["themeToggle", "landingThemeToggle"].forEach((id) => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    btn.dataset.theme = safeTheme;
+    const moon = btn.querySelector(".theme-icon-moon");
+    const sun = btn.querySelector(".theme-icon-sun");
+    if (moon) moon.style.display = safeTheme === "dark" ? "none" : "block";
+    if (sun) sun.style.display = safeTheme === "dark" ? "block" : "none";
     btn.setAttribute(
       "aria-label",
       safeTheme === "dark" ? "Switch to light theme" : "Switch to dark theme",
     );
-
     btn.title =
       safeTheme === "dark" ? "Switch to light theme" : "Switch to dark theme";
-  }
+  });
 }
 
 function toggleTheme() {
@@ -9153,170 +11289,11 @@ function toggleTheme() {
    ========================================================= */
 
 function setupThemeDrag() {
-  const btn = document.getElementById("themeToggle");
-  if (!btn) return;
-
-  let dragging = false;
-  let moved = false;
-
-  let startX = 0;
-  let startY = 0;
-
-  let startLeft = 0;
-  let startTop = 0;
-
-  let pointerId = null;
-
-  const savedLeft = localStorage.getItem("jee_theme_left");
-  const savedTop = localStorage.getItem("jee_theme_top");
-  const savedForMobile =
-    localStorage.getItem("jee_theme_position_mobile") === "true";
-  const isMobileViewport = () =>
-    window.matchMedia("(max-width: 879px)").matches;
-
-  /* Restore previous position */
-
-  if (
-    savedLeft !== null &&
-    savedTop !== null &&
-    (!isMobileViewport() || savedForMobile)
-  ) {
-    const left = parseFloat(savedLeft);
-    const top = parseFloat(savedTop);
-    const maxLeft = window.innerWidth - btn.offsetWidth;
-    const maxTop = window.innerHeight - btn.offsetHeight;
-
-    if (
-      Number.isFinite(left) &&
-      Number.isFinite(top) &&
-      left >= 0 &&
-      left <= maxLeft &&
-      top >= 0 &&
-      top <= maxTop
-    ) {
-      btn.style.left = `${left}px`;
-      btn.style.top = `${top}px`;
-
-      btn.style.right = "auto";
-      btn.style.bottom = "auto";
-    }
-  }
-
-  btn.addEventListener("pointerdown", (event) => {
-    pointerId = event.pointerId;
-
-    dragging = true;
-    moved = false;
-
-    btn.classList.add("dragging");
-
-    btn.setPointerCapture(pointerId);
-
-    const rect = btn.getBoundingClientRect();
-
-    startX = event.clientX;
-    startY = event.clientY;
-
-    startLeft = rect.left;
-    startTop = rect.top;
-
-    event.preventDefault();
-  });
-
-  btn.addEventListener("pointermove", (event) => {
-    if (!dragging || event.pointerId !== pointerId) return;
-
-    const dx = event.clientX - startX;
-    const dy = event.clientY - startY;
-
-    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
-      moved = true;
-    }
-
-    let newLeft = startLeft + dx;
-    let newTop = startTop + dy;
-
-    /* Keep button inside the screen */
-
-    const maxLeft = window.innerWidth - btn.offsetWidth;
-    const maxTop = window.innerHeight - btn.offsetHeight;
-
-    newLeft = Math.max(0, Math.min(newLeft, maxLeft));
-
-    newTop = Math.max(0, Math.min(newTop, maxTop));
-
-    btn.style.left = `${newLeft}px`;
-    btn.style.top = `${newTop}px`;
-
-    btn.style.right = "auto";
-    btn.style.bottom = "auto";
-
-    event.preventDefault();
-  });
-
-  const finishDrag = (event) => {
-    if (!dragging || event.pointerId !== pointerId) return;
-
-    dragging = false;
-
-    btn.classList.remove("dragging");
-
-    /* Save position */
-
-    if (moved) {
-      const rect = btn.getBoundingClientRect();
-
-      localStorage.setItem("jee_theme_left", String(rect.left));
-
-      localStorage.setItem("jee_theme_top", String(rect.top));
-
-      localStorage.setItem(
-        "jee_theme_position_mobile",
-        String(isMobileViewport()),
-      );
-    }
-
-    pointerId = null;
-  };
-
-  btn.addEventListener("pointerup", finishDrag);
-  btn.addEventListener("pointercancel", finishDrag);
-
-  /* Prevent a drag from accidentally toggling the theme */
-
-  btn.addEventListener("click", (event) => {
-    if (moved) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-
-      moved = false;
-      return;
-    }
-
-    toggleTheme();
-  });
-
-  window.addEventListener("resize", () => {
-    const hasMobilePosition =
-      localStorage.getItem("jee_theme_position_mobile") === "true";
-
-    if (isMobileViewport() && !hasMobilePosition) {
-      btn.style.left = "";
-      btn.style.top = "";
-      btn.style.right = "";
-      btn.style.bottom = "";
-      return;
-    }
-
-    if (!btn.style.left || !btn.style.top) return;
-
-    const maxLeft = window.innerWidth - btn.offsetWidth;
-    const maxTop = window.innerHeight - btn.offsetHeight;
-    const left = Math.max(0, Math.min(parseFloat(btn.style.left), maxLeft));
-    const top = Math.max(0, Math.min(parseFloat(btn.style.top), maxTop));
-
-    btn.style.left = `${left}px`;
-    btn.style.top = `${top}px`;
+  ["themeToggle", "landingThemeToggle"].forEach((id) => {
+    const btn = document.getElementById(id);
+    if (!btn || btn.dataset.themeBound) return;
+    btn.dataset.themeBound = "true";
+    btn.addEventListener("click", toggleTheme);
   });
 }
 
@@ -9325,14 +11302,12 @@ function setupThemeDrag() {
    ========================================================= */
 
 function setupTheme() {
-  const savedTheme =
-    localStorage.getItem("jee_theme") ||
-    (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  const savedTheme = localStorage.getItem("jee_theme") || "dark";
 
   applyTheme(savedTheme);
 
   setupThemeDrag();
-} 
+}
 
 /* =========================================================================
    LANDING PAGE — real screenshots
@@ -9388,12 +11363,13 @@ function initFaq() {
     return;
   }
   const io = new IntersectionObserver(
-    (entries) => entries.forEach((entry) => {
-      if (entry.isIntersecting) {
-        entry.target.classList.add("in");
-        io.unobserve(entry.target);
-      }
-    }),
+    (entries) =>
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("in");
+          io.unobserve(entry.target);
+        }
+      }),
     { threshold: 0.15 },
   );
   items.forEach((item) => io.observe(item));
@@ -9407,7 +11383,9 @@ document.addEventListener("click", (event) => {
   const link = event.target.closest('a[href^="#lp-"]');
   if (!link) return;
   event.preventDefault();
-  document.getElementById(link.getAttribute("href").slice(1))?.scrollIntoView({ behavior: "smooth", block: "start" });
+  document
+    .getElementById(link.getAttribute("href").slice(1))
+    ?.scrollIntoView({ behavior: "smooth", block: "start" });
 });
 
 /* =========================================================================
@@ -9416,10 +11394,29 @@ document.addEventListener("click", (event) => {
    announcement. One WhatsApp-style bar sits at the bottom of the screen.
    ========================================================================= */
 const ANN_AUDIENCES = [
-  ["all", "All students"], ["jee", "JEE"], ["neet", "NEET"], ["foundation", "Foundation"],
-  ["class_9", "Class 9"], ["class_10", "Class 10"], ["class_11", "Class 11"], ["class_12", "Class 12"], ["dropper", "Dropper"],
+  ["all", "All students"],
+  ["jee", "JEE"],
+  ["neet", "NEET"],
+  ["foundation", "Foundation"],
+  ["class_9", "Class 9"],
+  ["class_10", "Class 10"],
+  ["class_11", "Class 11"],
+  ["class_12", "Class 12"],
+  ["dropper", "Dropper"],
 ];
-const ann = { before: null, bound: false, isAdmin: false, uid: null, image: null, audio: null, poll: false, link: false, recorder: null, recTimer: null, target: null };
+const ann = {
+  before: null,
+  bound: false,
+  isAdmin: false,
+  uid: null,
+  image: null,
+  audio: null,
+  poll: false,
+  link: false,
+  recorder: null,
+  recTimer: null,
+  target: null,
+};
 let annBadgeAt = 0;
 
 async function refreshAnnouncementBadge(force = false) {
@@ -9432,14 +11429,33 @@ async function refreshAnnouncementBadge(force = false) {
   const n = Number(data) || 0;
   badge.hidden = n < 1;
   badge.textContent = n > 99 ? "99+" : String(n);
-  document.getElementById("annBtn")?.setAttribute("aria-label", n ? `Announcements, ${n} unread` : "Announcements");
+  document
+    .getElementById("annBtn")
+    ?.setAttribute(
+      "aria-label",
+      n ? `Announcements, ${n} unread` : "Announcements",
+    );
 }
 
-const annLinkify = (escaped) => escaped.replace(/https?:\/\/[^\s<]+/g, (u) => `<a href="${u}" target="_blank" rel="noopener noreferrer nofollow">${u}</a>`);
-const annPublicUrl = (path) => sb.storage.from("announcements").getPublicUrl(path).data.publicUrl;
-const annAudienceLabel = (list) => (list || []).map((k) => ANN_AUDIENCES.find((a) => a[0] === k)?.[1] || k).join(", ");
-const annSnippet = (t, n = 60) => (String(t || "").replace(/\s+/g, " ").trim().slice(0, n) || "Announcement");
-const annTime = (iso) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+const annLinkify = (escaped) =>
+  escaped.replace(
+    /https?:\/\/[^\s<]+/g,
+    (u) =>
+      `<a href="${u}" target="_blank" rel="noopener noreferrer nofollow">${u}</a>`,
+  );
+const annPublicUrl = (path) =>
+  sb.storage.from("announcements").getPublicUrl(path).data.publicUrl;
+const annAudienceLabel = (list) =>
+  (list || [])
+    .map((k) => ANN_AUDIENCES.find((a) => a[0] === k)?.[1] || k)
+    .join(", ");
+const annSnippet = (t, n = 60) =>
+  String(t || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, n) || "Announcement";
+const annTime = (iso) =>
+  new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
 function annPollHtml(post) {
   const poll = post.poll;
@@ -9451,7 +11467,9 @@ function annPollHtml(post) {
       return `<button type="button" class="ann-opt ${voted && poll.my_vote === i ? "is-mine" : ""}" data-vote="${i}" data-id="${post.id}">
         ${voted ? `<i style="width:${pct}%"></i>` : ""}<span class="ann-opt-t">${escapeHtml(opt)}</span>${voted ? `<b>${pct}%</b>` : ""}</button>`;
     })
-    .join("")}<small>${total} vote${total === 1 ? "" : "s"}${voted ? " · tap another option to change" : ""}</small></div>`;
+    .join(
+      "",
+    )}<small>${total} vote${total === 1 ? "" : "s"}${voted ? " · tap another option to change" : ""}</small></div>`;
 }
 
 function annRepliesLabel(post) {
@@ -9463,9 +11481,15 @@ function annPostHtml(post) {
   const canDelete = ann.isAdmin || post.mine;
   let host = "";
   if (post.link_url) {
-    try { host = new URL(post.link_url).hostname.replace(/^www\./, ""); } catch (_) { host = post.link_url; }
+    try {
+      host = new URL(post.link_url).hostname.replace(/^www\./, "");
+    } catch (_) {
+      host = post.link_url;
+    }
   }
-  const text = post.body ? `<div class="ann-text">${post.author_is_admin ? annLinkify(escapeHtml(post.body)) : escapeHtml(post.body)}</div>` : "";
+  const text = post.body
+    ? `<div class="ann-text">${post.author_is_admin ? annLinkify(escapeHtml(post.body)) : escapeHtml(post.body)}</div>`
+    : "";
   return `<article class="ann-post ${post.author_is_admin ? "is-admin" : ""} ${post.is_unread ? "is-unread" : ""}" data-post="${post.id}" data-snippet="${escapeHtml(annSnippet(post.body))}">
     <header class="ann-post-head">
       <span class="ann-avatar">${post.author_is_admin ? "📢" : escapeHtml(post.author_name.slice(0, 1).toUpperCase())}</span>
@@ -9478,11 +11502,15 @@ function annPostHtml(post) {
     ${post.audio_path ? `<audio class="ann-audio" controls preload="none" src="${annPublicUrl(post.audio_path)}"></audio>` : ""}
     ${post.link_url ? `<a class="ann-link" href="${escapeHtml(post.link_url)}" target="_blank" rel="noopener noreferrer nofollow">🔗 ${escapeHtml(host)}</a>` : ""}
     ${post.kind === "poll" && post.poll ? annPollHtml(post) : ""}
-    ${post.author_is_admin ? `<div class="ann-act-row">
+    ${
+      post.author_is_admin
+        ? `<div class="ann-act-row">
         <button type="button" class="ann-like ${post.liked ? "is-on" : ""}" data-like="${post.id}" aria-pressed="${post.liked ? "true" : "false"}"><span>${post.liked ? "❤️" : "🤍"}</span><b>${post.like_count}</b></button>
         <button type="button" class="ann-replies-btn" data-replies="${post.id}">💬 <span>${annRepliesLabel(post)}</span>${Number(post.new_replies) ? `<i class="ann-dot"></i>` : ""}</button>
       </div>
-      <div class="ann-thread" data-thread="${post.id}" hidden></div>` : ""}
+      <div class="ann-thread" data-thread="${post.id}" hidden></div>`
+        : ""
+    }
   </article>`;
 }
 
@@ -9498,18 +11526,30 @@ function annBubble(r) {
 
 function annThreadHtml(replies) {
   const head = `<div class="ann-th-head"><b>Replies</b><span>${replies.length}</span></div>`;
-  if (!replies.length) return head + `<p class="ann-thread-empty">${ann.isAdmin ? "No replies yet." : "Type your question in the box below. Only the Examle team can see it."}</p>`;
-  if (!ann.isAdmin) return head + `<div class="ann-bubs">${replies.map(annBubble).join("")}</div>`;
+  if (!replies.length)
+    return (
+      head +
+      `<p class="ann-thread-empty">${ann.isAdmin ? "No replies yet." : "Type your question in the box below. Only the Examle team can see it."}</p>`
+    );
+  if (!ann.isAdmin)
+    return (
+      head + `<div class="ann-bubs">${replies.map(annBubble).join("")}</div>`
+    );
   const groups = new Map();
   replies.forEach((r) => {
     if (!groups.has(r.thread_user_id)) groups.set(r.thread_user_id, []);
     groups.get(r.thread_user_id).push(r);
   });
-  return head + [...groups.entries()]
-    .map(([uid, list]) => {
-      const f = list[0];
-      const chips = [f.student_class, f.student_exam].filter(Boolean).map((c) => `<i>${escapeHtml(c)}</i>`).join("");
-      return `<div class="ann-tgroup">
+  return (
+    head +
+    [...groups.entries()]
+      .map(([uid, list]) => {
+        const f = list[0];
+        const chips = [f.student_class, f.student_exam]
+          .filter(Boolean)
+          .map((c) => `<i>${escapeHtml(c)}</i>`)
+          .join("");
+        return `<div class="ann-tgroup">
         <div class="ann-tg-head">
           <span class="ann-tg-av">${escapeHtml(String(f.student_name).slice(0, 1).toUpperCase())}</span>
           <div class="ann-tg-who"><b>${escapeHtml(f.student_name)}</b>${chips ? `<span class="ann-chips">${chips}</span>` : ""}</div>
@@ -9517,8 +11557,9 @@ function annThreadHtml(replies) {
         </div>
         <div class="ann-bubs">${list.map(annBubble).join("")}</div>
       </div>`;
-    })
-    .join("");
+      })
+      .join("")
+  );
 }
 
 async function annLoadThread(card, { open = false } = {}) {
@@ -9526,21 +11567,45 @@ async function annLoadThread(card, { open = false } = {}) {
   const panel = card.querySelector("[data-thread]");
   if (open) panel.hidden = false;
   if (panel.hidden) return;
-  if (!panel.dataset.loaded) panel.innerHTML = `<p class="ann-thread-empty">Loading…</p>`;
-  const { data, error } = await sb.rpc("get_announcement_replies", { p_id: id });
-  if (error) { panel.innerHTML = `<div class="error-box">${escapeHtml(friendlyError(error))}</div>`; return; }
+  if (!panel.dataset.loaded)
+    panel.innerHTML = `<p class="ann-thread-empty">Loading…</p>`;
+  const { data, error } = await sb.rpc("get_announcement_replies", {
+    p_id: id,
+  });
+  if (error) {
+    panel.innerHTML = `<div class="error-box">${escapeHtml(friendlyError(error))}</div>`;
+    return;
+  }
   panel.dataset.loaded = "1";
   panel.innerHTML = annThreadHtml(data || []);
   const btnLabel = card.querySelector(".ann-replies-btn span");
   const n = (data || []).length;
-  if (btnLabel) btnLabel.textContent = n ? `Replies (${n})` : ann.isAdmin ? "Replies" : "Reply";
+  if (btnLabel)
+    btnLabel.textContent = n
+      ? `Replies (${n})`
+      : ann.isAdmin
+        ? "Replies"
+        : "Reply";
   card.querySelector(".ann-dot")?.remove();
-  if (!ann.isAdmin) annSetTarget({ id, threadUser: ann.uid, title: "Replying to Examle Team", snippet: card.dataset.snippet });
+  if (!ann.isAdmin)
+    annSetTarget({
+      id,
+      threadUser: ann.uid,
+      title: "Replying to Examle Team",
+      snippet: card.dataset.snippet,
+    });
   else {
     const only = [...new Set((data || []).map((r) => r.thread_user_id))];
     if (only.length === 1) {
       const f = data[0];
-      annSetTarget({ id, threadUser: only[0], title: `Replying to ${f.student_name}`, snippet: [f.student_class, f.student_exam].filter(Boolean).join(" · ") || annSnippet(card.dataset.snippet) });
+      annSetTarget({
+        id,
+        threadUser: only[0],
+        title: `Replying to ${f.student_name}`,
+        snippet:
+          [f.student_class, f.student_exam].filter(Boolean).join(" · ") ||
+          annSnippet(card.dataset.snippet),
+      });
     }
   }
 }
@@ -9561,7 +11626,8 @@ function annSyncBar() {
   document.getElementById("annTarget").hidden = !replying;
   if (replying) {
     document.getElementById("annTargetTitle").textContent = ann.target.title;
-    document.getElementById("annTargetSnippet").textContent = ann.target.snippet || "";
+    document.getElementById("annTargetSnippet").textContent =
+      ann.target.snippet || "";
   }
   document.getElementById("annClip").hidden = !announcing;
   document.getElementById("annAudBtn").hidden = !announcing;
@@ -9570,15 +11636,33 @@ function annSyncBar() {
     document.getElementById("annMenu").hidden = true;
     document.getElementById("annAud").hidden = true;
   }
-  const hasMedia = !!(ann.image || ann.audio || ann.poll || document.getElementById("annLink").value.trim());
+  const hasMedia = !!(
+    ann.image ||
+    ann.audio ||
+    ann.poll ||
+    document.getElementById("annLink").value.trim()
+  );
   const recording = ann.recorder?.state === "recording";
-  document.getElementById("annTray").hidden = !(announcing && (hasMedia || ann.link || recording || !document.getElementById("annAud").hidden));
+  document.getElementById("annTray").hidden = !(
+    announcing &&
+    (hasMedia ||
+      ann.link ||
+      recording ||
+      !document.getElementById("annAud").hidden)
+  );
   document.getElementById("annRecInfo").hidden = !recording;
   const canType = ann.isAdmin || replying;
   input.disabled = !canType;
   input.maxLength = announcing ? 2000 : 500;
-  input.placeholder = announcing ? (ann.poll ? "Write the poll question" : "Write an announcement")
-    : replying ? (ann.isAdmin ? "Write a reply" : "Write your reply") : "Tap Reply on an announcement to message the team";
+  input.placeholder = announcing
+    ? ann.poll
+      ? "Write the poll question"
+      : "Write an announcement"
+    : replying
+      ? ann.isAdmin
+        ? "Write a reply"
+        : "Write your reply"
+      : "Tap Reply on an announcement to message the team";
   const hasText = input.value.trim().length > 0;
   // mic when the box is empty (admins), send arrow when there is something to send
   const showSend = !announcing || hasText || hasMedia || ann.poll;
@@ -9594,7 +11678,12 @@ function annRenderAudience() {
   const box = document.getElementById("annAud");
   if (box.dataset.ready) return;
   box.dataset.ready = "1";
-  box.innerHTML = ANN_AUDIENCES.map(([k, label]) => `<label class="ann-aud-chip"><input type="checkbox" value="${k}" ${k === "all" ? "checked" : ""}><span>${label}</span></label>`).join("") + `<button type="button" class="ann-x is-primary" data-aud-done>Done</button>`;
+  box.innerHTML =
+    ANN_AUDIENCES.map(
+      ([k, label]) =>
+        `<label class="ann-aud-chip"><input type="checkbox" value="${k}" ${k === "all" ? "checked" : ""}><span>${label}</span></label>`,
+    ).join("") +
+    `<button type="button" class="ann-x is-primary" data-aud-done>Done</button>`;
   box.addEventListener("click", (e) => {
     if (!e.target.closest("[data-aud-done]")) return;
     box.hidden = true;
@@ -9602,11 +11691,15 @@ function annRenderAudience() {
   });
   box.addEventListener("change", (e) => {
     const boxes = [...box.querySelectorAll("input")];
-    if (e.target.value === "all" && e.target.checked) boxes.forEach((b) => (b.checked = b.value === "all"));
-    else if (e.target.checked) boxes.find((b) => b.value === "all").checked = false;
-    if (!boxes.some((b) => b.checked)) boxes.find((b) => b.value === "all").checked = true;
+    if (e.target.value === "all" && e.target.checked)
+      boxes.forEach((b) => (b.checked = b.value === "all"));
+    else if (e.target.checked)
+      boxes.find((b) => b.value === "all").checked = false;
+    if (!boxes.some((b) => b.checked))
+      boxes.find((b) => b.value === "all").checked = true;
     const picked = boxes.filter((b) => b.checked).map((b) => b.value);
-    document.getElementById("annAudLabel").textContent = "To: " + annAudienceLabel(picked);
+    document.getElementById("annAudLabel").textContent =
+      "To: " + annAudienceLabel(picked);
   });
 }
 
@@ -9623,33 +11716,56 @@ function annAddPollOption(value = "") {
 
 function annAttachInfo() {
   const parts = [];
-  if (ann.image) parts.push(`🖼️ ${escapeHtml(ann.image.name)} · ${Math.max(1, Math.round(ann.image.size / 1024))} KB <button type="button" data-rm="image" aria-label="Remove image">✕</button>`);
-  if (ann.audio) parts.push(`🎵 Audio ready <button type="button" data-rm="audio" aria-label="Remove audio">✕</button>`);
-  document.getElementById("annAttachInfo").innerHTML = parts.map((p) => `<span>${p}</span>`).join("");
+  if (ann.image)
+    parts.push(
+      `🖼️ ${escapeHtml(ann.image.name)} · ${Math.max(1, Math.round(ann.image.size / 1024))} KB <button type="button" data-rm="image" aria-label="Remove image">✕</button>`,
+    );
+  if (ann.audio)
+    parts.push(
+      `🎵 Audio ready <button type="button" data-rm="audio" aria-label="Remove audio">✕</button>`,
+    );
+  document.getElementById("annAttachInfo").innerHTML = parts
+    .map((p) => `<span>${p}</span>`)
+    .join("");
   annSyncBar();
 }
 
 async function annUpload(file, kind) {
-  const ext = kind === "audio" ? audioExt(file.type) : (file.name.match(/\.[a-z0-9]+$/i)?.[0] || ".jpg");
+  const ext =
+    kind === "audio"
+      ? audioExt(file.type)
+      : file.name.match(/\.[a-z0-9]+$/i)?.[0] || ".jpg";
   const path = `${ann.uid}/${Date.now()}-${kind}${ext}`;
-  const { error } = await sb.storage.from("announcements").upload(path, file, { upsert: false, contentType: cleanMime(file.type) });
+  const { error } = await sb.storage
+    .from("announcements")
+    .upload(path, file, { upsert: false, contentType: cleanMime(file.type) });
   if (error) throw error;
   return path;
 }
 
 async function annToggleRecord() {
   const msg = document.getElementById("annMsg");
-  if (ann.recorder?.state === "recording") { ann.recorder.stop(); return; }
-  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { msg.textContent = "Recording is not supported in this browser."; return; }
+  if (ann.recorder?.state === "recording") {
+    ann.recorder.stop();
+    return;
+  }
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+    msg.textContent = "Recording is not supported in this browser.";
+    return;
+  }
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     const chunks = [];
     ann.recorder = new MediaRecorder(stream, recorderOptions());
-    ann.recorder.addEventListener("dataavailable", (ev) => { if (ev.data.size) chunks.push(ev.data); });
+    ann.recorder.addEventListener("dataavailable", (ev) => {
+      if (ev.data.size) chunks.push(ev.data);
+    });
     ann.recorder.addEventListener("stop", () => {
       clearInterval(ann.recTimer);
       stream.getTracks().forEach((t) => t.stop());
-      const blob = new Blob(chunks, { type: cleanMime(ann.recorder.mimeType) || "audio/webm" });
+      const blob = new Blob(chunks, {
+        type: cleanMime(ann.recorder.mimeType) || "audio/webm",
+      });
       if (ann.discardRec) ann.discardRec = false;
       else if (blob.size) ann.audio = blob;
       else msg.textContent = "Nothing was recorded.";
@@ -9659,11 +11775,17 @@ async function annToggleRecord() {
     msg.textContent = "";
     const t0 = Date.now();
     const input = document.getElementById("annInput");
-    ann.recTimer = setInterval(() => { document.getElementById("annRecTime").textContent = `Recording ${Math.round((Date.now() - t0) / 1000)}s`; }, 400);
+    ann.recTimer = setInterval(() => {
+      document.getElementById("annRecTime").textContent =
+        `Recording ${Math.round((Date.now() - t0) / 1000)}s`;
+    }, 400);
     document.getElementById("annRecTime").textContent = "Recording 0s";
     annSyncBar();
   } catch (err) {
-    msg.textContent = err?.name === "NotAllowedError" ? "Microphone is blocked. Allow it in browser settings." : "Could not start recording.";
+    msg.textContent =
+      err?.name === "NotAllowedError"
+        ? "Microphone is blocked. Allow it in browser settings."
+        : "Could not start recording.";
   }
 }
 
@@ -9678,9 +11800,16 @@ async function annSend() {
   if (ann.target) {
     if (!body) return;
     btn.disabled = true;
-    const { error } = await sb.rpc("post_announcement_reply", { p_id: ann.target.id, p_body: body, p_thread_user: ann.isAdmin ? ann.target.threadUser : null });
+    const { error } = await sb.rpc("post_announcement_reply", {
+      p_id: ann.target.id,
+      p_body: body,
+      p_thread_user: ann.isAdmin ? ann.target.threadUser : null,
+    });
     btn.disabled = false;
-    if (error) { msg.textContent = friendlyError(error); return; }
+    if (error) {
+      msg.textContent = friendlyError(error);
+      return;
+    }
     input.value = "";
     annSyncBar();
     const card = document.querySelector(`[data-post="${ann.target.id}"]`);
@@ -9691,31 +11820,56 @@ async function annSend() {
   // new announcement (admins only)
   if (!ann.isAdmin) return;
   const link = document.getElementById("annLink").value.trim();
-  const audience = [...document.querySelectorAll("#annAud input:checked")].map((b) => b.value);
-  const options = ann.poll ? [...document.querySelectorAll("#annPollOptions input")].map((i) => i.value.trim()).filter(Boolean) : null;
-  if (ann.poll && (!body || options.length < 2)) { msg.textContent = "A poll needs a question and at least 2 options."; return; }
+  const audience = [...document.querySelectorAll("#annAud input:checked")].map(
+    (b) => b.value,
+  );
+  const options = ann.poll
+    ? [...document.querySelectorAll("#annPollOptions input")]
+        .map((i) => i.value.trim())
+        .filter(Boolean)
+    : null;
+  if (ann.poll && (!body || options.length < 2)) {
+    msg.textContent = "A poll needs a question and at least 2 options.";
+    return;
+  }
   if (!ann.poll && !body && !ann.image && !ann.audio && !link) return;
-  if (link && !/^https?:\/\//i.test(link)) { msg.textContent = "The link must start with http:// or https://"; return; }
+  if (link && !/^https?:\/\//i.test(link)) {
+    msg.textContent = "The link must start with http:// or https://";
+    return;
+  }
   btn.disabled = true;
   try {
-    const imagePath = !ann.poll && ann.image ? await annUpload(ann.image, "image") : null;
-    const audioPath = !ann.poll && ann.audio ? await annUpload(ann.audio, "audio") : null;
+    const imagePath =
+      !ann.poll && ann.image ? await annUpload(ann.image, "image") : null;
+    const audioPath =
+      !ann.poll && ann.audio ? await annUpload(ann.audio, "audio") : null;
     const { error } = await sb.rpc("post_announcement", {
-      p_kind: ann.poll ? "poll" : "text", p_body: body, p_audience: audience, p_link: link || null,
-      p_image_path: imagePath, p_audio_path: audioPath, p_poll_options: options,
+      p_kind: ann.poll ? "poll" : "text",
+      p_body: body,
+      p_audience: audience,
+      p_link: link || null,
+      p_image_path: imagePath,
+      p_audio_path: audioPath,
+      p_poll_options: options,
     });
     if (error) throw error;
     input.value = "";
     document.getElementById("annLink").value = "";
     document.getElementById("annLinkRow").hidden = true;
     document.getElementById("annPollOptions").innerHTML = "";
-    annAddPollOption(); annAddPollOption();
+    annAddPollOption();
+    annAddPollOption();
     document.getElementById("annPollBox").hidden = true;
-    ann.image = null; ann.audio = null; ann.poll = false; ann.link = false;
+    ann.image = null;
+    ann.audio = null;
+    ann.poll = false;
+    ann.link = false;
     annAttachInfo();
     toast("Announcement sent", "success");
     await loadAnnouncements();
-    document.getElementById("annScroll").scrollTo({ top: 0, behavior: "smooth" });
+    document
+      .getElementById("annScroll")
+      .scrollTo({ top: 0, behavior: "smooth" });
   } catch (err) {
     msg.textContent = friendlyError(err);
   } finally {
@@ -9730,7 +11884,10 @@ async function loadAnnouncements(append = false) {
     feed.innerHTML = `<div class="empty-state">Loading…</div>`;
     ann.before = null;
   }
-  const { data, error } = await sb.rpc("get_announcements", { p_before: ann.before, p_limit: pageSize + 1 });
+  const { data, error } = await sb.rpc("get_announcements", {
+    p_before: ann.before,
+    p_limit: pageSize + 1,
+  });
   if (error) {
     document.getElementById("annMore").hidden = true;
     feed.innerHTML = `<div class="error-box">${escapeHtml(/get_announcements|schema cache|does not exist/i.test(error.message || "") ? "Announcements are not set up yet. Run the announcements migrations." : friendlyError(error))}</div>`;
@@ -9738,7 +11895,8 @@ async function loadAnnouncements(append = false) {
   }
   const posts = (data || []).slice(0, pageSize);
   if (!append) feed.innerHTML = "";
-  if (!append && !posts.length) feed.innerHTML = `<div class="empty-state">No announcements yet.</div>`;
+  if (!append && !posts.length)
+    feed.innerHTML = `<div class="empty-state">No announcements yet.</div>`;
   feed.insertAdjacentHTML("beforeend", posts.map(annPostHtml).join(""));
   ann.before = posts.length ? posts[posts.length - 1].created_at : ann.before;
   document.getElementById("annMore").hidden = (data || []).length <= pageSize;
@@ -9778,7 +11936,11 @@ function annBind() {
   input.addEventListener("input", annSyncBar);
   input.addEventListener("keydown", (e) => {
     // desktop: Enter sends, Shift+Enter makes a new line (like WhatsApp Web). Phones keep Enter as a new line.
-    if (e.key === "Enter" && !e.shiftKey && window.matchMedia("(pointer: fine)").matches) {
+    if (
+      e.key === "Enter" &&
+      !e.shiftKey &&
+      window.matchMedia("(pointer: fine)").matches
+    ) {
       e.preventDefault();
       annSend();
     }
@@ -9788,10 +11950,18 @@ function annBind() {
     annSend();
   });
   document.getElementById("annMic").addEventListener("click", annToggleRecord);
-  document.getElementById("annTargetClear").addEventListener("click", () => annSetTarget(null));
+  document
+    .getElementById("annTargetClear")
+    .addEventListener("click", () => annSetTarget(null));
 
-  document.getElementById("annClip").addEventListener("click", (e) => { e.stopPropagation(); menu.hidden = !menu.hidden; });
-  document.addEventListener("click", (e) => { if (!menu.hidden && !e.target.closest("#annMenu, #annClip")) menu.hidden = true; });
+  document.getElementById("annClip").addEventListener("click", (e) => {
+    e.stopPropagation();
+    menu.hidden = !menu.hidden;
+  });
+  document.addEventListener("click", (e) => {
+    if (!menu.hidden && !e.target.closest("#annMenu, #annClip"))
+      menu.hidden = true;
+  });
   document.getElementById("annAudBtn").addEventListener("click", () => {
     const box = document.getElementById("annAud");
     box.hidden = !box.hidden;
@@ -9807,7 +11977,8 @@ function annBind() {
     ann.link = !ann.link;
     const li = document.getElementById("annLink");
     document.getElementById("annLinkRow").hidden = !ann.link;
-    if (ann.link) li.focus(); else li.value = "";
+    if (ann.link) li.focus();
+    else li.value = "";
     menu.hidden = true;
     annSyncBar();
   });
@@ -9826,13 +11997,20 @@ function annBind() {
     annAddPollOption();
     annSyncBar();
   });
-  document.getElementById("annRecStop").addEventListener("click", () => ann.recorder?.state === "recording" && ann.recorder.stop());
+  document
+    .getElementById("annRecStop")
+    .addEventListener(
+      "click",
+      () => ann.recorder?.state === "recording" && ann.recorder.stop(),
+    );
   document.getElementById("annRecCancel").addEventListener("click", () => {
     if (ann.recorder?.state !== "recording") return;
     ann.discardRec = true;
     ann.recorder.stop();
   });
-  document.getElementById("annAddOption").addEventListener("click", () => annAddPollOption());
+  document
+    .getElementById("annAddOption")
+    .addEventListener("click", () => annAddPollOption());
   document.getElementById("annImage").addEventListener("change", async (e) => {
     const f = e.target.files?.[0];
     e.target.value = "";
@@ -9861,18 +12039,34 @@ function annBind() {
     const card = e.target.closest("[data-post]");
     const vote = e.target.closest("[data-vote]");
     if (vote) {
-      const { data, error } = await sb.rpc("vote_announcement", { p_id: vote.dataset.id, p_option: Number(vote.dataset.vote) });
-      if (error) { toast(friendlyError(error), "error"); return; }
-      const options = [...card.querySelectorAll(".ann-opt-t")].map((n) => n.textContent);
-      card.querySelector("[data-poll]").outerHTML = annPollHtml({ id: vote.dataset.id, poll: { options, counts: data.counts, my_vote: data.my_vote } });
+      const { data, error } = await sb.rpc("vote_announcement", {
+        p_id: vote.dataset.id,
+        p_option: Number(vote.dataset.vote),
+      });
+      if (error) {
+        toast(friendlyError(error), "error");
+        return;
+      }
+      const options = [...card.querySelectorAll(".ann-opt-t")].map(
+        (n) => n.textContent,
+      );
+      card.querySelector("[data-poll]").outerHTML = annPollHtml({
+        id: vote.dataset.id,
+        poll: { options, counts: data.counts, my_vote: data.my_vote },
+      });
       return;
     }
     const like = e.target.closest("[data-like]");
     if (like) {
       like.disabled = true;
-      const { data, error } = await sb.rpc("toggle_announcement_like", { p_id: like.dataset.like });
+      const { data, error } = await sb.rpc("toggle_announcement_like", {
+        p_id: like.dataset.like,
+      });
       like.disabled = false;
-      if (error) { toast(friendlyError(error), "error"); return; }
+      if (error) {
+        toast(friendlyError(error), "error");
+        return;
+      }
       like.classList.toggle("is-on", data.liked);
       like.setAttribute("aria-pressed", data.liked ? "true" : "false");
       like.querySelector("span").textContent = data.liked ? "❤️" : "🤍";
@@ -9883,19 +12077,30 @@ function annBind() {
     const rb = e.target.closest("[data-replies]");
     if (rb) {
       const panel = card.querySelector("[data-thread]");
-      if (!panel.hidden) { panel.hidden = true; if (ann.target?.id === card.dataset.post) annSetTarget(null); return; }
+      if (!panel.hidden) {
+        panel.hidden = true;
+        if (ann.target?.id === card.dataset.post) annSetTarget(null);
+        return;
+      }
       await annLoadThread(card, { open: true });
       return;
     }
     const rt = e.target.closest("[data-reply-to]");
     if (rt) {
-      annSetTarget({ id: card.dataset.post, threadUser: rt.dataset.replyTo, title: `Replying to ${rt.dataset.name}`, snippet: rt.dataset.meta || annSnippet(card.dataset.snippet) });
+      annSetTarget({
+        id: card.dataset.post,
+        threadUser: rt.dataset.replyTo,
+        title: `Replying to ${rt.dataset.name}`,
+        snippet: rt.dataset.meta || annSnippet(card.dataset.snippet),
+      });
       return;
     }
     const dr = e.target.closest("[data-del-reply]");
     if (dr) {
       if (!confirm("Delete this reply?")) return;
-      const { error } = await sb.rpc("delete_announcement_reply", { p_id: dr.dataset.delReply });
+      const { error } = await sb.rpc("delete_announcement_reply", {
+        p_id: dr.dataset.delReply,
+      });
       if (error) toast(friendlyError(error), "error");
       else await annLoadThread(card);
       return;
@@ -9903,12 +12108,16 @@ function annBind() {
     const del = e.target.closest("[data-del]");
     if (del) {
       if (!confirm("Delete this announcement?")) return;
-      const { error } = await sb.rpc("delete_announcement", { p_id: del.dataset.del });
+      const { error } = await sb.rpc("delete_announcement", {
+        p_id: del.dataset.del,
+      });
       if (error) toast(friendlyError(error), "error");
       else card.remove();
     }
   });
-  document.getElementById("annMore").addEventListener("click", () => loadAnnouncements(true));
+  document
+    .getElementById("annMore")
+    .addEventListener("click", () => loadAnnouncements(true));
 }
 
 async function enterAnnouncementsView() {
@@ -9924,7 +12133,9 @@ async function enterAnnouncementsView() {
   await loadAnnouncements();
 }
 
-document.getElementById("annBtn")?.addEventListener("click", () => navigate("/announcements"));
+document
+  .getElementById("annBtn")
+  ?.addEventListener("click", () => navigate("/announcements"));
 document.getElementById("menuNotifBtn")?.addEventListener("click", (e) => {
   e.preventDefault();
   document.getElementById("notifPill")?.click();
@@ -9936,7 +12147,7 @@ window.addEventListener("hashchange", () => {
   const on = location.hash.startsWith("#/announcements");
   document.body.classList.toggle("ann-open", on);
   document.documentElement.classList.toggle("ann-open", on);
-}); 
+});
 
 /* =========================================================================
    MOBILE MENU — the same options as the desktop sidebar, plus Announcements and Sign out
@@ -9956,12 +12167,18 @@ function openDrawer() {
     if (item.dataset.nav === "leaderboard") {
       const unread = document.getElementById("annBadge");
       const count = unread && !unread.hidden ? unread.textContent : "";
-      nav.insertAdjacentHTML("beforeend", `<a href="#/announcements" class="drawer-item" data-nav="announcements"><span class="app-nav-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></span><span class="app-nav-label">Announcements</span>${count ? `<b class="drawer-badge">${escapeHtml(count)}</b>` : ""}</a>`);
+      nav.insertAdjacentHTML(
+        "beforeend",
+        `<a href="#/announcements" class="drawer-item" data-nav="announcements"><span class="app-nav-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></span><span class="app-nav-label">Announcements</span>${count ? `<b class="drawer-badge">${escapeHtml(count)}</b>` : ""}</a>`,
+      );
     }
   });
-  document.getElementById("drawerName").textContent = document.getElementById("topbarUserName")?.textContent || "Student";
-  document.getElementById("drawerRole").textContent = document.getElementById("topbarUserRole")?.textContent || "";
-  document.getElementById("drawerAvatar").textContent = document.getElementById("topbarAvatar")?.textContent || "S";
+  document.getElementById("drawerName").textContent =
+    document.getElementById("topbarUserName")?.textContent || "Student";
+  document.getElementById("drawerRole").textContent =
+    document.getElementById("topbarUserRole")?.textContent || "";
+  document.getElementById("drawerAvatar").textContent =
+    document.getElementById("topbarAvatar")?.textContent || "S";
   const drawer = document.getElementById("appDrawer");
   document.getElementById("drawerBackdrop").hidden = false;
   requestAnimationFrame(() => drawer.classList.add("open"));
@@ -9983,24 +12200,56 @@ function closeDrawer() {
 document.getElementById("drawerBtn")?.addEventListener("click", openDrawer);
 document.getElementById("appNavAdmin")?.addEventListener("click", (event) => {
   event.preventDefault();
-  navigate("/admin-test");
+  navigate("/admin-panel");
 });
 document.getElementById("drawerClose")?.addEventListener("click", closeDrawer);
-document.getElementById("drawerBackdrop")?.addEventListener("click", closeDrawer);
-document.getElementById("drawerNav")?.addEventListener("click", (e) => { if (e.target.closest("a")) closeDrawer(); });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawer(); });
+document
+  .getElementById("drawerBackdrop")
+  ?.addEventListener("click", closeDrawer);
+document.getElementById("drawerNav")?.addEventListener("click", (e) => {
+  if (e.target.closest("a")) closeDrawer();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeDrawer();
+});
 window.addEventListener("hashchange", closeDrawer);
 
 /* =========================================================================
    INFINITE PRACTICE — build your own test, one step at a time:
    1 Subjects  2 Chapters and topics  3 Questions and difficulty  4 Time  5 Mode
    ========================================================================= */
-const PB_SUBJECTS = [["Physics", "🧲", "Physics"], ["Chemistry", "🧪", "Chemistry"], ["Mathematics", "📐", "Maths"], ["Biology", "🧬", "Biology"]];
+const PB_SUBJECTS = [
+  ["Physics", "🧲", "Physics"],
+  ["Chemistry", "🧪", "Chemistry"],
+  ["Mathematics", "📐", "Maths"],
+  ["Biology", "🧬", "Biology"],
+];
 const PB_COUNTS = [10, 20, 30, 50, 75];
-const PB_DIFFS = [["easy", "Easy", "🟢"], ["medium", "Medium", "🟡"], ["hard", "Hard", "🔴"], ["mixed", "Mixed", "🎲"]];
+const PB_DIFFS = [
+  ["easy", "Easy", "🟢"],
+  ["medium", "Medium", "🟡"],
+  ["hard", "Hard", "🔴"],
+  ["mixed", "Mixed", "🎲"],
+];
 const PB_STEPS = ["Subjects", "Chapters", "Questions", "Time", "Mode"];
 const PB_DIFF_FACTOR = { easy: 0.75, medium: 1, hard: 1.3, mixed: 1 };
-const pb = { bank: {}, step: 1, subjects: new Set(), chapters: new Map(), open: new Set(), count: 20, custom: false, customValue: "", difficulty: "mixed", minutes: null, mode: "quiz", search: "", showEmpty: false, bound: false, busy: false };
+const pb = {
+  bank: {},
+  step: 1,
+  subjects: new Set(),
+  chapters: new Map(),
+  open: new Set(),
+  count: 20,
+  custom: false,
+  customValue: "",
+  difficulty: "mixed",
+  minutes: null,
+  mode: "quiz",
+  search: "",
+  showEmpty: false,
+  bound: false,
+  busy: false,
+};
 
 function pbIndexCatalog(rows) {
   const bank = {};
@@ -10013,75 +12262,120 @@ function pbIndexCatalog(rows) {
   pb.bank = bank;
 }
 const pbKey = (s2, c) => `${s2}|${c}`;
-const pbTopicSum = (t, diff) => (diff === "mixed" ? t.easy + t.medium + t.hard : t[diff]);
-const pbChapterTotal = (s2, c) => Object.values(pb.bank[s2]?.[c]?.topics || {}).reduce((n, t) => n + pbTopicSum(t, "mixed"), 0);
-const pbSubjectTotal = (s2) => Object.keys(pb.bank[s2] || {}).reduce((n, c) => n + pbChapterTotal(s2, c), 0);
-const pbCountValue = () => (pb.custom ? Math.round(Number(pb.customValue)) : pb.count);
+const pbTopicSum = (t, diff) =>
+  diff === "mixed" ? t.easy + t.medium + t.hard : t[diff];
+const pbChapterTotal = (s2, c) =>
+  Object.values(pb.bank[s2]?.[c]?.topics || {}).reduce(
+    (n, t) => n + pbTopicSum(t, "mixed"),
+    0,
+  );
+const pbSubjectTotal = (s2) =>
+  Object.keys(pb.bank[s2] || {}).reduce((n, c) => n + pbChapterTotal(s2, c), 0);
+const pbCountValue = () =>
+  pb.custom ? Math.round(Number(pb.customValue)) : pb.count;
 
 function pbAvailable(diff) {
   let n = 0;
   pb.chapters.forEach((sel) => {
     const topics = pb.bank[sel.subject]?.[sel.chapter]?.topics || {};
-    sel.topics.forEach((name) => { if (topics[name]) n += pbTopicSum(topics[name], diff); });
+    sel.topics.forEach((name) => {
+      if (topics[name]) n += pbTopicSum(topics[name], diff);
+    });
   });
   return n;
 }
 
 function pbChapterGroups(subject) {
-  const groups = CHAPTER_GROUPS.filter((g) => g.subject === subject).map((g) => ({ group: g.group, chapters: [...g.chapters] }));
-  const known = new Set(groups.flatMap((g) => g.chapters));
-  const extra = Object.keys(pb.bank[subject] || {}).filter((c) => !known.has(c));
-  if (extra.length) groups.push({ group: "Other chapters", chapters: extra });
+  const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const bankNames = Object.keys(pb.bank[subject] || {});
+  const byNorm = new Map(bankNames.map((c) => [norm(c), c]));
+  const used = new Set();
+  const groups = CHAPTER_GROUPS.filter((g) => g.subject === subject).map((g) => ({
+    group: g.group,
+    chapters: g.chapters.map((c) => {
+      const real = byNorm.get(norm(c));
+      if (real) used.add(real);
+      return real || c;
+    }),
+  }));
+  const extra = bankNames.filter((c) => !used.has(c));
+  if (extra.length) {
+    if (groups.length) groups[groups.length - 1].chapters.push(...extra);
+    else groups.push({ group: subject, chapters: extra });
+  }
   return groups;
 }
 
-// recommended time: 2 min per Physics/Chemistry/Maths question, 1 min per Biology question, adjusted for difficulty
+// recommended time: 2 min per easy question, 3 min per medium, 5 min per hard
+const PB_MIN_PER_Q = { easy: 2, medium: 3, hard: 5 };
+function pbPerQuestion() {
+  if (PB_MIN_PER_Q[pb.difficulty]) return PB_MIN_PER_Q[pb.difficulty];
+  const e = pbAvailable("easy"), m = pbAvailable("medium"), h = pbAvailable("hard");
+  const total = e + m + h;
+  return total ? (e * 2 + m * 3 + h * 5) / total : 3;
+}
 function pbRecommended() {
-  const chapters = [...pb.chapters.values()];
-  if (!chapters.length) return 5;
-  const perQuestion = chapters.reduce((n, c) => n + (c.subject === "Biology" ? 1 : 2), 0) / chapters.length;
+  if (![...pb.chapters.values()].length) return 5;
   const questions = Math.max(1, Math.min(pbCountValue() || 0, pbAvailable(pb.difficulty)));
-  return Math.min(600, Math.max(5, Math.round((questions * perQuestion * PB_DIFF_FACTOR[pb.difficulty]) / 5) * 5));
+  return Math.min(600, Math.max(5, Math.round((questions * pbPerQuestion()) / 5) * 5));
 }
 const pbMinutes = () => (pb.minutes == null ? pbRecommended() : pb.minutes);
 
-const pbGroupLabel = (group, label) => (group && group !== label && group !== "Physics" && group !== "Mathematics" ? `<div class="pb-group-label">${escapeHtml(group)}</div>` : "");
+const pbGroupLabel = (group, label) =>
+  group && group !== label && group !== "Physics" && group !== "Mathematics"
+    ? `<div class="pb-group-label">${escapeHtml(group)}</div>`
+    : "";
 
 function pbChaptersHtml() {
   const q = pb.search.trim().toLowerCase();
   let hiddenEmpty = 0;
-  const html = PB_SUBJECTS.filter(([name]) => pb.subjects.has(name)).map(([name, icon, label]) => {
-    const groups = pbChapterGroups(name).map((g) => {
-      const rows = g.chapters
-        .filter((c) => !q || c.toLowerCase().includes(q))
-        .map((c) => {
-          const total = pbChapterTotal(name, c);
-          if (!total && !pb.showEmpty) { hiddenEmpty++; return ""; }
-          const key = pbKey(name, c);
-          const sel = pb.chapters.get(key);
-          const topics = Object.entries(pb.bank[name]?.[c]?.topics || {});
-          const open = pb.open.has(key);
-          return `<div class="pb-chap ${sel ? "on" : ""} ${total ? "" : "off"}">
+  const html = PB_SUBJECTS.filter(([name]) => pb.subjects.has(name))
+    .map(([name, icon, label]) => {
+      const groups = pbChapterGroups(name)
+        .map((g) => {
+          const rows = g.chapters
+            .filter((c) => !q || c.toLowerCase().includes(q))
+            .map((c) => {
+              const total = pbChapterTotal(name, c);
+              if (!total && !pb.showEmpty) {
+                hiddenEmpty++;
+                return "";
+              }
+              const key = pbKey(name, c);
+              const sel = pb.chapters.get(key);
+              const topics = Object.entries(pb.bank[name]?.[c]?.topics || {});
+              const open = pb.open.has(key);
+              return `<div class="pb-chap ${sel ? "on" : ""} ${total ? "" : "off"}">
             <label class="pb-chap-main"><input type="checkbox" data-pb-chap="${escapeHtml(key)}" ${sel ? "checked" : ""} ${total ? "" : "disabled"}><span class="pb-chap-name">${escapeHtml(c)}</span><em>${total ? total + " Q" : "No questions yet"}</em></label>
             ${sel && topics.length ? `<button type="button" class="pb-topics-btn" data-pb-open="${escapeHtml(key)}">Topics: ${sel.topics.size === topics.length ? "all" : sel.topics.size + " of " + topics.length} ${open ? "▴" : "▾"}</button>` : ""}
             ${sel && open ? `<div class="pb-topics">${topics.map(([t, d]) => `<label class="pb-topic"><input type="checkbox" data-pb-topic="${escapeHtml(key)}" value="${escapeHtml(t)}" ${sel.topics.has(t) ? "checked" : ""}><span>${escapeHtml(t)}</span><em>${pbTopicSum(d, "mixed")}</em></label>`).join("")}</div>` : ""}
           </div>`;
-        }).join("");
-      return rows ? `<div class="pb-group">${pbGroupLabel(g.group, label)}${rows}</div>` : "";
-    }).join("");
-    return `<div class="pb-subject-block"><div class="pb-subject-head"><h3>${icon} ${label}</h3><span><button type="button" data-pb-selall="${name}">Select all</button><button type="button" data-pb-clear="${name}">Clear</button></span></div>${groups || `<p class="pb-none">No chapters match.</p>`}</div>`;
-  }).join("");
-  const note = hiddenEmpty && !pb.showEmpty ? `<p class="pb-hint">${hiddenEmpty} chapter${hiddenEmpty === 1 ? " has" : "s have"} no questions yet and ${hiddenEmpty === 1 ? "is" : "are"} hidden.</p>` : "";
+            })
+            .join("");
+          return rows
+            ? `<div class="pb-group">${pbGroupLabel(g.group, label)}${rows}</div>`
+            : "";
+        })
+        .join("");
+      return `<div class="pb-subject-block"><div class="pb-subject-head"><h3>${icon} ${label}</h3><span><button type="button" data-pb-selall="${name}">Select all</button><button type="button" data-pb-clear="${name}">Clear</button></span></div>${groups || `<p class="pb-none">No chapters match.</p>`}</div>`;
+    })
+    .join("");
+  const note =
+    hiddenEmpty && !pb.showEmpty
+      ? `<p class="pb-hint">${hiddenEmpty} chapter${hiddenEmpty === 1 ? " has" : "s have"} no questions yet and ${hiddenEmpty === 1 ? "is" : "are"} hidden.</p>`
+      : "";
   return html + note;
 }
 
 function pbStepHtml() {
   const e = escapeHtml;
   if (pb.step === 1) {
-    return `<p class="pb-hint">Choose one or more subjects.</p><div class="pb-subjects">${PB_SUBJECTS.map(([name, icon, label]) => {
-      const n = pbSubjectTotal(name);
-      return `<button type="button" class="pb-subj ${pb.subjects.has(name) ? "on" : ""}" data-pb-subj="${name}" ${n ? "" : "disabled"}><span class="pb-subj-ic">${icon}</span><b>${label}</b><small>${n ? n + " questions" : "Coming soon"}</small></button>`;
-    }).join("")}</div>`;
+    return `<p class="pb-hint">Choose one or more subjects.</p><div class="pb-subjects">${PB_SUBJECTS.map(
+      ([name, icon, label]) => {
+        const n = pbSubjectTotal(name);
+        return `<button type="button" class="pb-subj ${pb.subjects.has(name) ? "on" : ""}" data-pb-subj="${name}" ${n ? "" : "disabled"}><span class="pb-subj-ic">${icon}</span><b>${label}</b><small>${n ? n + " questions" : "Coming soon"}</small></button>`;
+      },
+    ).join("")}</div>`;
   }
   if (pb.step === 2) {
     return `<p class="pb-hint">Every topic of a chapter is included. Tap <b>Topics</b> to leave some out.</p>
@@ -10091,7 +12385,12 @@ function pbStepHtml() {
   if (pb.step === 3) {
     const requested = pbCountValue();
     const total = pbAvailable(pb.difficulty);
-    const warn = total === 0 ? `<p class="pb-warn">No questions match this difficulty. Try another one.</p>` : requested > total ? `<p class="pb-warn">Only ${total} question${total === 1 ? "" : "s"} match. Your test will have ${total}.</p>` : "";
+    const warn =
+      total === 0
+        ? `<p class="pb-warn">No questions match this difficulty. Try another one.</p>`
+        : requested > total
+          ? `<p class="pb-warn">Only ${total} question${total === 1 ? "" : "s"} match. Your test will have ${total}.</p>`
+          : "";
     return `<h4 class="pb-h">How many questions?</h4>
       <div class="pb-chips">${PB_COUNTS.map((n) => `<button type="button" class="pb-chip ${!pb.custom && pb.count === n ? "on" : ""}" data-pb-count="${n}">${n}</button>`).join("")}
         <button type="button" class="pb-chip ${pb.custom ? "on" : ""}" data-pb-count="custom">Custom</button>
@@ -10102,8 +12401,10 @@ function pbStepHtml() {
   }
   if (pb.step === 4) {
     const rec = pbRecommended();
-    const per = [...pb.chapters.values()].some((c) => c.subject !== "Biology") ? "about 2 minutes per Physics, Chemistry or Maths question and 1 minute per Biology question" : "about 1 minute per Biology question";
-    return `<div class="pb-time-rec"><span>⏱</span><div><b>Recommended: ${rec} minutes</b><small>For ${Math.min(pbCountValue() || 0, pbAvailable(pb.difficulty))} questions, ${PB_DIFFS.find((d) => d[0] === pb.difficulty)[1].toLowerCase()} level: ${per}.</small></div></div>
+    const per = [...pb.chapters.values()].some((c) => c.subject !== "Biology")
+      ? "about 2 minutes per Physics, Chemistry or Maths question and 1 minute per Biology question"
+      : "about 1 minute per Biology question";
+    return `<div class="pb-time-rec"><span>⏱</span><div><b>Recommended: ${rec} minutes</b><small>For ${Math.min(pbCountValue() || 0, pbAvailable(pb.difficulty))} questions, ${PB_DIFFS.find((d) => d[0] === pb.difficulty)[1].toLowerCase()} level: about ${pbPerQuestion().toFixed(1).replace(/\.0$/, "")} min per question.</small></div></div>
       <h4 class="pb-h">Time limit for the whole test</h4>
       <div class="pb-time"><button type="button" class="pb-step-btn" data-pb-min="-5" aria-label="5 minutes less">−</button><input type="number" id="pbMinutes" min="5" max="600" inputmode="numeric" value="${pbMinutes()}"><span>minutes</span><button type="button" class="pb-step-btn" data-pb-min="5" aria-label="5 minutes more">+</button></div>
       <div class="pb-chips pb-time-chips"><button type="button" class="pb-chip ${pb.minutes == null ? "on" : ""}" data-pb-rec="1">Recommended</button>${[30, 60, 90, 120, 180].map((m) => `<button type="button" class="pb-chip ${pb.minutes === m ? "on" : ""}" data-pb-setmin="${m}">${m}</button>`).join("")}</div>`;
@@ -10116,14 +12417,26 @@ function pbStepHtml() {
 function pbStepValid() {
   if (pb.step === 1) return pb.subjects.size > 0;
   if (pb.step === 2) return pb.chapters.size > 0;
-  if (pb.step === 3) { const c = pbCountValue(); return c >= 1 && c <= 100 && pbAvailable(pb.difficulty) > 0; }
-  if (pb.step === 4) { const m = pbMinutes(); return m >= 5 && m <= 600; }
+  if (pb.step === 3) {
+    const c = pbCountValue();
+    return c >= 1 && c <= 100 && pbAvailable(pb.difficulty) > 0;
+  }
+  if (pb.step === 4) {
+    const m = pbMinutes();
+    return m >= 5 && m <= 600;
+  }
   return true;
 }
 
 function pbRender() {
   const last = PB_STEPS.length;
-  const titles = ["Choose subjects", "Choose chapters", "Questions and level", "Time limit", "Choose a mode"];
+  const titles = [
+    "Choose subjects",
+    "Choose chapters",
+    "Questions and level",
+    "Time limit",
+    "Choose a mode",
+  ];
   document.getElementById("pbWizard").innerHTML = `
     <button type="button" class="pb-back-link" id="pbBack" aria-label="Back to Infinite Practice">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"></path><path d="M9 12h12"></path></svg>
@@ -10137,11 +12450,19 @@ function pbRender() {
   prev.hidden = pb.step === 1;
   prev.style.visibility = "visible";
   const next = document.getElementById("pbNext");
-  next.textContent = pb.step === last ? (pb.busy ? "Creating your test…" : "Begin test") : "Next →";
+  next.textContent =
+    pb.step === last
+      ? pb.busy
+        ? "Creating your test…"
+        : "Begin test"
+      : "Next →";
   next.disabled = !pbStepValid() || pb.busy;
   const n = pb.chapters.size;
-  document.getElementById("pbBarTitle").textContent = `Step ${pb.step} of ${last}`;
-  document.getElementById("pbBarSub").textContent = n ? `${n} chapter${n === 1 ? "" : "s"} · ${Math.min(pbCountValue() || 0, pbAvailable(pb.difficulty))} questions · ${pbMinutes()} min` : "Pick a subject to begin";
+  document.getElementById("pbBarTitle").textContent =
+    `Step ${pb.step} of ${last}`;
+  document.getElementById("pbBarSub").textContent = n
+    ? `${n} chapter${n === 1 ? "" : "s"} · ${Math.min(pbCountValue() || 0, pbAvailable(pb.difficulty))} questions · ${pbMinutes()} min`
+    : "Pick a subject to begin";
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -10158,13 +12479,14 @@ function renderPracticeStartCard() {
   document.getElementById("practiceOverallStrip")?.removeAttribute("hidden");
   document.getElementById("pbBar").hidden = true;
   wiz.innerHTML = `<button type="button" class="pb-start-card" id="pbStartCard">
-    <span class="pb-start-icon" aria-hidden="true">
-      <svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"></path></svg>
-    </span>
-    <span><b>Start creating a test</b><small>Choose subjects, questions, time, and mode</small></span>
-    <span class="pb-start-arrow" aria-hidden="true">→</span>
+    <span class="pb-start-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"></path></svg></span>
+    <span class="pb-start-text"><b>Create a practice test</b><small>Build your own test from the question bank</small></span>
+    <span class="pb-start-steps" aria-hidden="true"><i>Subjects</i><i>Chapters</i><i>Questions</i><i>Time</i></span>
+    <span class="pb-start-cta">Start creating <span aria-hidden="true">→</span></span>
   </button>`;
-  wiz.querySelector("#pbStartCard").addEventListener("click", openPracticeWizard);
+  wiz
+    .querySelector("#pbStartCard")
+    .addEventListener("click", openPracticeWizard);
 }
 
 function closePracticeWizard() {
@@ -10175,12 +12497,18 @@ function pbRefreshBar() {
   const next = document.getElementById("pbNext");
   next.disabled = !pbStepValid() || pb.busy;
   const n = pb.chapters.size;
-  document.getElementById("pbBarSub").textContent = n ? `${n} chapter${n === 1 ? "" : "s"} · ${Math.min(pbCountValue() || 0, pbAvailable(pb.difficulty))} questions · ${pbMinutes()} min` : "Pick a subject to begin";
+  document.getElementById("pbBarSub").textContent = n
+    ? `${n} chapter${n === 1 ? "" : "s"} · ${Math.min(pbCountValue() || 0, pbAvailable(pb.difficulty))} questions · ${pbMinutes()} min`
+    : "Pick a subject to begin";
 }
 
 function pbToggleChapter(key, on) {
   const [subject, chapter] = key.split("|");
-  if (!on) { pb.chapters.delete(key); pb.open.delete(key); return; }
+  if (!on) {
+    pb.chapters.delete(key);
+    pb.open.delete(key);
+    return;
+  }
   const topics = Object.keys(pb.bank[subject]?.[chapter]?.topics || {});
   if (!topics.length) return;
   pb.chapters.set(key, { subject, chapter, topics: new Set(topics) }); // every topic is selected by default
@@ -10207,21 +12535,42 @@ function pbBind() {
     if (d.pbSubj) {
       if (pb.subjects.has(d.pbSubj)) {
         pb.subjects.delete(d.pbSubj);
-        [...pb.chapters.keys()].filter((k) => k.startsWith(d.pbSubj + "|")).forEach((k) => pb.chapters.delete(k));
+        [...pb.chapters.keys()]
+          .filter((k) => k.startsWith(d.pbSubj + "|"))
+          .forEach((k) => pb.chapters.delete(k));
       } else pb.subjects.add(d.pbSubj);
       pbRender();
     } else if (d.pbOpen) {
       pb.open.has(d.pbOpen) ? pb.open.delete(d.pbOpen) : pb.open.add(d.pbOpen);
-      pbPartial(() => (document.getElementById("pbChapters").innerHTML = pbChaptersHtml()));
+      pbPartial(
+        () =>
+          (document.getElementById("pbChapters").innerHTML = pbChaptersHtml()),
+      );
     } else if (d.pbSelall) {
-      Object.keys(pb.bank[d.pbSelall] || {}).forEach((c) => pbToggleChapter(pbKey(d.pbSelall, c), true));
-      pbPartial(() => (document.getElementById("pbChapters").innerHTML = pbChaptersHtml()));
+      Object.keys(pb.bank[d.pbSelall] || {}).forEach((c) =>
+        pbToggleChapter(pbKey(d.pbSelall, c), true),
+      );
+      pbPartial(
+        () =>
+          (document.getElementById("pbChapters").innerHTML = pbChaptersHtml()),
+      );
     } else if (d.pbClear) {
-      [...pb.chapters.keys()].filter((k) => k.startsWith(d.pbClear + "|")).forEach((k) => { pb.chapters.delete(k); pb.open.delete(k); });
-      pbPartial(() => (document.getElementById("pbChapters").innerHTML = pbChaptersHtml()));
+      [...pb.chapters.keys()]
+        .filter((k) => k.startsWith(d.pbClear + "|"))
+        .forEach((k) => {
+          pb.chapters.delete(k);
+          pb.open.delete(k);
+        });
+      pbPartial(
+        () =>
+          (document.getElementById("pbChapters").innerHTML = pbChaptersHtml()),
+      );
     } else if (d.pbCount) {
       if (d.pbCount === "custom") pb.custom = true;
-      else { pb.custom = false; pb.count = Number(d.pbCount); }
+      else {
+        pb.custom = false;
+        pb.count = Number(d.pbCount);
+      }
       pb.minutes = null;
       pbRender();
       if (pb.custom) document.getElementById("pbCustom")?.focus();
@@ -10247,21 +12596,32 @@ function pbBind() {
     const chap = e.target.closest("[data-pb-chap]");
     if (chap) {
       pbToggleChapter(chap.dataset.pbChap, chap.checked);
-      pbPartial(() => (document.getElementById("pbChapters").innerHTML = pbChaptersHtml()));
+      pbPartial(
+        () =>
+          (document.getElementById("pbChapters").innerHTML = pbChaptersHtml()),
+      );
       return;
     }
     const topic = e.target.closest("[data-pb-topic]");
     if (topic) {
       const sel = pb.chapters.get(topic.dataset.pbTopic);
       if (!sel) return;
-      topic.checked ? sel.topics.add(topic.value) : sel.topics.delete(topic.value);
+      topic.checked
+        ? sel.topics.add(topic.value)
+        : sel.topics.delete(topic.value);
       if (!sel.topics.size) pb.chapters.delete(topic.dataset.pbTopic);
-      pbPartial(() => (document.getElementById("pbChapters").innerHTML = pbChaptersHtml()));
+      pbPartial(
+        () =>
+          (document.getElementById("pbChapters").innerHTML = pbChaptersHtml()),
+      );
       return;
     }
     if (e.target.id === "pbShowEmpty") {
       pb.showEmpty = e.target.checked;
-      pbPartial(() => (document.getElementById("pbChapters").innerHTML = pbChaptersHtml()));
+      pbPartial(
+        () =>
+          (document.getElementById("pbChapters").innerHTML = pbChaptersHtml()),
+      );
     }
   });
   wiz.addEventListener("input", (e) => {
@@ -10278,10 +12638,18 @@ function pbBind() {
       pbRefreshBar();
     }
   });
-  document.getElementById("pbPrev").addEventListener("click", () => { if (pb.step > 1) { pb.step -= 1; pbRender(); } });
+  document.getElementById("pbPrev").addEventListener("click", () => {
+    if (pb.step > 1) {
+      pb.step -= 1;
+      pbRender();
+    }
+  });
   document.getElementById("pbNext").addEventListener("click", () => {
     if (!pbStepValid()) return;
-    if (pb.step < PB_STEPS.length) { pb.step += 1; pbRender(); } else pbStart();
+    if (pb.step < PB_STEPS.length) {
+      pb.step += 1;
+      pbRender();
+    } else pbStart();
   });
 }
 
@@ -10290,12 +12658,22 @@ async function pbStart() {
   const count = pbCountValue();
   const selection = [...pb.chapters.values()].map((sel) => {
     const all = Object.keys(pb.bank[sel.subject]?.[sel.chapter]?.topics || {});
-    return { subject: sel.subject, chapter: sel.chapter, topics: sel.topics.size === all.length ? null : [...sel.topics] };
+    return {
+      subject: sel.subject,
+      chapter: sel.chapter,
+      topics: sel.topics.size === all.length ? null : [...sel.topics],
+    };
   });
   pb.busy = true;
   pbRefreshBar();
   document.getElementById("pbNext").textContent = "Creating your test…";
-  const { data, error } = await sb.rpc("create_custom_test", { p_selection: selection, p_difficulty: pb.difficulty, p_count: count, p_mode: pb.mode, p_minutes: pbMinutes() });
+  const { data, error } = await sb.rpc("create_custom_test", {
+    p_selection: selection,
+    p_difficulty: pb.difficulty,
+    p_count: count,
+    p_mode: pb.mode,
+    p_minutes: pbMinutes(),
+  });
   pb.busy = false;
   document.getElementById("pbNext").textContent = "Begin test";
   if (error) {
@@ -10304,7 +12682,11 @@ async function pbStart() {
     return;
   }
   invalidateRpcCache();
-  if (data.question_count < count) toast(`Only ${data.question_count} questions matched, so your test has ${data.question_count}.`, "success");
+  if (data.question_count < count)
+    toast(
+      `Only ${data.question_count} questions matched, so your test has ${data.question_count}.`,
+      "success",
+    );
   document.body.classList.remove("practice-wizard-open");
   navigate(`/exam?test=${data.test_id}&practice=1&mode=${pb.mode}`);
 }
@@ -10315,8 +12697,15 @@ async function enterPracticeView() {
   document.getElementById("practiceOverallStrip")?.removeAttribute("hidden");
   document.getElementById("pbBar").hidden = true;
   wiz.innerHTML = `<div class="empty-state">Loading…</div>`;
-  const [bank, overall] = await Promise.all([cachedRpc("get_bank_catalog"), cachedRpc("get_practice_overall_report")]);
-  renderPracticeOverallStrip(document.getElementById("practiceOverallStrip"), overall.data, overall.error);
+  const [bank, overall] = await Promise.all([
+    cachedRpc("get_bank_catalog"),
+    cachedRpc("get_practice_overall_report"),
+  ]);
+  renderPracticeOverallStrip(
+    document.getElementById("practiceOverallStrip"),
+    overall.data,
+    overall.error,
+  );
   if (bank.error) {
     wiz.innerHTML = `<div class="error-box">${escapeHtml(/get_bank_catalog|schema cache|does not exist/i.test(bank.error.message || "") ? "Practice is not set up yet. Run migration_cleanup.sql." : friendlyError(bank.error))}</div>`;
     return;
@@ -10326,7 +12715,10 @@ async function enterPracticeView() {
     wiz.innerHTML = `<div class="empty-state pr-empty">No questions are available yet.<br><small>Please check back soon.</small></div>`;
     return;
   }
-  [...pb.chapters.keys()].forEach((k) => { const [s2, c] = k.split("|"); if (!pbChapterTotal(s2, c)) pb.chapters.delete(k); });
+  [...pb.chapters.keys()].forEach((k) => {
+    const [s2, c] = k.split("|");
+    if (!pbChapterTotal(s2, c)) pb.chapters.delete(k);
+  });
   pb.step = 1;
   pbBind();
   renderPracticeStartCard();
@@ -10335,9 +12727,18 @@ async function enterPracticeView() {
 /* =========================================================================
    ADMIN — QUESTION BANK  (subject > chapter > topic > difficulty)
    ========================================================================= */
-const ab = { bound: false, page: 0, size: 40, selected: new Set(), timer: null };
+const ab = {
+  bound: false,
+  page: 0,
+  size: 40,
+  selected: new Set(),
+  timer: null,
+};
 const AB_DIFF = { easy: "Easy", medium: "Medium", hard: "Hard" };
-const abClean = (v) => String(v || "").replace(/[%,()]/g, " ").trim();
+const abClean = (v) =>
+  String(v || "")
+    .replace(/[%,()]/g, " ")
+    .trim();
 
 async function enterAdminBankView() {
   myProfile = myProfile || (await getMyProfile());
@@ -10353,16 +12754,31 @@ function abBind() {
   if (ab.bound) return;
   ab.bound = true;
   fillChapterSelect(document.getElementById("abChapter"), "All chapters", "");
-  const reload = () => { clearTimeout(ab.timer); ab.timer = setTimeout(() => abLoad(true), 300); };
+  const reload = () => {
+    clearTimeout(ab.timer);
+    ab.timer = setTimeout(() => abLoad(true), 300);
+  };
   document.getElementById("abSubject").addEventListener("change", (e) => {
-    fillChapterSelect(document.getElementById("abChapter"), "All chapters", e.target.value);
+    fillChapterSelect(
+      document.getElementById("abChapter"),
+      "All chapters",
+      e.target.value,
+    );
     document.getElementById("abChapter").value = "";
     abLoad(true);
   });
-  ["abChapter", "abDifficulty", "abReview"].forEach((id) => document.getElementById(id).addEventListener("change", () => abLoad(true)));
-  ["abTopic", "abSearch"].forEach((id) => document.getElementById(id).addEventListener("input", reload));
-  document.getElementById("abAdd").addEventListener("click", () => abOpenEditor(null));
-  document.getElementById("abMore").addEventListener("click", () => abLoad(false));
+  ["abChapter", "abDifficulty", "abReview"].forEach((id) =>
+    document.getElementById(id).addEventListener("change", () => abLoad(true)),
+  );
+  ["abTopic", "abSearch"].forEach((id) =>
+    document.getElementById(id).addEventListener("input", reload),
+  );
+  document
+    .getElementById("abAdd")
+    .addEventListener("click", () => abOpenEditor(null));
+  document
+    .getElementById("abMore")
+    .addEventListener("click", () => abLoad(false));
   document.getElementById("abList").addEventListener("click", (e) => {
     const edit = e.target.closest("[data-ab-edit]");
     if (edit) return abOpenEditor(edit.dataset.abEdit);
@@ -10372,7 +12788,9 @@ function abBind() {
   document.getElementById("abList").addEventListener("change", (e) => {
     const box = e.target.closest("[data-ab-sel]");
     if (!box) return;
-    box.checked ? ab.selected.add(box.dataset.abSel) : ab.selected.delete(box.dataset.abSel);
+    box.checked
+      ? ab.selected.add(box.dataset.abSel)
+      : ab.selected.delete(box.dataset.abSel);
     abSyncBulk();
   });
   document.getElementById("abBulkBar").addEventListener("click", async (e) => {
@@ -10384,7 +12802,9 @@ function abBind() {
     } else if (e.target.id === "abDeleteSel") abDelete([...ab.selected]);
     else if (e.target.id === "abClearSel") {
       ab.selected.clear();
-      document.querySelectorAll("[data-ab-sel]").forEach((b) => (b.checked = false));
+      document
+        .querySelectorAll("[data-ab-sel]")
+        .forEach((b) => (b.checked = false));
       abSyncBulk();
     }
   });
@@ -10392,7 +12812,8 @@ function abBind() {
 
 function abSyncBulk() {
   document.getElementById("abBulkBar").hidden = ab.selected.size === 0;
-  document.getElementById("abSelCount").textContent = `${ab.selected.size} selected`;
+  document.getElementById("abSelCount").textContent =
+    `${ab.selected.size} selected`;
 }
 
 async function abLoad(reset) {
@@ -10403,14 +12824,24 @@ async function abLoad(reset) {
     abSyncBulk();
     list.innerHTML = `<div class="empty-state">Loading…</div>`;
   }
-  let q = sb.from("questions").select("id, subject, chapter, topic, difficulty, question_type, question_text, needs_review", { count: "exact" }).is("test_id", null).order("created_at", { ascending: false });
+  let q = sb
+    .from("questions")
+    .select(
+      "id, subject, chapter, topic, difficulty, question_type, question_text, needs_review",
+      { count: "exact" },
+    )
+    .is("test_id", null)
+    .order("created_at", { ascending: false });
   const val = (id) => document.getElementById(id).value;
   if (val("abSubject")) q = q.eq("subject", val("abSubject"));
   if (val("abChapter")) q = q.eq("chapter", val("abChapter"));
-  if (abClean(val("abTopic"))) q = q.ilike("topic", `%${abClean(val("abTopic"))}%`);
+  if (abClean(val("abTopic")))
+    q = q.ilike("topic", `%${abClean(val("abTopic"))}%`);
   if (val("abDifficulty")) q = q.eq("difficulty", val("abDifficulty"));
-  if (document.getElementById("abReview").checked) q = q.eq("needs_review", true);
-  if (abClean(val("abSearch"))) q = q.ilike("question_text", `%${abClean(val("abSearch"))}%`);
+  if (document.getElementById("abReview").checked)
+    q = q.eq("needs_review", true);
+  if (abClean(val("abSearch")))
+    q = q.ilike("question_text", `%${abClean(val("abSearch"))}%`);
   const from = ab.page * ab.size;
   const { data, error, count } = await q.range(from, from + ab.size - 1);
   if (error) {
@@ -10418,52 +12849,112 @@ async function abLoad(reset) {
     return;
   }
   if (reset) list.innerHTML = "";
-  if (reset && !data.length) list.innerHTML = `<div class="empty-state">No questions match. Use "Add question" or "Bulk import".</div>`;
-  list.insertAdjacentHTML("beforeend", data.map((r) => `<div class="ab-row">
+  if (reset && !data.length)
+    list.innerHTML = `<div class="empty-state">No questions match. Use "Add question" or "Bulk import".</div>`;
+  list.insertAdjacentHTML(
+    "beforeend",
+    data
+      .map(
+        (r) => `<div class="ab-row">
       <input type="checkbox" data-ab-sel="${r.id}" aria-label="Select question">
       <div class="ab-main"><div class="ab-q">${escapeHtml(String(r.question_text).replace(/\s+/g, " ").slice(0, 150))}</div>
         <div class="ab-chips"><i>${escapeHtml(r.subject)}</i><i>${escapeHtml(r.chapter)}</i><i>${escapeHtml(r.topic)}</i><i class="d-${r.difficulty}">${AB_DIFF[r.difficulty]}</i><i>${r.question_type === "mcq" ? "MCQ" : "Integer"}</i>${r.needs_review ? `<i class="warn">Needs tagging</i>` : ""}</div></div>
       <div class="ab-acts"><button type="button" data-ab-edit="${r.id}" aria-label="Edit">✏️</button><button type="button" data-ab-del="${r.id}" aria-label="Delete">🗑</button></div>
-    </div>`).join(""));
+    </div>`,
+      )
+      .join(""),
+  );
   ab.page += 1;
   document.getElementById("abMore").hidden = from + data.length >= (count || 0);
   if (reset) {
     const [all, review] = await Promise.all([
-      sb.from("questions").select("id", { count: "exact", head: true }).is("test_id", null),
-      sb.from("questions").select("id", { count: "exact", head: true }).is("test_id", null).eq("needs_review", true),
+      sb
+        .from("questions")
+        .select("id", { count: "exact", head: true })
+        .is("test_id", null),
+      sb
+        .from("questions")
+        .select("id", { count: "exact", head: true })
+        .is("test_id", null)
+        .eq("needs_review", true),
     ]);
-    document.getElementById("abSummary").textContent = `${all.count ?? 0} questions in the bank${review.count ? ` · ${review.count} need tagging` : ""} · showing ${count ?? 0} match${count === 1 ? "" : "es"}`;
+    document.getElementById("abSummary").textContent =
+      `${all.count ?? 0} questions in the bank${review.count ? ` · ${review.count} need tagging` : ""} · showing ${count ?? 0} match${count === 1 ? "" : "es"}`;
   }
 }
 
 async function abBulkUpdate(patch) {
   const ids = [...ab.selected];
   if (!ids.length) return;
-  const { error } = await sb.from("questions").update({ ...patch, needs_review: false, updated_at: new Date().toISOString() }).in("id", ids);
-  if (error) { toast(friendlyError(error), "error"); return; }
+  const { error } = await sb
+    .from("questions")
+    .update({
+      ...patch,
+      needs_review: false,
+      updated_at: new Date().toISOString(),
+    })
+    .in("id", ids);
+  if (error) {
+    toast(friendlyError(error), "error");
+    return;
+  }
   invalidateRpcCache();
-  toast(`${ids.length} question${ids.length === 1 ? "" : "s"} updated`, "success");
+  toast(
+    `${ids.length} question${ids.length === 1 ? "" : "s"} updated`,
+    "success",
+  );
   await abLoad(true);
 }
 
 async function abDelete(ids) {
-  if (!ids.length || !confirm(`Delete ${ids.length} question${ids.length === 1 ? "" : "s"} from the bank? Tests students already made keep their own copy.`)) return;
+  if (
+    !ids.length ||
+    !confirm(
+      `Delete ${ids.length} question${ids.length === 1 ? "" : "s"} from the bank? Tests students already made keep their own copy.`,
+    )
+  )
+    return;
   const { error } = await sb.from("questions").delete().in("id", ids);
-  if (error) { toast(friendlyError(error), "error"); return; }
+  if (error) {
+    toast(friendlyError(error), "error");
+    return;
+  }
   invalidateRpcCache();
   toast("Deleted", "success");
   await abLoad(true);
 }
 
 async function abOpenEditor(id) {
-  let row = { subject: "Physics", chapter: "", topic: "", difficulty: "medium", question_type: "mcq", question_text: "", options: null, correct_option: "A", correct_integer_value: null, explanation: "", positive_marks: 4, negative_marks: 1 };
+  let row = {
+    subject: "Physics",
+    chapter: "",
+    topic: "",
+    difficulty: "medium",
+    question_type: "mcq",
+    question_text: "",
+    options: null,
+    correct_option: "A",
+    correct_integer_value: null,
+    explanation: "",
+    positive_marks: 4,
+    negative_marks: 1,
+  };
   if (id) {
-    const { data, error } = await sb.from("questions").select("*").eq("id", id).single();
-    if (error) { toast(friendlyError(error), "error"); return; }
+    const { data, error } = await sb
+      .from("questions")
+      .select("*")
+      .eq("id", id)
+      .single();
+    if (error) {
+      toast(friendlyError(error), "error");
+      return;
+    }
     row = data;
   }
   document.getElementById("abModal")?.remove();
-  const opt = Object.fromEntries((row.options || []).map((o) => [o.id, o.text]));
+  const opt = Object.fromEntries(
+    (row.options || []).map((o) => [o.id, o.text]),
+  );
   const e = escapeHtml;
   const wrap = document.createElement("div");
   wrap.id = "abModal";
@@ -10493,25 +12984,55 @@ async function abOpenEditor(id) {
   document.body.appendChild(wrap);
   document.body.classList.add("eb-open");
   const $ = (x) => wrap.querySelector("#" + x);
-  const close = () => { wrap.remove(); document.body.classList.remove("eb-open"); };
-  wrap.addEventListener("click", (ev) => { if (ev.target === wrap || ev.target.closest("[data-close]")) close(); });
+  const close = () => {
+    wrap.remove();
+    document.body.classList.remove("eb-open");
+  };
+  wrap.addEventListener("click", (ev) => {
+    if (ev.target === wrap || ev.target.closest("[data-close]")) close();
+  });
 
   const syncChapter = async () => {
     const sub = $("abmSubject").value;
     const keep = $("abmChapter").value || row.chapter;
     fillChapterSelect($("abmChapter"), "Select chapter", sub);
-    if (keep && ![...$("abmChapter").options].some((o) => o.value === keep) && sub === row.subject) $("abmChapter").insertAdjacentHTML("beforeend", `<option>${e(keep)}</option>`);
-    $("abmChapter").value = [...$("abmChapter").options].some((o) => o.value === keep) ? keep : "";
+    if (
+      keep &&
+      ![...$("abmChapter").options].some((o) => o.value === keep) &&
+      sub === row.subject
+    )
+      $("abmChapter").insertAdjacentHTML(
+        "beforeend",
+        `<option>${e(keep)}</option>`,
+      );
+    $("abmChapter").value = [...$("abmChapter").options].some(
+      (o) => o.value === keep,
+    )
+      ? keep
+      : "";
     const { data } = await cachedRpc("get_bank_catalog");
-    const topics = [...new Set((data || []).filter((r) => r.subject === sub && r.chapter === $("abmChapter").value).map((r) => r.topic))];
-    $("abmTopics").innerHTML = topics.map((t) => `<option value="${e(t)}">`).join("");
+    const topics = [
+      ...new Set(
+        (data || [])
+          .filter(
+            (r) => r.subject === sub && r.chapter === $("abmChapter").value,
+          )
+          .map((r) => r.topic),
+      ),
+    ];
+    $("abmTopics").innerHTML = topics
+      .map((t) => `<option value="${e(t)}">`)
+      .join("");
   };
   const syncType = () => {
     const mcq = $("abmType").value === "mcq";
     $("abmMcq").hidden = !mcq;
     $("abmIntWrap").hidden = mcq;
   };
-  $("abmSubject").addEventListener("change", () => { $("abmChapter").value = ""; syncChapter(); });
+  $("abmSubject").addEventListener("change", () => {
+    $("abmChapter").value = "";
+    syncChapter();
+  });
   $("abmChapter").addEventListener("change", syncChapter);
   $("abmType").addEventListener("change", syncType);
   syncType();
@@ -10524,7 +13045,8 @@ async function abOpenEditor(id) {
       subject: $("abmSubject").value,
       chapter: $("abmChapter").value.trim(),
       topic: $("abmTopic").value.trim(),
-      difficulty: wrap.querySelector('input[name="abmDiff"]:checked')?.value || "medium",
+      difficulty:
+        wrap.querySelector('input[name="abmDiff"]:checked')?.value || "medium",
       question_type: type,
       question_text: $("abmQ").value.trim(),
       explanation: null,
@@ -10533,33 +13055,55 @@ async function abOpenEditor(id) {
       needs_review: false,
       updated_at: new Date().toISOString(),
     };
-    if (!payload.question_text) { msg.textContent = "Write the question."; return; }
-    if (!payload.chapter) { msg.textContent = "Choose a chapter."; return; }
-    if (!payload.topic) { msg.textContent = "Add a topic."; return; }
+    if (!payload.question_text) {
+      msg.textContent = "Write the question.";
+      return;
+    }
+    if (!payload.chapter) {
+      msg.textContent = "Choose a chapter.";
+      return;
+    }
+    if (!payload.topic) {
+      msg.textContent = "Add a topic.";
+      return;
+    }
     if (type === "mcq") {
-      payload.options = ["A", "B", "C", "D"].map((l) => ({ id: l, text: $("abmOpt" + l).value.trim() }));
-      if (payload.options.some((o) => !o.text)) { msg.textContent = "Fill all four options."; return; }
+      payload.options = ["A", "B", "C", "D"].map((l) => ({
+        id: l,
+        text: $("abmOpt" + l).value.trim(),
+      }));
+      if (payload.options.some((o) => !o.text)) {
+        msg.textContent = "Fill all four options.";
+        return;
+      }
       payload.correct_option = $("abmAnswer").value;
       payload.correct_integer_value = null;
     } else {
       const n = Number($("abmInt").value.trim());
-      if (!$("abmInt").value.trim() || !Number.isFinite(n)) { msg.textContent = "Enter the correct number."; return; }
+      if (!$("abmInt").value.trim() || !Number.isFinite(n)) {
+        msg.textContent = "Enter the correct number.";
+        return;
+      }
       payload.options = null;
       payload.correct_option = null;
       payload.correct_integer_value = n;
     }
     msg.textContent = "";
     $("abmSave").disabled = true;
-    const res = id ? await sb.from("questions").update(payload).eq("id", id) : await sb.from("questions").insert(payload);
+    const res = id
+      ? await sb.from("questions").update(payload).eq("id", id)
+      : await sb.from("questions").insert(payload);
     $("abmSave").disabled = false;
-    if (res.error) { msg.textContent = friendlyError(res.error); return; }
+    if (res.error) {
+      msg.textContent = friendlyError(res.error);
+      return;
+    }
     invalidateRpcCache();
     close();
     toast(id ? "Question updated" : "Question added", "success");
     await abLoad(true);
   });
 }
-
 
 /* =========================================================================
    RE-ATTEMPT MODE CHOOSER — every re-attempt asks: Quiz mode or Practice mode
@@ -10576,15 +13120,22 @@ function openModeChooser(testId) {
       <button type="button" class="pb-mode" data-mode="practice"><span>📖</span><b>Practice mode</b><small>See right or wrong after every answer. No restrictions: you can switch tabs freely.</small></button>
     </div></div></div>`;
   document.body.appendChild(wrap);
-  const onKey = (e) => { if (e.key === "Escape") close(); };
-  const close = () => { wrap.remove(); document.removeEventListener("keydown", onKey); };
+  const onKey = (e) => {
+    if (e.key === "Escape") close();
+  };
+  const close = () => {
+    wrap.remove();
+    document.removeEventListener("keydown", onKey);
+  };
   document.addEventListener("keydown", onKey);
   wrap.addEventListener("click", (e) => {
     if (e.target === wrap || e.target.closest(".syl-x")) return close();
     const b = e.target.closest("[data-mode]");
     if (b) {
       close();
-      navigate(`/exam?test=${encodeURIComponent(testId)}&practice=1&mode=${b.dataset.mode}`);
+      navigate(
+        `/exam?test=${encodeURIComponent(testId)}&practice=1&mode=${b.dataset.mode}`,
+      );
     }
   });
 }
@@ -10611,12 +13162,21 @@ function syncHomeLive() {
       el.previousElementSibling?.removeAttribute("data-live-hidden-head");
     }
   });
-  const withText = [...view.querySelectorAll("[id]")].filter((el) => el.id !== "view-dashboard" && EMPTY.test(el.textContent));
-  const deepest = withText.filter((el) => !withText.some((o) => o !== el && el.contains(o)));
+  const withText = [...view.querySelectorAll("[id]")].filter(
+    (el) => el.id !== "view-dashboard" && EMPTY.test(el.textContent),
+  );
+  const deepest = withText.filter(
+    (el) => !withText.some((o) => o !== el && el.contains(o)),
+  );
   deepest.forEach((el) => {
     el.setAttribute("data-live-hidden", "");
     const head = el.previousElementSibling;
-    if (head && head.querySelector("h2") && /live tests/i.test(head.textContent)) head.setAttribute("data-live-hidden-head", "");
+    if (
+      head &&
+      head.querySelector("h2") &&
+      /live tests/i.test(head.textContent)
+    )
+      head.setAttribute("data-live-hidden-head", "");
   });
 }
 (() => {
@@ -10626,7 +13186,10 @@ function syncHomeLive() {
   new MutationObserver(() => {
     if (queued) return;
     queued = true;
-    requestAnimationFrame(() => { queued = false; syncHomeLive(); });
+    requestAnimationFrame(() => {
+      queued = false;
+      syncHomeLive();
+    });
   }).observe(view, { childList: true, subtree: true, characterData: true });
 })();
 
@@ -10640,12 +13203,22 @@ function anTrendHtml(trend) {
   const last = rows[rows.length - 1];
   const prev = rows[rows.length - 2];
   const delta = prev ? Number(last.pct) - Number(prev.pct) : null;
-  const badge = delta == null ? "" : `<span class="an-delta ${delta >= 0 ? "up" : "down"}">${delta >= 0 ? "▲" : "▼"} ${Math.abs(delta).toFixed(1)} pts vs previous</span>`;
-  const bars = rows.map((r, i) => {
-    const pct = Math.max(0, Math.min(100, Number(r.pct) || 0));
-    return `<div class="an-col"><b>${Math.round(pct)}%</b><i class="${r.practice ? "is-practice" : "is-live"} ${i === rows.length - 1 ? "is-last" : ""}" style="height:${Math.max(pct, 1)}%"></i></div>`;
-  }).join("");
-  const labels = rows.map((r) => { const d = new Date(r.at); return `<span>${d.getDate()}<small>${d.toLocaleString([], { month: "short" })}</small></span>`; }).join("");
+  const badge =
+    delta == null
+      ? ""
+      : `<span class="an-delta ${delta >= 0 ? "up" : "down"}">${delta >= 0 ? "▲" : "▼"} ${Math.abs(delta).toFixed(1)} pts vs previous</span>`;
+  const bars = rows
+    .map((r, i) => {
+      const pct = Math.max(0, Math.min(100, Number(r.pct) || 0));
+      return `<div class="an-col"><b>${Math.round(pct)}%</b><i class="${r.practice ? "is-practice" : "is-live"} ${i === rows.length - 1 ? "is-last" : ""}" style="height:${Math.max(pct, 1)}%"></i></div>`;
+    })
+    .join("");
+  const labels = rows
+    .map((r) => {
+      const d = new Date(r.at);
+      return `<span>${d.getDate()}<small>${d.toLocaleString([], { month: "short" })}</small></span>`;
+    })
+    .join("");
   return `<section class="card pr-section an-card"><div class="an-head"><div><h2>Score trend</h2><small>Last ${rows.length} attempt${rows.length === 1 ? "" : "s"} · live and practice together</small></div>${badge}</div>
     <div class="an-plot"><div class="an-yaxis"><span>100%</span><span>75%</span><span>50%</span><span>25%</span><span>0%</span></div>
       <div class="an-area"><div class="an-avg" style="bottom:${avg}%"></div><div class="an-cols" style="--n:${rows.length}">${bars}</div></div>
@@ -10654,7 +13227,9 @@ function anTrendHtml(trend) {
 }
 
 function anOutcomesHtml(t) {
-  const c = Number(t.correct || 0), w = Number(t.wrong || 0), u = Number(t.unanswered || 0);
+  const c = Number(t.correct || 0),
+    w = Number(t.wrong || 0),
+    u = Number(t.unanswered || 0);
   const total = c + w + u;
   if (!total) return "";
   const a = (c / total) * 100;
@@ -10669,18 +13244,27 @@ function anDifficultyHtml(diff) {
   const label = { easy: "Easy", medium: "Medium", hard: "Hard" };
   const by = Object.fromEntries((diff || []).map((d) => [d.difficulty, d]));
   const have = order.some((k) => by[k] && Number(by[k].attempted) > 0);
-  const cards = order.map((k) => {
-    const d = by[k] || { attempted: 0, correct: 0 };
-    const att = Number(d.attempted), cor = Number(d.correct);
-    const acc = att ? Math.round((cor / att) * 100) : 0;
-    return `<div class="an-diff d-${k}"><div class="an-ring" style="--p:${acc}"><b>${att ? acc + "%" : "—"}</b></div><div class="an-diff-t"><b>${label[k]}</b><small>${cor} of ${att} correct</small></div></div>`;
-  }).join("");
-  const rated = order.filter((k) => by[k] && Number(by[k].attempted) >= 5).map((k) => ({ k, acc: Number(by[k].correct) / Number(by[k].attempted) * 100 }));
+  const cards = order
+    .map((k) => {
+      const d = by[k] || { attempted: 0, correct: 0 };
+      const att = Number(d.attempted),
+        cor = Number(d.correct);
+      const acc = att ? Math.round((cor / att) * 100) : 0;
+      return `<div class="an-diff d-${k}"><div class="an-ring" style="--p:${acc}"><b>${att ? acc + "%" : "—"}</b></div><div class="an-diff-t"><b>${label[k]}</b><small>${cor} of ${att} correct</small></div></div>`;
+    })
+    .join("");
+  const rated = order
+    .filter((k) => by[k] && Number(by[k].attempted) >= 5)
+    .map((k) => ({
+      k,
+      acc: (Number(by[k].correct) / Number(by[k].attempted)) * 100,
+    }));
   let insight = "";
   if (rated.length >= 2) {
     const best = rated.reduce((a, b) => (b.acc > a.acc ? b : a));
     const worst = rated.reduce((a, b) => (b.acc < a.acc ? b : a));
-    if (best.k !== worst.k) insight = `<p class="an-insight">You are strongest on <b>${label[best.k]}</b> questions (${Math.round(best.acc)}%). Practise more <b>${label[worst.k]}</b> questions (${Math.round(worst.acc)}%).</p>`;
+    if (best.k !== worst.k)
+      insight = `<p class="an-insight">You are strongest on <b>${label[best.k]}</b> questions (${Math.round(best.acc)}%). Practise more <b>${label[worst.k]}</b> questions (${Math.round(worst.acc)}%).</p>`;
   }
   return `<section class="card pr-section an-card"><div class="an-head"><h2>Question difficulty</h2><small>How you do on Easy, Medium and Hard</small></div><div class="an-diffs">${cards}</div>${insight}${have ? "" : `<p class="text-muted pr-note">Build tests in Infinite Practice to see how you do at each level.</p>`}</section>`;
 }
@@ -10691,9 +13275,15 @@ function analyticsMergedHtml(o) {
     return `<div class="card analytics-empty-card"><span class="analytics-empty-icon">📊</span><h2>No analytics yet</h2><p class="text-muted">Attempt a test to see your analytics.</p><a href="#/practice" class="btn btn-primary">Start practising</a></div>`;
   }
   const secs = Number(t.total_time_seconds || 0);
-  const timeLabel = secs >= 3600 ? `${(secs / 3600).toFixed(1)}h` : `${Math.round(secs / 60)}m`;
-  const subjects = (o.subjects || []).map((x) => prBar(x.subject, x.accuracy, `${x.correct} right · ${x.wrong} wrong`)).join("");
-  const chap = (list) => (list || []).map((x) => prBar(x.chapter, x.accuracy, x.subject)).join("");
+  const timeLabel =
+    secs >= 3600 ? `${(secs / 3600).toFixed(1)}h` : `${Math.round(secs / 60)}m`;
+  const subjects = (o.subjects || [])
+    .map((x) =>
+      prBar(x.subject, x.accuracy, `${x.correct} right · ${x.wrong} wrong`),
+    )
+    .join("");
+  const chap = (list) =>
+    (list || []).map((x) => prBar(x.chapter, x.accuracy, x.subject)).join("");
   return `
     <div class="pr-stat-row">${prStat(t.questions_attempted, "Questions attempted")}${prStat(t.tests_attempted, "Tests attempted")}${prStat(prPct(t.accuracy), "Accuracy")}${prStat(`🔥 ${o.streak_days || 0}`, "Day streak")}</div>
     <div class="pr-stat-row">${prStat(t.live_attempts, "Live attempts")}${prStat(t.practice_attempts, "Practice attempts")}${prStat(timeLabel, "Total study time")}${prStat(`${t.sec_per_question || 0}s`, "Time per question")}</div>
@@ -10712,7 +13302,10 @@ function analyticsMergedHtml(o) {
 async function enterAnalyticsView() {
   const content = document.getElementById("analyticsContent");
   const hist = document.getElementById("analysisHistory");
-  if (hist) { hist.innerHTML = ""; hist.style.display = "none"; }
+  if (hist) {
+    hist.innerHTML = "";
+    hist.style.display = "none";
+  }
   content.innerHTML = `<div class="empty-state">Loading analytics…</div>`;
   const { data, error } = await cachedRpc("get_combined_overview");
   content.innerHTML = error
@@ -10725,21 +13318,41 @@ async function enterAnalyticsView() {
    ========================================================================= */
 const annReadKey = () => `ann_read_at_${myProfile?.id || "guest"}`;
 const annSince = () => {
-  try { return localStorage.getItem(annReadKey()) || new Date(Date.now() - 7 * 86400000).toISOString(); } catch (_) { return new Date(Date.now() - 7 * 86400000).toISOString(); }
+  try {
+    return (
+      localStorage.getItem(annReadKey()) ||
+      new Date(Date.now() - 7 * 86400000).toISOString()
+    );
+  } catch (_) {
+    return new Date(Date.now() - 7 * 86400000).toISOString();
+  }
 };
-const annMarkRead = () => { try { localStorage.setItem(annReadKey(), new Date().toISOString()); } catch (_) { /* private mode */ } };
+const annMarkRead = () => {
+  try {
+    localStorage.setItem(annReadKey(), new Date().toISOString());
+  } catch (_) {
+    /* private mode */
+  }
+};
 
 async function refreshAnnouncementBadge(force = false) {
   const badge = document.getElementById("annBadge");
   if (!badge || !document.body.classList.contains("app-shell-on")) return;
   if (!force && Date.now() - annBadgeAt < 60000) return;
   annBadgeAt = Date.now();
-  const { data, error } = await sb.rpc("get_announcement_unread_count", { p_since: annSince() });
+  const { data, error } = await sb.rpc("get_announcement_unread_count", {
+    p_since: annSince(),
+  });
   if (error) return;
   const n = Number(data) || 0;
   badge.hidden = n < 1;
   badge.textContent = n > 99 ? "99+" : String(n);
-  document.getElementById("annBtn")?.setAttribute("aria-label", n ? `Announcements, ${n} unread` : "Announcements");
+  document
+    .getElementById("annBtn")
+    ?.setAttribute(
+      "aria-label",
+      n ? `Announcements, ${n} unread` : "Announcements",
+    );
 }
 
 async function loadAnnouncements(append = false) {
@@ -10748,14 +13361,19 @@ async function loadAnnouncements(append = false) {
     feed.innerHTML = `<div class="empty-state">Loading…</div>`;
     ann.before = null;
   }
-  const { data, error } = await sb.rpc("get_announcements", { p_before: ann.before, p_limit: 20, p_since: annSince() });
+  const { data, error } = await sb.rpc("get_announcements", {
+    p_before: ann.before,
+    p_limit: 20,
+    p_since: annSince(),
+  });
   if (error) {
     feed.innerHTML = `<div class="error-box">${escapeHtml(/get_announcements|schema cache|does not exist/i.test(error.message || "") ? "Announcements need the latest database update. Run migration_cleanup.sql." : friendlyError(error))}</div>`;
     return;
   }
   const posts = data || [];
   if (!append) feed.innerHTML = "";
-  if (!append && !posts.length) feed.innerHTML = `<div class="empty-state">No announcements yet.</div>`;
+  if (!append && !posts.length)
+    feed.innerHTML = `<div class="empty-state">No announcements yet.</div>`;
   feed.insertAdjacentHTML("beforeend", posts.map(annPostHtml).join(""));
   ann.before = posts.length ? posts[posts.length - 1].created_at : ann.before;
   document.getElementById("annMore").hidden = posts.length < 20;
@@ -10781,15 +13399,22 @@ function reportCheckPrompt(q) {
   if (meta) lines.push(meta);
   lines.push(`Question: ${String(q.question_text || "").trim()}`);
   (q.options || []).forEach((o) => lines.push(`${o.id}) ${o.text}`));
-  const answer = q.correct_option != null && q.correct_option !== "" ? q.correct_option : q.correct_integer_value;
-  if (answer != null && answer !== "") lines.push("", `Correct option marked in the platform: ${answer}`);
+  const answer =
+    q.correct_option != null && q.correct_option !== ""
+      ? q.correct_option
+      : q.correct_integer_value;
+  if (answer != null && answer !== "")
+    lines.push("", `Correct option marked in the platform: ${answer}`);
   return lines.join("\n").slice(0, 3200);
 }
 
 function reportCheckMenuHtml(q) {
   if (!q) return "";
   const text = reportCheckPrompt(q);
-  const short = `${String(q.question_text || "").replace(/\s+/g, " ").trim().slice(0, 260)} check answer`;
+  const short = `${String(q.question_text || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 260)} check answer`;
   const links = [
     ["ChatGPT", `https://chatgpt.com/?q=${encodeURIComponent(text)}`],
     ["Claude", `https://claude.ai/new?q=${encodeURIComponent(text)}`],
@@ -10806,32 +13431,53 @@ async function enterAdminReportsView() {
   if (!ok) return;
   if (!arBound) {
     arBound = true;
-    document.querySelector("#arContent .an-tabs").addEventListener("click", (e) => {
-      const b = e.target.closest("[data-ar]");
-      if (!b) return;
-      arTab = b.dataset.ar;
-      document.querySelectorAll("#arContent .an-tab").forEach((x) => x.classList.toggle("active", x === b));
-      loadAdminReportsInbox();
-    });
+    document
+      .querySelector("#arContent .an-tabs")
+      .addEventListener("click", (e) => {
+        const b = e.target.closest("[data-ar]");
+        if (!b) return;
+        arTab = b.dataset.ar;
+        document
+          .querySelectorAll("#arContent .an-tab")
+          .forEach((x) => x.classList.toggle("active", x === b));
+        loadAdminReportsInbox();
+      });
     document.getElementById("arList").addEventListener("click", async (e) => {
       const btn = e.target.closest("[data-ar-act]");
       if (!btn) return;
       const act = btn.dataset.arAct;
-      if (act === "delete" && !confirm("Delete these resolved reports? This cannot be undone.")) return;
+      if (
+        act === "delete" &&
+        !confirm("Delete these resolved reports? This cannot be undone.")
+      )
+        return;
       btn.disabled = true;
-      const fn = { resolve: "admin_resolve_question_reports", reopen: "admin_reopen_question_reports", delete: "admin_delete_resolved_reports" }[act];
+      const fn = {
+        resolve: "admin_resolve_question_reports",
+        reopen: "admin_reopen_question_reports",
+        delete: "admin_delete_resolved_reports",
+      }[act];
       const { error } = await sb.rpc(fn, { p_question_id: btn.dataset.q });
       if (error) {
         toast(friendlyError(error), "error");
         btn.disabled = false;
         return;
       }
-      toast({ resolve: "Marked as resolved", reopen: "Reopened", delete: "Deleted" }[act], "success");
+      toast(
+        {
+          resolve: "Marked as resolved",
+          reopen: "Reopened",
+          delete: "Deleted",
+        }[act],
+        "success",
+      );
       await loadAdminReportsInbox();
     });
   }
   arTab = "open";
-  document.querySelectorAll("#arContent .an-tab").forEach((x) => x.classList.toggle("active", x.dataset.ar === "open"));
+  document
+    .querySelectorAll("#arContent .an-tab")
+    .forEach((x) => x.classList.toggle("active", x.dataset.ar === "open"));
   await loadAdminReportsInbox();
 }
 
@@ -10840,47 +13486,91 @@ async function loadAdminReportsInbox() {
   list.innerHTML = `<div class="empty-state">Loading…</div>`;
   const { data, error } = await sb
     .from("question_reports")
-    .select("id, test_id, question_id, reason, details, created_at, resolved_at, questions(question_text, subject, chapter, question_type, options, correct_option, correct_integer_value), profiles(full_name)")
+    .select(
+      "id, test_id, question_id, reason, details, created_at, resolved_at, questions(question_text, subject, chapter, question_type, options, correct_option, correct_integer_value), profiles(full_name)",
+    )
     .order("created_at", { ascending: false });
   if (error) {
     list.innerHTML = `<div class="error-box">${escapeHtml(/resolved_at/.test(error.message || "") ? "Run the latest migration to enable resolved reports." : friendlyError(error))}</div>`;
     return;
   }
+  const all = data || [];
+  const openN = new Set(all.filter((r) => !r.resolved_at).map((r) => r.question_id)).size;
+  const resN = new Set(all.filter((r) => r.resolved_at).map((r) => r.question_id)).size;
+  document.querySelectorAll("#arContent .an-tab").forEach((b) => {
+    const isOpen = b.dataset.ar === "open";
+    b.innerHTML = `${isOpen ? "Open" : "Resolved"} <span class="seg-count">${isOpen ? openN : resN}</span>`;
+  });
+  const sum = document.getElementById("arSummary");
+  if (sum) sum.textContent = `${openN} open · ${resN} resolved`;
+
   const wantResolved = arTab === "resolved";
-  const rows = (data || []).filter((r) => (wantResolved ? !!r.resolved_at : !r.resolved_at));
+  const rows = all.filter((r) => (wantResolved ? !!r.resolved_at : !r.resolved_at));
   const groups = new Map();
   rows.forEach((r) => {
-    if (!groups.has(r.question_id)) groups.set(r.question_id, { q: r.question_id, test: r.test_id, question: r.questions, items: [] });
+    if (!groups.has(r.question_id))
+      groups.set(r.question_id, { q: r.question_id, test: r.test_id, question: r.questions, items: [] });
     groups.get(r.question_id).items.push(r);
   });
   const testIds = [...new Set(rows.map((r) => r.test_id).filter(Boolean))];
   const titles = new Map();
   if (testIds.length) {
-    const { data: tests } = await sb.from("tests").select("id, title, test_mode").in("id", testIds);
+    const { data: tests } = await sb
+      .from("tests")
+      .select("id, title, test_mode, owner_id")
+      .in("id", testIds);
     (tests || []).forEach((t) => titles.set(t.id, t));
   }
   if (!groups.size) {
     list.innerHTML = `<div class="empty-state">${wantResolved ? "Nothing resolved yet." : "No open reports. Nice and clean ✓"}</div>`;
     return;
   }
-  list.innerHTML = [...groups.values()].map((g) => {
-    const t = titles.get(g.test);
-    const reasons = g.items.map((r) => `<li><b>${escapeHtml(r.reason)}</b>${r.details ? ` · ${escapeHtml(r.details)}` : ""} <small>${escapeHtml(r.profiles?.full_name || "Student")} · ${formatDateTime(r.created_at)}</small></li>`).join("");
-    return `<article class="report-card">
-      <div class="report-card-head"><strong>${escapeHtml(t?.title || "Test")}</strong><span class="status-tag dq-tag">${g.items.length} report${g.items.length === 1 ? "" : "s"}</span></div>
-      <div class="text-muted">${escapeHtml(g.question?.subject || "")}</div>
-      <div class="question-text report-question-text">${escapeHtml(g.question?.question_text || "This question has been removed.")}</div>
-      <ul class="report-reasons">${reasons}</ul>
-      <div class="report-actions">
-        ${g.question ? `<a class="btn btn-sm btn-primary" href="#/admin-test?test=${encodeURIComponent(g.test)}&edit=${encodeURIComponent(g.q)}">✏️ Edit question</a>` : ""}
-        ${reportCheckMenuHtml(g.question)}
-        ${wantResolved
-          ? `<button type="button" class="btn btn-sm" data-ar-act="reopen" data-q="${g.q}">↩ Reopen</button><button type="button" class="btn btn-sm btn-danger" data-ar-act="delete" data-q="${g.q}">🗑 Delete</button>`
-          : `<button type="button" class="btn btn-sm btn-success" data-ar-act="resolve" data-q="${g.q}">✓ Mark resolved</button>`}
-      </div></article>`;
-  }).join("");
+  const modeOf = (t) =>
+    !t ? "Test" : t.owner_id ? "Student-made test" : t.test_mode === "practice" ? "Infinite Practice" : "Live test";
+  list.innerHTML = [...groups.values()]
+    .map((g) => {
+      const t = titles.get(g.test);
+      const q = g.question;
+      const studentMade = !!t?.owner_id;
+      const reasons = g.items
+        .map(
+          (r) =>
+            `<li><span class="rp-reason">${escapeHtml(r.reason)}</span>${r.details ? `<span class="rp-detail">${escapeHtml(r.details)}</span>` : ""}<small>${escapeHtml(r.profiles?.full_name || "Student")} · ${formatDateTime(r.created_at)}</small></li>`,
+        )
+        .join("");
+      const key = q ? (q.question_type === "integer" ? q.correct_integer_value : q.correct_option) : null;
+      const chips = [
+        `<span class="rp-chip${studentMade ? " is-student" : ""}">${modeOf(t)}</span>`,
+        q?.subject ? `<span class="rp-chip">${escapeHtml(q.subject)}</span>` : "",
+        q?.chapter ? `<span class="rp-chip">${escapeHtml(q.chapter)}</span>` : "",
+      ].join("");
+      const edit = !q
+        ? ""
+        : studentMade
+          ? `<a class="btn btn-sm btn-primary" href="#/admin-bank">🗄️ Fix in question bank</a>`
+          : `<a class="btn btn-sm btn-primary" href="#/admin-test?test=${encodeURIComponent(g.test)}&edit=${encodeURIComponent(g.q)}">✏️ Edit question</a>`;
+      return `<article class="rp-card${wantResolved ? " is-resolved" : ""}">
+      <header class="rp-head">
+        <div class="rp-title"><strong>${escapeHtml(t?.title || "Test")}</strong><div class="rp-chips">${chips}</div></div>
+        <span class="rp-count">${g.items.length} report${g.items.length === 1 ? "" : "s"}</span>
+      </header>
+      <div class="rp-question question-text">${escapeHtml(q?.question_text || "This question has been removed.")}</div>
+      ${key != null && key !== "" ? `<div class="rp-key">Answer key: <b>${escapeHtml(String(key))}</b></div>` : ""}
+      <ul class="rp-reasons">${reasons}</ul>
+      <footer class="rp-actions">
+        ${edit}
+        ${reportCheckMenuHtml(q)}
+        ${
+          wantResolved
+            ? `<button type="button" class="btn btn-sm" data-ar-act="reopen" data-q="${g.q}">↩ Reopen</button><button type="button" class="btn btn-sm btn-danger" data-ar-act="delete" data-q="${g.q}">🗑 Delete</button>`
+            : `<button type="button" class="btn btn-sm btn-success" data-ar-act="resolve" data-q="${g.q}">✓ Mark resolved</button>`
+        }
+      </footer></article>`;
+    })
+    .join("");
   renderMath(list);
 }
+
 
 /* =========================================================================
    ADMIN — student feedback (read and delete)
@@ -10897,21 +13587,31 @@ async function enterAdminFeedbackView() {
     list.addEventListener("click", async (e) => {
       const del = e.target.closest("[data-af-del]");
       if (!del || !confirm("Delete this feedback?")) return;
-      const { error } = await sb.from("test_feedback").delete().eq("id", del.dataset.afDel);
-      if (error) { toast(friendlyError(error), "error"); return; }
+      const { error } = await sb
+        .from("test_feedback")
+        .delete()
+        .eq("id", del.dataset.afDel);
+      if (error) {
+        toast(friendlyError(error), "error");
+        return;
+      }
       del.closest(".af-item").remove();
       toast("Feedback deleted", "success");
     });
   }
   list.innerHTML = `<div class="empty-state">Loading…</div>`;
-  let res = await sb.from("test_feedback").select("*").order("created_at", { ascending: false }).limit(300);
+  let res = await sb
+    .from("test_feedback")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(300);
   if (res.error) res = await sb.from("test_feedback").select("*").limit(300);
   if (res.error) {
     list.innerHTML = `<div class="error-box">${escapeHtml(friendlyError(res.error))}</div>`;
     return;
   }
   const rows = res.data || [];
-  document.getElementById("afSummary").textContent = `${rows.length} feedback ${rows.length === 1 ? "message" : "messages"}`;
+
   if (!rows.length) {
     list.innerHTML = `<div class="empty-state">No feedback yet.</div>`;
     return;
@@ -10920,32 +13620,75 @@ async function enterAdminFeedbackView() {
   const userIds = [...new Set(rows.map(uid).filter(Boolean))];
   const testIds = [...new Set(rows.map((r) => r.test_id).filter(Boolean))];
   const [pr, ts] = await Promise.all([
-    userIds.length ? sb.from("profiles").select("id, full_name, class_grade, target_exam").in("id", userIds) : { data: [] },
-    testIds.length ? sb.from("tests").select("id, title").in("id", testIds) : { data: [] },
+    userIds.length
+      ? sb
+          .from("profiles")
+          .select("id, full_name, class_grade, target_exam")
+          .in("id", userIds)
+      : { data: [] },
+    testIds.length
+      ? sb.from("tests").select("id, title").in("id", testIds)
+      : { data: [] },
   ]);
   const people = new Map((pr.data || []).map((p) => [p.id, p]));
   const tests = new Map((ts.data || []).map((t) => [t.id, t]));
-  list.innerHTML = rows.map((r) => {
-    const p = people.get(uid(r));
-    const stars = Number(r.rating) ? "★".repeat(Number(r.rating)) + "☆".repeat(Math.max(0, 5 - Number(r.rating))) : "";
-    const text = r.comment ?? r.message ?? r.feedback ?? r.text ?? "";
-    const chips = [p?.class_grade, p?.target_exam ? examOptionFor(p.target_exam) : ""].filter(Boolean).map((c) => `<i>${escapeHtml(c)}</i>`).join("");
-    return `<article class="af-item">
-      <div class="af-head"><span class="af-av">${escapeHtml((p?.full_name || "S").slice(0, 1).toUpperCase())}</span>
+  const statsBox = document.getElementById("afStats");
+  if (statsBox) {
+    const getText = (r) => String(r.comment ?? r.message ?? r.feedback ?? r.text ?? "").trim();
+    const rated = rows.filter((r) => Number(r.rating) > 0);
+    const avg = rated.length ? rated.reduce((s, r) => s + Number(r.rating), 0) / rated.length : 0;
+    const dist = [5, 4, 3, 2, 1].map((n) => ({ n, c: rated.filter((r) => Number(r.rating) === n).length }));
+    const maxC = Math.max(1, ...dist.map((d) => d.c));
+    const low = rated.filter((r) => Number(r.rating) <= 2).length;
+    const withText = rows.filter((r) => getText(r)).length;
+    const per = new Map();
+    rated.forEach((r) => {
+      const o = per.get(r.test_id) || { n: 0, s: 0 };
+      o.n += 1; o.s += Number(r.rating); per.set(r.test_id, o);
+    });
+    const perRows = [...per.entries()]
+      .map(([id, o]) => ({ title: tests.get(id)?.title || "Test", avg: o.s / o.n, n: o.n }))
+      .sort((x, y) => y.n - x.n).slice(0, 4);
+    const filled = Math.round(avg);
+    statsBox.hidden = false;
+    statsBox.innerHTML = `<div class="af-score"><strong>${avg ? avg.toFixed(1) : "–"}</strong><span class="af-stars">${"★".repeat(filled)}${"☆".repeat(5 - filled)}</span><small>${rated.length} rating${rated.length === 1 ? "" : "s"}</small></div>
+      <div class="af-dist">${dist.map((d) => `<div class="af-dist-row"><span>${d.n}★</span><div class="af-bar"><i style="--w:${Math.round((d.c / maxC) * 100)}%"></i></div><b>${d.c}</b></div>`).join("")}</div>
+      <div class="af-mini"><div>Feedback <b>${rows.length}</b></div><div>With comment <b>${withText}</b></div><div>Low (1–2★) <b>${low}</b></div></div>
+      ${perRows.length ? `<div class="af-tests">${perRows.map((t) => `<div><span>${escapeHtml(t.title)}</span><b>★ ${t.avg.toFixed(1)}</b><small>${t.n}</small></div>`).join("")}</div>` : ""}`;
+  }
+  list.innerHTML = rows
+    .map((r) => {
+      const p = people.get(uid(r));
+      const stars = Number(r.rating)
+        ? "★".repeat(Number(r.rating)) +
+          "☆".repeat(Math.max(0, 5 - Number(r.rating)))
+        : "";
+      const text = r.comment ?? r.message ?? r.feedback ?? r.text ?? "";
+      const chips = [
+        p?.class_grade,
+        p?.target_exam ? examOptionFor(p.target_exam) : "",
+      ]
+        .filter(Boolean)
+        .map((c) => `<i>${escapeHtml(c)}</i>`)
+        .join("");
+      return `<article class="af-item">
+      <div class="af-row"><span class="af-av">${escapeHtml((p?.full_name || "S").slice(0, 1).toUpperCase())}</span>
         <div class="af-who"><b>${escapeHtml(p?.full_name || "Student")}</b><span class="ann-chips">${chips}</span></div>
+        ${stars ? `<span class="af-stars" aria-label="${Number(r.rating)} out of 5">${stars}</span>` : ""}
         <button type="button" class="ann-del" data-af-del="${r.id}" aria-label="Delete feedback">🗑</button></div>
-      ${stars ? `<div class="af-stars" aria-label="${Number(r.rating)} out of 5">${stars}</div>` : ""}
-      ${text ? `<div class="af-text">${escapeHtml(String(text))}</div>` : `<div class="af-text muted">No written comment.</div>`}
+      ${text ? `<div class="af-text">${escapeHtml(String(text))}</div>` : ""}
       <div class="af-meta">${tests.get(r.test_id)?.title ? escapeHtml(tests.get(r.test_id).title) + " · " : ""}${r.created_at ? formatDateTime(r.created_at) : ""}</div>
     </article>`;
-  }).join("");
+    })
+    .join("");
 }
 
 /* =========================================================================
    PROFILE POPUP — shown on the home page until every detail is filled in
    ========================================================================= */
 let ppOpen = false;
-const ppField = (field, control) => `<label class="pp-field">${field.label} <span class="pp-star">*</span>${control}</label>`;
+const ppField = (field, control) =>
+  `<label class="pp-field">${field.label} <span class="pp-star">*</span>${control}</label>`;
 
 function ppMissing(profile) {
   return PROFILE_FIELDS.filter((f) => !f.valid(storedProfileValue(profile, f)));
@@ -10957,21 +13700,63 @@ function maybeShowProfilePrompt() {
   ppOpen = true;
   const [name, email, mobile, dob, gender, klass, exam, board] = PROFILE_FIELDS;
   const val = (f) => escapeHtml(storedProfileValue(myProfile, f));
-  const sel = (f, ph, values, current) => ppField(f, `<select class="ui-select" id="pp_${f.id}"><option value="">${ph}</option>${profileOptions(values, current)}</select>`);
+  const sel = (f, ph, values, current) =>
+    ppField(
+      f,
+      `<select class="ui-select" id="pp_${f.id}"><option value="">${ph}</option>${profileOptions(values, current)}</select>`,
+    );
   const overlay = document.getElementById("profilePrompt");
   document.getElementById("ppBody").innerHTML = [
-    ppField(name, `<input type="text" id="pp_${name.id}" value="${val(name)}" maxlength="120" autocomplete="name">`),
-    ppField(email, `<input type="email" id="pp_${email.id}" value="${val(email)}" autocomplete="email">`),
-    ppField(mobile, `<input type="tel" id="pp_${mobile.id}" value="${escapeHtml(mobileDigits(myProfile.mobile_number))}" inputmode="numeric" maxlength="14" placeholder="10-digit mobile number" autocomplete="tel-national">`),
-    ppField(dob, `<input type="date" id="pp_${dob.id}" value="${val(dob)}" min="1970-01-01" max="${isoToday()}">`),
-    sel(gender, "Select gender", GENDER_OPTIONS, storedProfileValue(myProfile, gender)),
-    sel(klass, "Select class", CLASS_OPTIONS, storedProfileValue(myProfile, klass)),
-    sel(exam, "Select target exam", EXAM_OPTIONS, examOptionFor(storedProfileValue(myProfile, exam))),
-    sel(board, "Select board", BOARD_OPTIONS, storedProfileValue(myProfile, board)),
+    ppField(
+      name,
+      `<input type="text" id="pp_${name.id}" value="${val(name)}" maxlength="120" autocomplete="name">`,
+    ),
+    ppField(
+      email,
+      `<input type="email" id="pp_${email.id}" value="${val(email)}" autocomplete="email">`,
+    ),
+    ppField(
+      mobile,
+      `<input type="tel" id="pp_${mobile.id}" value="${escapeHtml(mobileDigits(myProfile.mobile_number))}" inputmode="numeric" maxlength="14" placeholder="10-digit mobile number" autocomplete="tel-national">`,
+    ),
+    ppField(
+      dob,
+      `<input type="date" id="pp_${dob.id}" value="${val(dob)}" min="1970-01-01" max="${isoToday()}">`,
+    ),
+    sel(
+      gender,
+      "Select gender",
+      GENDER_OPTIONS,
+      storedProfileValue(myProfile, gender),
+    ),
+    sel(
+      klass,
+      "Select class",
+      CLASS_OPTIONS,
+      storedProfileValue(myProfile, klass),
+    ),
+    sel(
+      exam,
+      "Select target exam",
+      EXAM_OPTIONS,
+      examOptionFor(storedProfileValue(myProfile, exam)),
+    ),
+    sel(
+      board,
+      "Select board",
+      BOARD_OPTIONS,
+      storedProfileValue(myProfile, board),
+    ),
   ].join("");
   overlay.hidden = false;
   document.body.classList.add("eb-open");
-  const read = () => Object.fromEntries(PROFILE_FIELDS.map((f) => [f.key, document.getElementById("pp_" + f.id).value]));
+  const read = () =>
+    Object.fromEntries(
+      PROFILE_FIELDS.map((f) => [
+        f.key,
+        document.getElementById("pp_" + f.id).value,
+      ]),
+    );
   const done = document.getElementById("ppDone");
   const refresh = () => {
     const v = read();
@@ -11014,7 +13799,11 @@ function maybeShowProfilePrompt() {
     myProfile = data;
     close();
     toast("Profile saved", "success");
-    try { await syncAppShell("dashboard", true); } catch (_) { /* shell refresh is optional */ }
+    try {
+      await syncAppShell("dashboard", true);
+    } catch (_) {
+      /* shell refresh is optional */
+    }
   };
   refresh();
 }
@@ -11043,14 +13832,34 @@ function bulkCardHtml(question, index) {
   const e = escapeHtml;
   const bank = bulkDest() === "bank";
   const diff = bulkDiff(question.difficulty);
-  const meta = [subj || question.subject || "No subject", question.chapter || "No chapter", bank ? question.topic || "No topic" : "", bank ? (diff ? diff[0].toUpperCase() + diff.slice(1) : "No difficulty") : ""].filter(Boolean).map(e).join(" · ");
+  const meta = [
+    subj || question.subject || "No subject",
+    question.chapter || "No chapter",
+    bank ? question.topic || "No topic" : "",
+    bank
+      ? diff
+        ? diff[0].toUpperCase() + diff.slice(1)
+        : "No difficulty"
+      : "",
+  ]
+    .filter(Boolean)
+    .map(e)
+    .join(" · ");
   const options =
     type === "mcq"
-      ? `<div class="bq-options">${["A", "B", "C", "D"].map((l) => `<div class="bq-opt ${ans === l ? "is-correct" : ""}" data-bq-wrap="option${l}">
+      ? `<div class="bq-options">${["A", "B", "C", "D"]
+          .map(
+            (
+              l,
+            ) => `<div class="bq-opt ${ans === l ? "is-correct" : ""}" data-bq-wrap="option${l}">
             <span class="bq-letter">${l}</span>
             <textarea rows="2" data-bulk-field="option${l}" placeholder="Option ${l}">${e(question[`option${l}`])}</textarea>
             <button type="button" class="bq-mark" data-bq-answer="${l}" aria-label="Mark option ${l} as correct" title="Mark as the correct answer">${ans === l ? "✔" : ""}</button>
-          </div>`).join("")}</div><div class="bq-hint">Tap the circle next to the correct option.</div>`
+          </div>`,
+          )
+          .join(
+            "",
+          )}</div><div class="bq-hint">Tap the circle next to the correct option.</div>`
       : type === "integer"
         ? `<label class="bq-f" data-bq-wrap="answer">Correct numerical answer<input type="text" inputmode="decimal" data-bulk-field="answer" value="${e(question.answer)}" placeholder="e.g. 7 or -2.5"></label>`
         : `<div class="bq-hint">Choose the question type above to continue.</div>`;
@@ -11074,11 +13883,15 @@ function bulkCardHtml(question, index) {
         <label class="bq-f" data-bq-wrap="chapter">Chapter
           <select class="ui-select" data-bulk-field="chapter">${bulkChapterOptions(question.subject, question.chapter.trim())}</select></label>
       </div>
-      ${bank ? `<div class="bq-meta">
+      ${
+        bank
+          ? `<div class="bq-meta">
         <label class="bq-f" data-bq-wrap="topic">Topic<input type="text" data-bulk-field="topic" value="${e(question.topic || "")}" placeholder="e.g. Projectile motion"></label>
         <label class="bq-f" data-bq-wrap="difficulty">Difficulty
           <select class="ui-select" data-bulk-field="difficulty"><option value="">Select</option>${["Easy", "Medium", "Hard"].map((d) => `<option ${diff === d.toLowerCase() ? "selected" : ""}>${d}</option>`).join("")}</select></label>
-      </div>` : ""}
+      </div>`
+          : ""
+      }
       <label class="bq-f" data-bq-wrap="question">Question<textarea rows="4" data-bulk-field="question">${e(question.question)}</textarea></label>
       ${options}
     </div>
@@ -11093,11 +13906,18 @@ function rerenderBulkCard(index) {
   holder.innerHTML = bulkCardHtml(bulkQuestions[index], index);
   const fresh = holder.firstElementChild;
   old.replaceWith(fresh);
-  fresh.querySelectorAll("[data-bq-wrap]").forEach((wrap) => wrap.classList.toggle("is-invalid", bulkQuestions[index].badFields.has(wrap.dataset.bqWrap)));
+  fresh
+    .querySelectorAll("[data-bq-wrap]")
+    .forEach((wrap) =>
+      wrap.classList.toggle(
+        "is-invalid",
+        bulkQuestions[index].badFields.has(wrap.dataset.bqWrap),
+      ),
+    );
   renderMath(fresh);
   refreshBulkSummary();
 }
-   
+
 function renderBulkImportPreview() {
   const preview = document.getElementById("bulkImportPreview");
   const active = bulkQuestions.filter((q) => !q.removed);
@@ -11114,7 +13934,14 @@ function renderBulkImportPreview() {
     : `<div class="empty-state">All parsed questions were removed.</div>`;
   preview.querySelectorAll("[data-bulk-card]").forEach((card) => {
     const question = bulkQuestions[Number(card.dataset.bulkCard)];
-    card.querySelectorAll("[data-bq-wrap]").forEach((wrap) => wrap.classList.toggle("is-invalid", question.badFields.has(wrap.dataset.bqWrap)));
+    card
+      .querySelectorAll("[data-bq-wrap]")
+      .forEach((wrap) =>
+        wrap.classList.toggle(
+          "is-invalid",
+          question.badFields.has(wrap.dataset.bqWrap),
+        ),
+      );
   });
   refreshBulkSummary();
   renderMath(preview);
