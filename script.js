@@ -261,6 +261,7 @@ const VIEWS = [
   "admin-student-tests",
   "admin-queries",
   "support",
+  "admin-bank-test",
   "admin-test",
   "bulk-import",
   "exam",
@@ -295,6 +296,7 @@ const APP_SHELL_VIEWS = new Set([
   "admin-student-tests",
   "admin-queries",
   "support",
+  "admin-bank-test",
   "admin-test",
   "bulk-import",
   "result",
@@ -507,6 +509,10 @@ async function routerCore() {
       showView("test-details");
       await enterTestDetailsView();
       break;
+    case "/admin-bank-test":
+      showView("admin-bank-test");
+      await enterAdminBankTestView();
+      break;
     case "/support":
       showView("support");
       await enterSupportView();
@@ -652,7 +658,14 @@ const pushNotifications = (() => {
     const current = await state();
     if (!os || current !== "default") return current;
     try {
-      await os.Slidedown.promptPush({ force: true });
+      const native =
+        os.Notifications.permissionNative ??
+        (typeof Notification !== "undefined"
+          ? Notification.permission
+          : "default");
+      // Browser permission already granted but not subscribed yet: just opt in.
+      if (native === "granted") await os.User.PushSubscription.optIn();
+      else await os.Slidedown.promptPush({ force: true });
     } catch (err) {
       console.warn(
         "OneSignal slidedown failed, using the browser prompt:",
@@ -701,6 +714,7 @@ const PAGE_TITLES = {
   "admin-student-tests": "Student-made tests",
   "admin-queries": "Student queries",
   "support": "Support",
+  "admin-bank-test": "Test from bank",
   "admin-test": "Manage test",
   "bulk-import": "Bulk import",
   result: "Report",
@@ -1537,7 +1551,10 @@ async function admLoadBadges() {
 
 
 /* ---------- full screen ---------- */
-async function appEnterFullscreen() {
+const fsIsMobile = () =>
+  window.matchMedia("(pointer: coarse) and (hover: none)").matches || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+async function appEnterFullscreen(force = false) {
+  if (!force && !fsIsMobile()) return;
   const el = document.documentElement;
   if (document.fullscreenElement || document.webkitFullscreenElement) return;
   try {
@@ -1556,9 +1573,261 @@ function fsFirstGesture() {
 }
 ["pointerdown", "touchend", "keydown"].forEach((t) => document.addEventListener(t, fsFirstGesture, { passive: true }));
 document.addEventListener("click", (e) => {
-  const b = e.target.closest("#beginModal button");
-  if (b && /start|begin|continue|ready/i.test(b.textContent || "")) appEnterFullscreen();
+  if (e.target.closest("#beginBtn")) appEnterFullscreen(true);
 });
+
+/* =========================================================================
+   ADMIN — create a live test from the question bank (subjects → chapters →
+   questions & difficulty → time → details)
+   ========================================================================= */
+const abt = { catalog: [], subjects: [], chapters: new Map(), cfg: new Map(), bound: false, durTouched: false };
+const ABT_MIN = { easy: 2, medium: 3, hard: 5 };
+const ABT_DIFFS = [["easy", "Easy"], ["medium", "Medium"], ["hard", "Hard"], ["", "Mixed"]];
+const abtEl = (id) => document.getElementById(id);
+function abtSay(text, bad = false) {
+  const m = abtEl("abtMsg");
+  if (!m) return;
+  m.textContent = text || "";
+  m.classList.toggle("is-bad", !!bad);
+}
+function abtLocal(d) {
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function abtShuffle(a) {
+  const p = a.slice();
+  for (let i = p.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [p[i], p[j]] = [p[j], p[i]];
+  }
+  return p;
+}
+const abtAllSubjects = () => [...new Set(abt.catalog.map((c) => c.subject))];
+function abtStats(subject) {
+  const chs = abt.chapters.get(subject);
+  const s = { total: 0, easy: 0, medium: 0, hard: 0 };
+  abt.catalog.forEach((c) => {
+    if (c.subject !== subject || (chs && chs.size && !chs.has(c.chapter))) return;
+    s.total += c.total; s.easy += c.easy; s.medium += c.medium; s.hard += c.hard;
+  });
+  return s;
+}
+const abtAvail = (subject, diff) => abtStats(subject)[diff || "total"] || 0;
+function abtPerQ(subject, diff) {
+  if (ABT_MIN[diff]) return ABT_MIN[diff];
+  const s = abtStats(subject);
+  const t = s.easy + s.medium + s.hard;
+  return t ? (s.easy * 2 + s.medium * 3 + s.hard * 5) / t : 3;
+}
+
+async function enterAdminBankTestView() {
+  if (!(await admGate("abtNotAdmin", "abtContent"))) return;
+  if (!abt.bound) {
+    abt.bound = true;
+    abtEl("abtContent").addEventListener("click", abtOnClick);
+    abtEl("abtContent").addEventListener("input", (e) => {
+      const t = e.target;
+      if (t.dataset?.abtN) {
+        const c = abt.cfg.get(t.dataset.abtN);
+        if (c) c.n = Math.max(0, Math.min(Number(t.value) || 0, abtAvail(t.dataset.abtN, c.diff)));
+        abtUpdateSummary();
+      } else if (t.id === "abtDuration") abt.durTouched = true;
+    });
+  }
+  if (!abtEl("abtFrom").value) {
+    const start = new Date();
+    start.setMinutes(0, 0, 0);
+    start.setHours(start.getHours() + 1);
+    abtEl("abtFrom").value = abtLocal(start);
+    abtEl("abtUntil").value = abtLocal(new Date(start.getTime() + 7 * 86400000));
+  }
+  const { data, error } = await sb.rpc("admin_bank_catalog");
+  if (error) { abtSay(admMigrationHint(error), true); return; }
+  abt.catalog = data || [];
+  abtRenderAll();
+}
+
+function abtOnClick(e) {
+  const t = e.target;
+  const sub = t.closest("[data-abt-sub]");
+  if (sub) {
+    const s = sub.dataset.abtSub;
+    const i = abt.subjects.indexOf(s);
+    if (i >= 0) abt.subjects.splice(i, 1); else abt.subjects.push(s);
+    return abtRenderAll();
+  }
+  const ch = t.closest("[data-abt-ch]");
+  if (ch) {
+    const s = ch.dataset.abtS;
+    const set = abt.chapters.get(s) || new Set();
+    const k = ch.dataset.abtCh;
+    if (set.has(k)) set.delete(k); else set.add(k);
+    abt.chapters.set(s, set);
+    return abtRenderChapters(), abtRenderConfig();
+  }
+  const all = t.closest("[data-abt-chall]");
+  if (all) {
+    const s = all.dataset.abtS;
+    const names = abt.catalog.filter((c) => c.subject === s).map((c) => c.chapter);
+    abt.chapters.set(s, new Set(all.dataset.abtChall === "all" ? names : []));
+    return abtRenderChapters(), abtRenderConfig();
+  }
+  const d = t.closest("[data-abt-diff]");
+  if (d) {
+    const s = d.dataset.abtS;
+    const c = abt.cfg.get(s);
+    if (c) { c.diff = d.dataset.abtDiff; c.n = Math.min(c.n, abtAvail(s, c.diff)); }
+    return abtRenderConfig();
+  }
+  const dur = t.closest("[data-abt-dur]");
+  if (dur) {
+    if (dur.dataset.abtDur === "rec") { abt.durTouched = false; abtUpdateSummary(true); }
+    else { abt.durTouched = true; abtEl("abtDuration").value = dur.dataset.abtDur; }
+    return;
+  }
+  const act = t.closest("[data-abt-act]");
+  if (act) abtCreate(act.dataset.abtAct === "publish");
+}
+
+function abtRenderAll() {
+  abtRenderSubjects();
+  abtRenderChapters();
+  abtRenderConfig();
+}
+function abtRenderSubjects() {
+  abtEl("abtSubjects").innerHTML =
+    abtAllSubjects().map((s) => {
+      const total = abt.catalog.filter((c) => c.subject === s).reduce((n, c) => n + c.total, 0);
+      return `<button type="button" class="abt-subject${abt.subjects.includes(s) ? " on" : ""}" data-abt-sub="${escapeHtml(s)}"><b>${escapeHtml(s)}</b><small>${total} questions</small></button>`;
+    }).join("") || `<div class="empty-state">The question bank is empty.</div>`;
+}
+function abtRenderChapters() {
+  const box = abtEl("abtChapters");
+  if (!abt.subjects.length) { box.innerHTML = `<p class="text-muted">Choose a subject first.</p>`; return; }
+  box.innerHTML = abt.subjects.map((s) => {
+    const set = abt.chapters.get(s) || new Set();
+    const chips = abt.catalog.filter((c) => c.subject === s).map((c) => `<button type="button" class="abt-chip${set.has(c.chapter) ? " on" : ""}" data-abt-s="${escapeHtml(s)}" data-abt-ch="${escapeHtml(c.chapter)}">${escapeHtml(c.chapter)} <b>${c.total}</b></button>`).join("");
+    return `<div class="abt-chgroup"><div class="abt-chgroup-head"><b>${escapeHtml(s)}</b><span><small>${set.size ? set.size + " selected" : "All chapters"}</small>
+      <button type="button" class="btn btn-sm" data-abt-s="${escapeHtml(s)}" data-abt-chall="all">Select all</button>
+      <button type="button" class="btn btn-sm" data-abt-s="${escapeHtml(s)}" data-abt-chall="none">Clear</button></span></div><div class="abt-chips">${chips}</div></div>`;
+  }).join("");
+}
+function abtRenderConfig() {
+  const box = abtEl("abtConfig");
+  [...abt.cfg.keys()].forEach((s) => { if (!abt.subjects.includes(s)) abt.cfg.delete(s); });
+  if (!abt.subjects.length) { box.innerHTML = `<p class="text-muted">Choose a subject first.</p>`; abtUpdateSummary(); return; }
+  box.innerHTML = abt.subjects.map((s) => {
+    const st = abtStats(s);
+    let c = abt.cfg.get(s);
+    if (!c) { c = { n: Math.min(10, st.total), diff: "" }; abt.cfg.set(s, c); }
+    c.n = Math.min(c.n, abtAvail(s, c.diff));
+    const seg = ABT_DIFFS.map(([v, l]) => `<button type="button" class="${c.diff === v ? "on" : ""}" data-abt-s="${escapeHtml(s)}" data-abt-diff="${v}">${l}</button>`).join("");
+    return `<div class="abt-cfg"><div class="abt-cfg-head"><b>${escapeHtml(s)}</b><small>Available: ${st.total} · Easy ${st.easy} · Medium ${st.medium} · Hard ${st.hard}</small></div>
+      <div class="abt-cfg-body"><label class="abt-n">Questions <input type="number" min="1" max="${abtAvail(s, c.diff)}" value="${c.n}" data-abt-n="${escapeHtml(s)}"></label><div class="abt-seg" role="group" aria-label="Difficulty">${seg}</div></div></div>`;
+  }).join("");
+  abtUpdateSummary();
+}
+function abtUpdateSummary(forceTime) {
+  let total = 0, mins = 0;
+  abt.subjects.forEach((s) => {
+    const c = abt.cfg.get(s);
+    if (!c) return;
+    total += c.n;
+    mins += c.n * abtPerQ(s, c.diff);
+  });
+  const rec = Math.min(600, Math.max(5, Math.round(mins / 5) * 5));
+  abtEl("abtSum").textContent = `${abt.subjects.length} subject${abt.subjects.length === 1 ? "" : "s"} · ${total} question${total === 1 ? "" : "s"}`;
+  abtEl("abtRec").textContent = total ? `Recommended: ${rec} min (2 min per easy, 3 per medium, 5 per hard question)` : "";
+  if (total && (!abt.durTouched || forceTime)) abtEl("abtDuration").value = rec;
+}
+
+async function abtCreate(publish) {
+  const fail = (m) => { document.querySelectorAll("[data-abt-act]").forEach((b) => (b.disabled = false)); abtSay(m, true); };
+  const subs = abt.subjects.slice();
+  if (!subs.length) return abtSay("Choose at least one subject.", true);
+  for (const s of subs) if (!(abt.cfg.get(s)?.n >= 1)) return abtSay(`Set the number of questions for ${s}.`, true);
+  const title = abtEl("abtTitle").value.trim();
+  if (!title) return abtSay("Give the test a title.", true);
+  const from = new Date(abtEl("abtFrom").value);
+  const until = new Date(abtEl("abtUntil").value);
+  if (Number.isNaN(from.getTime()) || Number.isNaN(until.getTime()) || until <= from) return abtSay("Closing time must be after opening time.", true);
+  document.querySelectorAll("[data-abt-act]").forEach((b) => (b.disabled = true));
+  abtSay("Picking questions…");
+  const ids = [];
+  for (const s of subs) {
+    const c = abt.cfg.get(s);
+    const chs = abt.chapters.get(s);
+    const { data, error } = await sb.rpc("admin_bank_search", { p_subject: s, p_chapters: chs && chs.size ? [...chs] : null, p_difficulty: c.diff || null, p_limit: 1000 });
+    if (error) return fail(admMigrationHint(error));
+    const pool = abtShuffle(data || []);
+    if (pool.length < c.n) return fail(`${s}: only ${pool.length} questions match.`);
+    pool.slice(0, c.n).forEach((r) => ids.push(r.id));
+  }
+  if (ids.length > 300) return fail("A test can have at most 300 questions.");
+  abtSay("Creating test…");
+  const { data, error } = await sb.rpc("admin_create_test_from_bank", {
+    p_title: title,
+    p_category: abtEl("abtCategory").value,
+    p_description: null,
+    p_instructions: abtEl("abtInstr").value,
+    p_duration: Number(abtEl("abtDuration").value) || 60,
+    p_available_from: from.toISOString(),
+    p_available_until: until.toISOString(),
+    p_question_ids: ids,
+    p_publish: !!publish,
+  });
+  if (error) return fail(admMigrationHint(error));
+  document.querySelectorAll("[data-abt-act]").forEach((b) => (b.disabled = false));
+  navigate(`/admin-test?test=${encodeURIComponent(data.test_id)}`);
+}
+
+/* ---------- test screen: tap to return to full screen after leaving the tab ---------- */
+(function () {
+  const examOn = () => {
+    const s = document.getElementById("examShell");
+    const view = document.getElementById("view-exam");
+    return (
+      !!s &&
+      !!view &&
+      view.classList.contains("active") &&
+      examStarted &&
+      !submitted &&
+      s.style.display !== "none" &&
+      getComputedStyle(s).display !== "none"
+    );
+  };
+  const inFs = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+  const canFs = () => !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
+  function box() {
+    let el = document.getElementById("fsResume");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "fsResume";
+      el.className = "fs-resume";
+      el.hidden = true;
+      el.innerHTML = `<div class="fs-resume-card"><h3>Return to full screen</h3><p>Your test continues in full screen mode.</p><button type="button" class="btn btn-primary" id="fsResumeBtn">Resume test</button></div>`;
+      document.body.appendChild(el);
+      el.querySelector("#fsResumeBtn").addEventListener("click", async () => {
+        await appEnterFullscreen(true);
+        el.hidden = true;
+      });
+    }
+    return el;
+  }
+  function check() {
+    const el = box();
+    if (examOn() && canFs() && !inFs() && document.visibilityState === "visible") el.hidden = false;
+    else if (inFs() || !examOn()) el.hidden = true;
+  }
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && examOn()) { appEnterFullscreen(true); setTimeout(check, 350); }
+  });
+  document.addEventListener("fullscreenchange", () => setTimeout(check, 150));
+  document.addEventListener("webkitfullscreenchange", () => setTimeout(check, 150));
+  window.addEventListener("focus", () => setTimeout(check, 350));
+  window.addEventListener("hashchange", () => setTimeout(check, 0));
+  document.addEventListener("examfinished", check);
+})();
 
 window.addEventListener("hashchange", router);
 
@@ -2133,10 +2402,8 @@ function renderErrorBook() {
     _subj: normalizeSubject(r.subject),
   }));
   const open = rows.filter((r) => !r.resolved).length;
-  summary.innerHTML = `
-    <div class="home-stat-card"><div class="home-stat-val">${rows.length}</div><div class="home-stat-lbl">Saved mistakes</div></div>
-    <div class="home-stat-card"><div class="home-stat-val">${open}</div><div class="home-stat-lbl">Need review</div></div>
-    <div class="home-stat-card"><div class="home-stat-val">${rows.length - open}</div><div class="home-stat-lbl">Resolved</div></div>`;
+  summary.innerHTML = "";
+  summary.hidden = true;
   const countBy = (k) => rows.filter((r) => r._subj === k).length;
   tabs.innerHTML =
     `<button type="button" class="eb-subj-tab ${st.subject === "all" ? "active" : ""}" data-subj="all">All <i>${rows.length}</i></button>` +
@@ -7104,12 +7371,20 @@ function setupExamStaticListeners() {
   document
     .getElementById("beginEnableNotificationsBtn")
     .addEventListener("click", async () => {
-      const current = await pushNotifications.request();
       const status = document.getElementById("beginNotificationStatus");
+      status.textContent = "Checking…";
+      let current = await pushNotifications.state();
+      // "default" opens the OneSignal pop-up; "denied" cannot be re-asked by
+      // the browser, so it is only re-checked (the student may have just
+      // unblocked it from the lock icon).
+      if (current === "default") current = await pushNotifications.request();
+      await renderBeginNotificationGate(current);
       status.textContent =
-        current === "granted"
-          ? "Notifications enabled successfully. You can start the test now."
-          : NOTIFICATION_BLOCKED_HELP;
+        current === "denied"
+          ? "Still blocked. If you already allowed it, refresh this page and try again."
+          : current === "default"
+            ? "Choose Allow in the pop-up to continue."
+            : "Notifications enabled. You can start the test now.";
     });
   document
     .getElementById("submitTestBtn")
@@ -7169,6 +7444,48 @@ async function loadTestStartInfo(testId) {
   return res.error ? null : res.data;
 }
 
+/* ---- Notification gate on the test-start screen ---- */
+let beginNotificationOk = true;
+let beginNotificationUnsub = null;
+
+async function notificationsRequired() {
+  myProfile = myProfile || (await getMyProfile());
+  return myProfile?.role !== "admin"; // admins are never blocked
+}
+
+function syncBeginButton() {
+  const beginBtn = document.getElementById("beginBtn");
+  const box = document.getElementById("declarationCheckbox");
+  if (!beginBtn || !box || beginBtn.textContent === "Starting…") return;
+  beginBtn.disabled = !box.checked || !beginNotificationOk;
+}
+
+// current: "granted" | "default" | "denied" | "unsupported" | "unknown"
+// Only "default" and "denied" block; anything we cannot detect fails open.
+async function renderBeginNotificationGate(current) {
+  const gate = document.getElementById("beginNotificationGate");
+  if (!gate) return;
+  const required = await notificationsRequired();
+  if (typeof current !== "string") current = await pushNotifications.state();
+  const blocked = required && (current === "default" || current === "denied");
+  beginNotificationOk = !blocked;
+  gate.hidden = !blocked;
+  if (blocked) {
+    const denied = current === "denied";
+    document.getElementById("beginNotificationTitle").textContent = denied
+      ? "Notifications are blocked"
+      : "Allow notifications";
+    document.getElementById("beginNotificationText").textContent = denied
+      ? "Your browser is blocking notifications for this site. Allow them from the address bar to start the test:"
+      : "Allow notifications to get new tests, results and important updates. This is required to start the test.";
+    document.getElementById("beginNotificationSteps").hidden = !denied;
+    document.getElementById("beginEnableNotificationsBtn").textContent = denied
+      ? "Check again"
+      : "Allow notifications";
+  }
+  syncBeginButton();
+}
+
 async function renderBeginInstructions() {
   const body = document.getElementById("beginInstructions");
   const beginBtn = document.getElementById("beginBtn");
@@ -7178,9 +7495,13 @@ async function renderBeginInstructions() {
   beginBtn.textContent = previousAttemptInProgress
     ? "Resume Test"
     : "Begin Test";
-  box.onchange = () => {
-    beginBtn.disabled = !box.checked;
-  };
+  box.onchange = syncBeginButton;
+  document.getElementById("beginNotificationStatus").textContent = "";
+  beginNotificationUnsub?.();
+  beginNotificationUnsub = pushNotifications.subscribe(
+    renderBeginNotificationGate,
+  );
+  renderBeginNotificationGate();
   body.scrollTop = 0;
   body.innerHTML = `<div class="empty-state">Loading instructions…</div>`;
 
@@ -7792,7 +8113,7 @@ function renderQuestion() {
         <button class="btn" id="markReviewBtn">Mark for review &amp; next</button>
       </div>
       <div class="exam-actions-right">
-        <button class="btn" id="clearResponseBtn">Clear response</button>
+        <button class="btn" id="prevBtn"${currentLocalIndex === 0 && subjects.indexOf(currentSubject) === 0 ? " disabled" : ""}>← Previous</button>
         <button class="btn btn-success" id="saveNextBtn">Save &amp; next</button>
       </div>
     </div>
@@ -7802,6 +8123,15 @@ function renderQuestion() {
     card.querySelectorAll(".option-item").forEach((el) => {
       el.addEventListener("click", () => {
         if (feedbackMode && q.feedback) return; // answer already checked and locked
+        if (q.selected_option === el.dataset.opt) {
+          // tapping the selected option again clears the response
+          q.selected_option = null;
+          q.status = q.status === "marked" || q.status === "answered_marked" ? "marked" : "not_answered";
+          el.classList.remove("selected");
+          persistAnswer(q);
+          renderPalette();
+          return;
+        }
         q.selected_option = el.dataset.opt;
         q.status =
           q.status === "marked" || q.status === "answered_marked"
@@ -7844,9 +8174,7 @@ function renderQuestion() {
   document
     .getElementById("markReviewBtn")
     .addEventListener("click", () => goMarkReview(q));
-  document
-    .getElementById("clearResponseBtn")
-    .addEventListener("click", () => goClear(q));
+  document.getElementById("prevBtn").addEventListener("click", moveToPrev);
   document
     .getElementById("reportQuestionBtn")
     .addEventListener("click", () => reportQuestion(q));
@@ -7917,6 +8245,21 @@ function moveToNext() {
   renderQuestion();
 }
 
+function moveToPrev() {
+  commitActiveTime();
+  if (currentLocalIndex > 0) {
+    currentLocalIndex--;
+  } else {
+    const si = subjects.indexOf(currentSubject);
+    if (si <= 0) return;
+    currentSubject = subjects[si - 1];
+    currentLocalIndex = bySubject[currentSubject].length - 1;
+    renderSubjectTabs();
+  }
+  startTimingQuestion(currentQuestion());
+  renderQuestion();
+}
+
 async function goSaveNext(q) {
   q.status = hasAnswer(q) ? "answered" : "not_answered";
   if (!(await persistAnswer(q))) return;
@@ -7975,6 +8318,7 @@ async function doSubmit(reason) {
   commitActiveTime();
   submitted = true;
   examLocked = false;
+  document.dispatchEvent(new Event("examfinished"));
   clearInterval(timerInterval);
   clearInterval(timeSyncInterval);
   closeModal("submitModal");
@@ -8023,6 +8367,16 @@ async function onBegin() {
   if (!(await profileGate())) {
     closeModal("beginModal");
     return;
+  }
+
+  // Notifications must be on before the clock starts (admins excepted).
+  if (await notificationsRequired()) {
+    const notifState = await pushNotifications.state();
+    if (notifState === "default" || notifState === "denied") {
+      await renderBeginNotificationGate(notifState);
+      toast("Allow notifications to start the test.", "error");
+      return;
+    }
   }
 
   const beginBtn = document.getElementById("beginBtn");
@@ -8110,7 +8464,7 @@ async function onBegin() {
 
   examStarted = true;
 
-  appEnterFullscreen();
+  appEnterFullscreen(true);
   examLocked = true;
 
   // Start timer ONLY after clicking Begin Test
@@ -8212,6 +8566,7 @@ async function triggerViolation() {
     commitActiveTime();
     submitted = true;
     examLocked = false;
+    document.dispatchEvent(new Event("examfinished"));
     clearInterval(timerInterval);
     clearInterval(timeSyncInterval);
     removeAntiCheatListeners();
@@ -13945,4 +14300,4 @@ function renderBulkImportPreview() {
   });
   refreshBulkSummary();
   renderMath(preview);
-} 
+}

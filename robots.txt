@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://jeehustlers.netlify.app/sitemap.xml
+Sitemap: https://examle-tech.netlify.app/sitemap.xml
